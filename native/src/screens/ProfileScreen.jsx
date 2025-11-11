@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-n
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 
-const GOLD = '#D4AF37'
+const GOLD = '#E63946'
 const BG = '#FFFFFF'
-const DEEP_BLUE = '#0b1b3a'
+const DEEP_BLUE = '#2D6A4F'
 
 export default function ProfileScreen({ navigation }) {
   return (
@@ -90,7 +90,7 @@ export default function ProfileScreen({ navigation }) {
 
           <View style={styles.subscriptionCard}>
             <LinearGradient
-              colors={['#0b1b3a', '#162a56']}
+              colors={['#2D6A4F', '#40916C']}
               style={StyleSheet.absoluteFill}
             />
             <View style={styles.subscriptionContent}>

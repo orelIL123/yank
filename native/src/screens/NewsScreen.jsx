@@ -3,9 +3,9 @@ import { SafeAreaView, View, Text, StyleSheet, ScrollView, Pressable, ImageBackg
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
-const GOLD = '#D4AF37'
+const GOLD = '#E63946'
 const BG = '#FFFFFF'
-const DEEP_BLUE = '#0b1b3a'
+const DEEP_BLUE = '#2D6A4F'
 
 const ARTICLES = [
   {
@@ -24,7 +24,7 @@ const ARTICLES = [
   },
   {
     id: 'news-3',
-    title: 'נאור ממליץ: 3 מניות למעקב מקרוב',
+    title: 'טל ממליץ: 3 מניות למעקב מקרוב',
     date: '27 באוקטובר 2025',
     summary: 'הסקירה השבועית עם נקודות מפתח לפני שבוע המסחר הבא.',
     image: require('../../assets/photos/photo4.png'),
@@ -34,7 +34,7 @@ const ARTICLES = [
 export default function NewsScreen({ navigation }) {
   const handleShare = React.useCallback((article) => {
     Share.share({
-      message: `${article.title}\n${article.summary}\n\nפורסם ב-Naor Baruch App`
+      message: `${article.title}\n${article.summary}\n\nפורסם ב-Boiler Room App`
     }).catch(() => {})
   }, [])
 

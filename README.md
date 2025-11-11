@@ -1,13 +1,13 @@
-# Naor Baruch - HomeScreen Mockup (React + Vite)
+# Boiler Room - HomeScreen Mockup (React + Vite)
 
-This is a minimal React project (Vite) containing a single screen mockup named `HomeScreen` for the Naor Baruch app.
+This is a minimal React project (Vite) containing a single screen mockup named `HomeScreen` for the Boiler Room app.
 
 ## Features
-- Premium, spiritual aesthetic: black, gold, deep blue
+- Premium, spiritual aesthetic: black, red, green
 - Header with gradient and subtitle
 - 2x3 card grid with icons, soft shadows, light 3D tilt on hover
 - Gentle fade-in animation on mount
-- Bottom navigation sketch with gold accent on active tab
+- Bottom navigation sketch with red accent on active tab
 
 ## Tech
 - React 18, Vite
