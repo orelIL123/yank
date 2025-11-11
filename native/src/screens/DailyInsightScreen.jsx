@@ -3,9 +3,9 @@ import { SafeAreaView, View, Text, StyleSheet, Pressable, ScrollView, Share } fr
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
-const GOLD = '#D4AF37'
+const GOLD = '#E63946'
 const BG = '#FFFFFF'
-const DEEP_BLUE = '#0b1b3a'
+const DEEP_BLUE = '#2D6A4F'
 
 const todayInsight = {
   title: 'הכוח של סבלנות במסחר',
@@ -17,7 +17,7 @@ const todayInsight = {
   }),
   readTime: '2 דקות קריאה',
   category: 'Mindset',
-  author: 'נאור ברוך',
+  author: 'טל פרטוק',
   content: `המסחר הוא מרתון, לא ספרינט.
 
 כשאתה מתחיל את הדרך, אתה רוצה תוצאות מהירות. אתה רוצה לראות את החשבון גדל כל יום, לחוש את ההצלחה מיד. אבל האמת היא שהמסחר המצליח בנוי על סבלנות, משמעת, ואמונה בתהליך.

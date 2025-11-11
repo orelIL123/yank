@@ -4,9 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Grayscale } from 'react-native-color-matrix-image-filters'
 
-const GOLD = '#D4AF37'
+const GOLD = '#E63946'
 const BG = '#FFFFFF'
-const DEEP_BLUE = '#0b1b3a'
+const DEEP_BLUE = '#2D6A4F'
 
 const CARDS = [
   { key: 'daily-insight', title: 'ערך יומי', desc: 'תובנה מעוררת השראה ליום שלך', icon: 'bulb-outline', image: require('../assets/photos/photo4.png') },
@@ -157,7 +157,7 @@ export default function HomeScreen({ navigation }) {
   const [unreadCount, setUnreadCount] = React.useState(3) // TODO: Get from backend
 
   const onShareQuote = React.useCallback(() => {
-    Share.share({ message: `"${quote}" — נאור ברוך` }).catch(() => {})
+    Share.share({ message: `"${quote}" — טל פרטוק` }).catch(() => {})
   }, [quote])
 
   const handleCardPress = React.useCallback((key) => {
@@ -279,7 +279,7 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.quoteCard}>
               <Text style={styles.quoteText}>“{quote}”</Text>
               <View style={styles.quoteFooter}>
-                <Text style={styles.quoteAuthor}>— נאור ברוך</Text>
+                <Text style={styles.quoteAuthor}>— טל פרטוק</Text>
                 <Pressable onPress={onShareQuote} style={styles.shareBtn} accessibilityRole="button">
                   <Ionicons name="share-social-outline" size={16} color="#ffffff" />
                   <Text style={styles.shareBtnText}>שיתוף</Text>
@@ -331,9 +331,9 @@ export default function HomeScreen({ navigation }) {
           {/* Naor Recommends */}
           <View style={styles.section}>
             <Pressable style={styles.recoBanner} accessibilityRole="button">
-              <LinearGradient colors={[ '#0b1b3a', '#162a56' ]} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={[ '#2D6A4F', '#40916C' ]} style={StyleSheet.absoluteFill} />
               <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
-                <Text style={styles.recoTitle}>נאור ממליץ לראות</Text>
+                <Text style={styles.recoTitle}>טל ממליץ לראות</Text>
                 <Text style={styles.recoDesc} numberOfLines={2}>וידאו, מאמר או תובנה מומלצים במיוחד עבורך</Text>
                 <View style={styles.recoCta}>
                   <Text style={styles.recoCtaText}>צפה עכשיו</Text>
@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardLabelDesc: {
-    color: '#0b1b3a',
+    color: '#2D6A4F',
     opacity: 0.9,
     fontSize: 13,
     lineHeight: 18,

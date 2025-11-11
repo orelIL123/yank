@@ -2,7 +2,7 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { IoArrowBack, IoCalendarOutline, IoTimeOutline } from 'react-icons/io5'
 
-const GOLD = '#D4AF37'
+const GOLD = '#E63946'
 
 // Mock data - בהמשך יבוא מ-Firebase
 const todayInsight = {
@@ -32,7 +32,7 @@ const todayInsight = {
 
 💪 המשך לצמוח, המשך להאמין.`,
   readTime: '2 דקות קריאה',
-  author: 'נאור ברוך',
+  author: 'טל פרטוק',
   category: 'Mindset',
 }
 
@@ -86,7 +86,7 @@ export default function DailyInsight() {
 
           {/* Author */}
           <div className="di-author">
-            <div className="di-author-avatar">NB</div>
+            <div className="di-author-avatar">TF</div>
             <div className="di-author-info">
               <div className="di-author-name">{todayInsight.author}</div>
               <div className="di-author-title">Trader • Mentor • Faith</div>

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Naor Baruch",
-    "slug": "naor-baruch",
+    "name": "Boiler Room",
+    "slug": "boiler-room",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/adaptive-icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.naorbaruch.trading",
+      "bundleIdentifier": "com.boilerroom.trading",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -26,16 +26,16 @@
         "backgroundColor": "#0A0A0A"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.naorbaruch.trading",
+      "package": "com.boilerroom.trading",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE"
       ]
     },
     "notification": {
-      "color": "#D4AF37",
+      "color": "#E63946",
       "androidMode": "default",
-      "androidCollapsedTitle": "התראות מ-Naor Baruch"
+      "androidCollapsedTitle": "התראות מ-Boiler Room"
     },
     "web": {
       "favicon": "./assets/favicon.png"

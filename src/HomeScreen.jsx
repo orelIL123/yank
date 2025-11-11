@@ -10,11 +10,11 @@ import {
   IoHomeOutline,
   IoPersonCircleOutline,
 } from 'react-icons/io5'
-import { FaInstagram, FaTelegramPlane } from 'react-icons/fa'
+import { FaInstagram, FaTelegramPlane, FaYoutube } from 'react-icons/fa'
 import { SignedIn, SignedOut, UserButton } from '@clerk/clerk-react'
 import AuthModal from './components/AuthModal.jsx'
 
-const GOLD = '#D4AF37'
+const GOLD = '#E63946'
 
 const cards = [
   {
@@ -82,10 +82,13 @@ export default function HomeScreen({ hasClerk = false }) {
       <header className="nb-header">
         <div className="nb-header__gradient" />
         <div className="nb-header__content">
-          <h1 className="nb-title">NAOR BARUCH</h1>
+          <h1 className="nb-title">BOILER ROOM</h1>
           <p className="nb-subtitle">Trading • Mindset • Faith</p>
           <span className="nb-badge">welcome to the TOP&gt;</span>
           <div className="nb-socials" aria-label="Social links">
+            <a href="https://www.youtube.com/@BoilerRoom.Israel" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+              <FaYoutube size={18} />
+            </a>
             <a href="#" target="_self" aria-label="Instagram (demo)">
               <FaInstagram size={18} />
             </a>

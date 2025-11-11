@@ -4,9 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { sendLocalNotification, formatAlertForPush } from '../utils/notifications'
 
-const GOLD = '#D4AF37'
+const GOLD = '#E63946'
 const BG = '#FFFFFF'
-const DEEP_BLUE = '#0b1b3a'
+const DEEP_BLUE = '#2D6A4F'
 
 const TABS = [
   { id: 'alerts', label: 'התראות', icon: 'notifications-outline' },
@@ -358,13 +358,13 @@ function RecommendationsForm() {
   const handleSubmit = () => {
     Alert.alert(
       'המלצה תתווסף! ⭐',
-      `כותרת: ${form.title}\nסוג: ${form.type}\n\nיופיע בבאנר "נאור ממליץ לראות" במסך הבית`
+      `כותרת: ${form.title}\nסוג: ${form.type}\n\nיופיע בבאנר "טל ממליץ לראות" במסך הבית`
     )
   }
 
   return (
     <View style={styles.formContainer}>
-      <Text style={styles.formTitle}>⭐ נאור ממליץ לראות</Text>
+      <Text style={styles.formTitle}>⭐ טל ממליץ לראות</Text>
 
       <View style={styles.formGroup}>
         <Text style={styles.label}>סוג תוכן</Text>
