@@ -1,3 +1,8 @@
 node_modules/
 dist/
 .DS_Store
+
+# Firebase secrets
+yank-99f79-firebase-adminsdk-fbsvc-eaa2a3f7de.json
+GoogleService-Info-10.plist
+google-services-8.json
