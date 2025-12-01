@@ -63,53 +63,80 @@ export default function App() {
 
   // Auth state listener
   useEffect(() => {
+    let mounted = true
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      console.log('Auth state changed:', currentUser ? 'User logged in' : 'User logged out')
-      setUser(currentUser)
+      if (!mounted) return
 
-      if (currentUser) {
-        // Fetch user role from Firestore
-        try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
-          if (userDoc.exists()) {
-            const role = userDoc.data().role
-            console.log('User role:', role)
-            setUserRole(role)
-          } else {
-            console.log('User document not found in Firestore')
+      try {
+        console.log('Auth state changed:', currentUser ? 'User logged in' : 'User logged out')
+        setUser(currentUser)
+
+        if (currentUser) {
+          // Fetch user role from Firestore
+          try {
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
+            if (userDoc.exists() && mounted) {
+              const role = userDoc.data().role
+              console.log('User role:', role)
+              setUserRole(role)
+            } else {
+              console.log('User document not found in Firestore')
+            }
+          } catch (error) {
+            console.error('Error fetching user role:', error)
+            // Don't crash if role fetch fails
           }
-        } catch (error) {
-          console.error('Error fetching user role:', error)
+
+          // Navigate to Home after successful login
+          if (navigationRef.current && mounted) {
+            try {
+              console.log('Navigating to Home after login')
+              navigationRef.current.reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              })
+            } catch (navError) {
+              console.error('Navigation error:', navError)
+            }
+          }
+        } else {
+          if (mounted) {
+            setUserRole(null)
+          }
+          // Navigate to Login if user is logged out
+          if (navigationRef.current && mounted) {
+            try {
+              const currentRoute = navigationRef.current.getCurrentRoute()
+              // Only navigate to Login if we're not already there and not on Register
+              if (currentRoute?.name !== 'Login' && currentRoute?.name !== 'Register') {
+                console.log('Navigating to Login after logout')
+                navigationRef.current.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                })
+              }
+            } catch (navError) {
+              console.error('Navigation error:', navError)
+            }
+          }
         }
 
-        // Navigate to Home after successful login
-        if (navigationRef.current) {
-          console.log('Navigating to Home after login')
-          navigationRef.current.reset({
-            index: 0,
-            routes: [{ name: 'Home' }],
-          })
+        if (mounted) {
+          setAuthLoading(false)
         }
-      } else {
-        setUserRole(null)
-        // Navigate to Login if user is logged out
-        if (navigationRef.current) {
-          const currentRoute = navigationRef.current.getCurrentRoute()
-          // Only navigate to Login if we're not already there and not on Register
-          if (currentRoute?.name !== 'Login' && currentRoute?.name !== 'Register') {
-            console.log('Navigating to Login after logout')
-            navigationRef.current.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            })
-          }
+      } catch (error) {
+        console.error('Error in auth state listener:', error)
+        if (mounted) {
+          setAuthLoading(false)
         }
       }
-
-      setAuthLoading(false)
     })
 
-    return unsubscribe
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
@@ -129,20 +156,37 @@ export default function App() {
   // Check for EAS Updates on app start
   useEffect(() => {
     async function checkForUpdates() {
-      if (__DEV__) {
-        // Skip update check in development
+      // Skip update check in development
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
         return
       }
 
+      // Wait for app to fully initialize before checking for updates
+      await new Promise(resolve => setTimeout(resolve, 3000))
+
       try {
+        // Check if Updates is available and enabled
+        if (!Updates.isEnabled) {
+          return
+        }
+
         const update = await Updates.checkForUpdateAsync()
         if (update.isAvailable) {
           await Updates.fetchUpdateAsync()
-          // Reload the app to apply the update
-          await Updates.reloadAsync()
+          // Delay reload to ensure app is fully ready
+          // This prevents crashes on startup
+          setTimeout(async () => {
+            try {
+              await Updates.reloadAsync()
+            } catch (reloadError) {
+              console.log('Error reloading app:', reloadError)
+              // Don't crash if reload fails - app will continue normally
+            }
+          }, 2000)
         }
       } catch (error) {
         console.log('Error checking for updates:', error)
+        // Don't crash if update check fails - app will continue normally
       }
     }
 
@@ -202,6 +246,10 @@ export default function App() {
         <Stack.Navigator
           screenOptions={{ headerShown: false }}
           initialRouteName={user ? "Home" : "Login"}
+          // Fallback to Login if user is undefined/null
+          defaultNavigationOptions={{
+            headerShown: false
+          }}
         >
           {/* Auth screens - always available */}
           <Stack.Screen name="Login" component={LoginScreen} />

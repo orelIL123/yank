@@ -3,11 +3,10 @@
     "name": "הינוקא",
     "slug": "yanuka",
     "owner": "orel895",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "cover",
@@ -36,9 +35,6 @@
       "color": "#1e3a8a",
       "androidMode": "default",
       "androidCollapsedTitle": "התראות מ-הינוקא"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
