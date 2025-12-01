@@ -10,15 +10,14 @@ import {
   IoPiano,
 } from 'react-icons/io5'
 import { FaInstagram, FaTelegramPlane } from 'react-icons/fa'
-import { SignedIn, SignedOut, UserButton } from '@clerk/clerk-react'
-import AuthModal from './components/AuthModal.jsx'
+// Clerk removed - using Firebase instead
+// AuthModal removed - using Firebase instead
 import { homeCards } from './data/cards.js'
 
 const ACCENT = '#4A90E2'
 
 export default function HomeScreen({ hasClerk = false }) {
   const navigate = useNavigate()
-  const [authOpen, setAuthOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('home')
 
   const handleHomeClick = () => {
@@ -125,57 +124,20 @@ export default function HomeScreen({ hasClerk = false }) {
           <span>בית מדרש</span>
         </button>
 
-        {hasClerk ? (
-          <>
-            <SignedOut>
-              <button
-                type="button"
-                className={`nb-nav-item${activeTab === 'profile' ? ' is-active' : ''}`}
-                aria-current={activeTab === 'profile' ? 'page' : undefined}
-                onClick={() => {
-                  setActiveTab('profile')
-                  setAuthOpen(true)
-                }}
-              >
-                <IoPersonCircleOutline size={22} color={ACCENT} />
-                <span>חשבון</span>
-              </button>
-            </SignedOut>
-            <SignedIn>
-              <button
-                type="button"
-                className={`nb-nav-item${activeTab === 'profile' ? ' is-active' : ''}`}
-                aria-current={activeTab === 'profile' ? 'page' : undefined}
-                onClick={() => setActiveTab('profile')}
-                style={{ paddingTop: 4 }}
-              >
-                <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox: 'w-[28px] h-[28px]'
-                    }
-                  }}
-                />
-                <span>חשבון</span>
-              </button>
-            </SignedIn>
-          </>
-        ) : (
-          <button
-            type="button"
-            className={`nb-nav-item${activeTab === 'profile' ? ' is-active' : ''}`}
-            aria-current={activeTab === 'profile' ? 'page' : undefined}
-            onClick={() => setActiveTab('profile')}
-            disabled
-            style={{ opacity: 0.6, cursor: 'not-allowed' }}
-          >
-            <IoPersonCircleOutline size={22} color={ACCENT} />
-            <span>בקרוב</span>
-          </button>
-        )}
+        <button
+          type="button"
+          className={`nb-nav-item${activeTab === 'profile' ? ' is-active' : ''}`}
+          aria-current={activeTab === 'profile' ? 'page' : undefined}
+          onClick={() => setActiveTab('profile')}
+          disabled
+          style={{ opacity: 0.6, cursor: 'not-allowed' }}
+        >
+          <IoPersonCircleOutline size={22} color={ACCENT} />
+          <span>בקרוב</span>
+        </button>
       </nav>
 
-      {hasClerk && <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />}
+      {/* AuthModal removed - using Firebase instead */}
     </div>
   )
 }
