@@ -429,7 +429,7 @@ export default function LongLessonsScreen({ navigation, userRole }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-        >
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -556,7 +556,7 @@ export default function LongLessonsScreen({ navigation, userRole }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-        >
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>

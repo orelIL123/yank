@@ -528,9 +528,9 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>הוסף שיעור קצר חדש</Text>
                 <TouchableOpacity
@@ -713,7 +713,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-        >
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -840,7 +840,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-        >
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
