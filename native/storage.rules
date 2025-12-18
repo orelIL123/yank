@@ -41,6 +41,13 @@ service firebase.storage {
       allow write: if isAdmin();
     }
     
+    // ========== PRAYERS PDFs ==========
+    // תפילות - רק Admin יכול להעלות, כולם יכולים לקרוא
+    match /prayers/{prayerId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
     // ========== COURSES ==========
     match /courses/{courseId}/{allPaths=**} {
       allow read: if isSignedIn();

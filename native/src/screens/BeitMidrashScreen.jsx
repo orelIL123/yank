@@ -142,7 +142,7 @@ export default function BeitMidrashScreen({ navigation }) {
               accessibilityLabel={`סרטון ${video.title}`}
             >
               <ImageBackground
-                source={video.thumbnailUrl ? { uri: video.thumbnailUrl } : require('../../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.jpg')}
+                source={video.thumbnailUrl ? { uri: video.thumbnailUrl } : require('../../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.png')}
                 style={styles.videoThumbnail}
                 imageStyle={styles.videoThumbnailRadius}
               >

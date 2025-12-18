@@ -11,7 +11,8 @@ import {
   TextInput,
   ScrollView,
   Platform,
-  Image
+  Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,7 @@ function extractYouTubeId(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
     /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+    /youtube\.com\/shorts\/([^&\n?#/]+)/, // support YouTube Shorts / Reels-style links
   ];
   
   for (const pattern of patterns) {
@@ -423,6 +425,11 @@ export default function LongLessonsScreen({ navigation, userRole }) {
         transparent={true}
         onRequestClose={() => setShowAddModal(false)}
       >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -441,7 +448,12 @@ export default function LongLessonsScreen({ navigation, userRole }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>כותרת *</Text>
                 <TextInput
@@ -523,6 +535,7 @@ export default function LongLessonsScreen({ navigation, userRole }) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit Lesson Modal */}
@@ -539,6 +552,11 @@ export default function LongLessonsScreen({ navigation, userRole }) {
           setFormCategory('');
         }}
       >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -558,7 +576,12 @@ export default function LongLessonsScreen({ navigation, userRole }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>כותרת *</Text>
                 <TextInput
@@ -641,6 +664,7 @@ export default function LongLessonsScreen({ navigation, userRole }) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

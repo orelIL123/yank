@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Platform, Image, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Platform, Image, ActivityIndicator, Modal } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import * as DocumentPicker from 'expo-document-picker'
+// DocumentPicker will be imported dynamically when needed
 import { collection, addDoc, doc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { db, auth } from '../config/firebase'
-import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath } from '../utils/storage'
+import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath, pickPDF, uploadPDFToStorage, generatePrayerPDFPath } from '../utils/storage'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -22,6 +22,7 @@ const TABS = [
   { id: 'yeshiva', label: 'בית המדרש', icon: 'business-outline' },
   { id: 'tzadikim', label: 'צדיקים', icon: 'people-outline' },
   { id: 'music', label: 'ניגונים', icon: 'musical-notes-outline' },
+  { id: 'notifications', label: 'התראות', icon: 'notifications-outline' },
 ]
 
 export default function AdminScreen({ navigation, route }) {
@@ -79,6 +80,7 @@ export default function AdminScreen({ navigation, route }) {
         {activeTab === 'yeshiva' && <YeshivaForm />}
         {activeTab === 'tzadikim' && <TzadikimForm />}
         {activeTab === 'music' && <MusicForm />}
+        {activeTab === 'notifications' && <NotificationsForm />}
       </ScrollView>
     </SafeAreaView>
   )
@@ -543,6 +545,7 @@ function NewslettersForm() {
 
   const handlePickFile = async () => {
     try {
+      const DocumentPicker = await import('expo-document-picker')
       const result = await DocumentPicker.getDocumentAsync({
         type: form.fileType === 'pdf' ? 'application/pdf' : 'image/*',
         copyToCacheDirectory: true,
@@ -909,6 +912,7 @@ function DailyLearningForm() {
 
   const handlePickAudio = async () => {
     try {
+      const DocumentPicker = await import('expo-document-picker')
       const result = await DocumentPicker.getDocumentAsync({
         type: 'audio/*',
         copyToCacheDirectory: true,
@@ -1268,8 +1272,11 @@ function PrayersForm() {
     category: 'תפילה',
     imageUri: null,
     imageUrl: '',
+    pdfUri: null,
+    pdfUrl: '',
   })
   const [uploading, setUploading] = useState(false)
+  const [uploadingPDF, setUploadingPDF] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const handlePickImage = async () => {
@@ -1302,6 +1309,37 @@ function PrayersForm() {
     }
   }
 
+  const handlePickPDF = async () => {
+    const pdf = await pickPDF()
+    if (pdf) {
+      setForm({ ...form, pdfUri: pdf.uri, pdfName: pdf.name })
+    }
+  }
+
+  const handleUploadPDF = async () => {
+    if (!form.pdfUri) {
+      Alert.alert('שגיאה', 'אנא בחר קובץ PDF תחילה')
+      return
+    }
+
+    setUploadingPDF(true)
+    try {
+      const timestamp = Date.now()
+      const filename = form.pdfName || `prayer_${timestamp}.pdf`
+      const path = generatePrayerPDFPath(timestamp.toString(), filename)
+      const url = await uploadPDFToStorage(form.pdfUri, path, (progress) => {
+        console.log(`PDF upload progress: ${progress}%`)
+      })
+      setForm({ ...form, pdfUrl: url })
+      Alert.alert('הצלחה!', 'קובץ ה-PDF הועלה בהצלחה')
+    } catch (error) {
+      Alert.alert('שגיאה', 'לא ניתן להעלות את קובץ ה-PDF')
+      console.error(error)
+    } finally {
+      setUploadingPDF(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!form.title || !form.content) {
       Alert.alert('שגיאה', 'אנא מלא כותרת ותוכן')
@@ -1313,6 +1351,11 @@ function PrayersForm() {
       return
     }
 
+    if (form.pdfUri && !form.pdfUrl) {
+      Alert.alert('שים לב', 'אנא העלה את קובץ ה-PDF לפני השמירה')
+      return
+    }
+
     try {
       setSaving(true)
       await addDoc(collection(db, 'prayers'), {
@@ -1320,6 +1363,7 @@ function PrayersForm() {
         content: form.content,
         category: form.category,
         imageUrl: form.imageUrl || '',
+        pdfUrl: form.pdfUrl || '',
         createdAt: serverTimestamp(),
       })
 
@@ -1336,6 +1380,8 @@ function PrayersForm() {
                 category: 'תפילה',
                 imageUri: null,
                 imageUrl: '',
+                pdfUri: null,
+                pdfUrl: '',
               })
             }
           }
@@ -1409,7 +1455,7 @@ function PrayersForm() {
           <Pressable
             style={styles.uploadButton}
             onPress={handlePickImage}
-            disabled={uploading}
+            disabled={uploading || uploadingPDF}
           >
             <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
             <Text style={styles.uploadButtonText}>
@@ -1420,7 +1466,7 @@ function PrayersForm() {
             <Pressable
               style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
               onPress={handleUploadImage}
-              disabled={uploading}
+              disabled={uploading || uploadingPDF}
             >
               {uploading ? (
                 <ActivityIndicator color={PRIMARY_BLUE} />
@@ -1435,10 +1481,56 @@ function PrayersForm() {
         </View>
       </View>
 
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קובץ PDF (אופציונלי)</Text>
+        {form.pdfUri && (
+          <View style={styles.pdfPreview}>
+            <Ionicons name="document-text" size={48} color={PRIMARY_BLUE} />
+            <Text style={styles.pdfName} numberOfLines={1}>
+              {form.pdfName || 'קובץ PDF'}
+            </Text>
+            {form.pdfUrl && (
+              <View style={styles.uploadedBadge}>
+                <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
+                <Text style={styles.uploadedText}>הועלה</Text>
+              </View>
+            )}
+          </View>
+        )}
+        <View style={styles.uploadSection}>
+          <Pressable
+            style={styles.uploadButton}
+            onPress={handlePickPDF}
+            disabled={uploading || uploadingPDF}
+          >
+            <Ionicons name="document-text-outline" size={24} color={PRIMARY_BLUE} />
+            <Text style={styles.uploadButtonText}>
+              {form.pdfUri ? 'בחר PDF אחר' : 'בחר קובץ PDF'}
+            </Text>
+          </Pressable>
+          {form.pdfUri && !form.pdfUrl && (
+            <Pressable
+              style={[styles.uploadButton, uploadingPDF && styles.uploadButtonDisabled]}
+              onPress={handleUploadPDF}
+              disabled={uploading || uploadingPDF}
+            >
+              {uploadingPDF ? (
+                <ActivityIndicator color={PRIMARY_BLUE} />
+              ) : (
+                <Ionicons name="cloud-upload-outline" size={24} color={PRIMARY_BLUE} />
+              )}
+              <Text style={styles.uploadButtonText}>
+                {uploadingPDF ? 'מעלה...' : 'העלה PDF'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+
       <Pressable
-        style={[styles.submitButton, (saving || uploading) && styles.submitButtonDisabled]}
+        style={[styles.submitButton, (saving || uploading || uploadingPDF) && styles.submitButtonDisabled]}
         onPress={handleSubmit}
-        disabled={saving || uploading}
+        disabled={saving || uploading || uploadingPDF}
       >
         <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
         {saving ? (
@@ -1452,7 +1544,7 @@ function PrayersForm() {
       </Pressable>
 
       <Text style={styles.note}>
-        💡 התפילה תישמר ב-Firestore ויופיע באפליקציה.
+        💡 התפילה תישמר ב-Firestore ויופיע באפליקציה. PDFs יועלו ל-Firebase Storage.
       </Text>
     </View>
   )
@@ -1667,6 +1759,15 @@ function YeshivaForm() {
   })
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  
+  // Short lesson form state
+  const [shortLessonForm, setShortLessonForm] = useState({
+    title: '',
+    description: '',
+    youtubeUrl: '',
+    category: '',
+  })
+  const [savingShortLesson, setSavingShortLesson] = useState(false)
 
   const handlePickImage = async () => {
     const image = await pickImage({ aspect: [16, 9] })
@@ -1749,6 +1850,126 @@ function YeshivaForm() {
 
   return (
     <View style={styles.formContainer}>
+      {/* Short Lessons Section - First! */}
+      <Text style={styles.formTitle}>🎬 הוספת שיעור קצר</Text>
+      
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>כותרת השיעור הקצר *</Text>
+        <TextInput
+          style={styles.input}
+          value={shortLessonForm.title}
+          onChangeText={text => setShortLessonForm({ ...shortLessonForm, title: text })}
+          placeholder="הכנס כותרת השיעור"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>תיאור</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={shortLessonForm.description}
+          onChangeText={text => setShortLessonForm({ ...shortLessonForm, description: text })}
+          placeholder="הכנס תיאור (אופציונלי)"
+          multiline
+          numberOfLines={3}
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קישור YouTube *</Text>
+        <TextInput
+          style={styles.input}
+          value={shortLessonForm.youtubeUrl}
+          onChangeText={text => setShortLessonForm({ ...shortLessonForm, youtubeUrl: text })}
+          placeholder="https://www.youtube.com/watch?v=..."
+          autoCapitalize="none"
+          keyboardType="url"
+        />
+        <Text style={styles.helpText}>
+          העתק את הקישור המלא מ-YouTube (לדוגמה: https://www.youtube.com/watch?v=VIDEO_ID)
+        </Text>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קטגוריה</Text>
+        <TextInput
+          style={styles.input}
+          value={shortLessonForm.category}
+          onChangeText={text => setShortLessonForm({ ...shortLessonForm, category: text })}
+          placeholder="הכנס קטגוריה (אופציונלי)"
+        />
+      </View>
+
+      <Pressable
+        style={[styles.submitButton, savingShortLesson && styles.submitButtonDisabled]}
+        onPress={async () => {
+          if (!shortLessonForm.title.trim() || !shortLessonForm.youtubeUrl.trim()) {
+            Alert.alert('שגיאה', 'יש למלא כותרת וקישור YouTube')
+            return
+          }
+
+          // Extract YouTube ID
+          const youtubeIdPattern = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/
+          const match = shortLessonForm.youtubeUrl.match(youtubeIdPattern)
+          if (!match || !match[1]) {
+            Alert.alert('שגיאה', 'קישור YouTube לא תקין. אנא השתמש בקישור מלא מ-YouTube')
+            return
+          }
+
+          setSavingShortLesson(true)
+          try {
+            await addDoc(collection(db, 'shortLessons'), {
+              title: shortLessonForm.title.trim(),
+              description: shortLessonForm.description.trim() || '',
+              youtubeUrl: shortLessonForm.youtubeUrl.trim(),
+              category: shortLessonForm.category.trim() || '',
+              isActive: true,
+              createdAt: serverTimestamp(),
+              order: 0
+            })
+
+            Alert.alert(
+              'הצלחה! 🎬',
+              'השיעור הקצר נוסף בהצלחה ויופיע באפליקציה',
+              [
+                {
+                  text: 'אישור',
+                  onPress: () => {
+                    setShortLessonForm({ title: '', description: '', youtubeUrl: '', category: '' })
+                  }
+                }
+              ]
+            )
+          } catch (error) {
+            console.error('Error saving short lesson:', error)
+            const errorMessage = error.code === 'permission-denied' 
+              ? 'אין הרשאה להוסיף שיעור. ודא שאתה מחובר כמנהל.'
+              : error.message || 'לא ניתן להוסיף את השיעור. אנא נסה שנית.'
+            Alert.alert('שגיאה', errorMessage)
+          } finally {
+            setSavingShortLesson(false)
+          }
+        }}
+        disabled={savingShortLesson}
+      >
+        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
+        {savingShortLesson ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="add-circle" size={20} color="#fff" />
+            <Text style={styles.submitButtonText}>הוסף שיעור קצר</Text>
+          </>
+        )}
+      </Pressable>
+
+      <Text style={styles.note}>
+        💡 השיעור הקצר יישמר ב-Firestore ויופיע באפליקציה במסך "שיעורים קצרים".
+      </Text>
+
+      <View style={styles.separator} />
+
+      {/* News Section */}
       <Text style={styles.formTitle}>📢 הוספת חדשה מבית המדרש</Text>
 
       <View style={styles.formGroup}>
@@ -1852,6 +2073,7 @@ function YeshivaForm() {
       <Text style={styles.note}>
         💡 החדשה תישמר ב-Firestore ב-collection 'news' ויופיע באפליקציה במסך "מהנעשה בבית המדרש".
       </Text>
+
     </View>
   )
 }
@@ -2169,6 +2391,209 @@ function TzadikimForm() {
   )
 }
 
+// ========== NOTIFICATIONS FORM ==========
+function NotificationsForm() {
+  const [form, setForm] = useState({
+    title: '',
+    message: '',
+    icon: 'notifications',
+    priority: 'medium',
+    link: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const iconOptions = [
+    { value: 'notifications', label: 'התראה כללית', icon: 'notifications' },
+    { value: 'information-circle', label: 'מידע', icon: 'information-circle' },
+    { value: 'warning', label: 'אזהרה', icon: 'warning' },
+    { value: 'checkmark-circle', label: 'הצלחה', icon: 'checkmark-circle' },
+    { value: 'calendar', label: 'אירוע', icon: 'calendar' },
+    { value: 'musical-notes', label: 'ניגון', icon: 'musical-notes' },
+    { value: 'book', label: 'תורה', icon: 'book' },
+    { value: 'heart', label: 'תפילה', icon: 'heart' },
+  ]
+
+  const priorityOptions = [
+    { value: 'low', label: 'נמוכה' },
+    { value: 'medium', label: 'בינונית' },
+    { value: 'high', label: 'גבוהה' },
+  ]
+
+  const handleSubmit = async () => {
+    if (!form.title || !form.message) {
+      Alert.alert('שגיאה', 'אנא מלא את כל השדות הנדרשים')
+      return
+    }
+
+    if (form.message.length > 500) {
+      Alert.alert('שגיאה', 'ההודעה ארוכה מדי (מקסימום 500 תווים)')
+      return
+    }
+
+    try {
+      setSaving(true)
+
+      await addDoc(collection(db, 'notifications'), {
+        title: form.title,
+        message: form.message,
+        icon: form.icon,
+        priority: form.priority,
+        link: form.link || null,
+        isActive: true,
+        readBy: [],
+        createdAt: serverTimestamp(),
+        createdBy: auth.currentUser?.uid || 'admin',
+      })
+
+      Alert.alert(
+        'הצלחה! 🔔',
+        'ההתראה נשלחה בהצלחה ותופיע לכל המשתמשים',
+        [
+          {
+            text: 'אישור',
+            onPress: () => {
+              setForm({
+                title: '',
+                message: '',
+                icon: 'notifications',
+                priority: 'medium',
+                link: '',
+              })
+            }
+          }
+        ]
+      )
+    } catch (error) {
+      console.error('Error saving notification:', error)
+      Alert.alert('שגיאה', 'לא ניתן לשמור את ההתראה. אנא נסה שנית.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>🔔 שליחת התראה חדשה</Text>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>כותרת ההתראה *</Text>
+        <TextInput
+          style={styles.input}
+          value={form.title}
+          onChangeText={text => setForm({ ...form, title: text })}
+          placeholder='לדוגמה: "עדכון חשוב"'
+          maxLength={100}
+        />
+        <Text style={styles.charCount}>{form.title.length}/100</Text>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>הודעה *</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={form.message}
+          onChangeText={text => setForm({ ...form, message: text })}
+          placeholder="כתוב את תוכן ההתראה..."
+          multiline
+          numberOfLines={6}
+          maxLength={500}
+        />
+        <Text style={styles.charCount}>{form.message.length}/500</Text>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>אייקון</Text>
+        <View style={styles.radioGroup}>
+          {iconOptions.map(option => (
+            <Pressable
+              key={option.value}
+              style={[
+                styles.radioButton,
+                form.icon === option.value && styles.radioButtonActive
+              ]}
+              onPress={() => setForm({ ...form, icon: option.value })}
+            >
+              <Ionicons
+                name={option.icon}
+                size={20}
+                color={form.icon === option.value ? PRIMARY_BLUE : '#6b7280'}
+              />
+              <Text
+                style={[
+                  styles.radioText,
+                  form.icon === option.value && styles.radioTextActive
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>עדיפות</Text>
+        <View style={styles.radioGroup}>
+          {priorityOptions.map(option => (
+            <Pressable
+              key={option.value}
+              style={[
+                styles.radioButton,
+                form.priority === option.value && styles.radioButtonActive
+              ]}
+              onPress={() => setForm({ ...form, priority: option.value })}
+            >
+              <Text
+                style={[
+                  styles.radioText,
+                  form.priority === option.value && styles.radioTextActive
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קישור (אופציונלי)</Text>
+        <TextInput
+          style={styles.input}
+          value={form.link}
+          onChangeText={text => setForm({ ...form, link: text })}
+          placeholder="https://..."
+          autoCapitalize="none"
+          keyboardType="url"
+        />
+        <Text style={styles.note}>
+          💡 אם תרצה שההתראה תפתח מסך מסוים, תוכל להוסיף קישור כאן (אופציונלי)
+        </Text>
+      </View>
+
+      <Pressable
+        style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+        onPress={handleSubmit}
+        disabled={saving}
+      >
+        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Ionicons name="send" size={20} color="#fff" />
+        )}
+        <Text style={styles.submitButtonText}>
+          {saving ? 'שולח...' : 'שלח התראה'}
+        </Text>
+      </Pressable>
+
+      <Text style={styles.note}>
+        💡 ההתראה תישלח לכל המשתמשים ותופיע במסך ההתראות. משתמשים יוכלו לראות אותה כשלוחצים על אייקון הפעמון.
+      </Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -2437,7 +2862,113 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: PRIMARY_BLUE,
   },
+  pdfPreview: {
+    width: '100%',
+    minHeight: 100,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30,58,138,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    padding: 16,
+    position: 'relative',
+    borderWidth: 2,
+    borderColor: 'rgba(212,175,55,0.2)',
+  },
+  pdfName: {
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: PRIMARY_BLUE,
+    textAlign: 'center',
+  },
   submitButtonDisabled: {
     opacity: 0.6,
+  },
+  addShortLessonButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+    marginBottom: 16,
+    minHeight: 56,
+    position: 'relative',
+  },
+  addShortLessonButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#fff',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: BG,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(11,27,58,0.1)',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontFamily: 'Poppins_700Bold',
+    color: DEEP_BLUE,
+  },
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(11,27,58,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(11,27,58,0.1)',
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+  },
+  saveButton: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#fff',
+    paddingVertical: 14,
+    textAlign: 'center',
   },
 })

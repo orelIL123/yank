@@ -149,12 +149,49 @@ export default function PianoScreen({ navigation }) {
   const webViewRef = useRef(null);
 
   useEffect(() => {
-    // Lock to landscape orientation
+    // Lock to landscape orientation and force rotation
     const lockOrientation = async () => {
       try {
+        // First, get current orientation
+        const currentOrientation = await ScreenOrientation.getOrientationAsync();
+        console.log('Current orientation:', currentOrientation);
+        
+        // Check if already in landscape
+        const isLandscape = 
+          currentOrientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+          currentOrientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+        
+        if (!isLandscape) {
+          // Force rotation to landscape by unlocking first, then locking
+          await ScreenOrientation.unlockAsync();
+          // Small delay to allow unlock to complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Lock to landscape (allows both left and right landscape)
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        
+        // Update dimensions after orientation change
+        setTimeout(() => {
+          const newDims = Dimensions.get('window');
+          setDimensions(newDims);
+          console.log('Dimensions after lock:', newDims);
+        }, 300);
       } catch (error) {
         console.log('Orientation lock error:', error);
+        // Retry after a short delay
+        setTimeout(async () => {
+          try {
+            await ScreenOrientation.unlockAsync();
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+            setTimeout(() => {
+              setDimensions(Dimensions.get('window'));
+            }, 300);
+          } catch (retryError) {
+            console.error('Retry orientation lock error:', retryError);
+          }
+        }, 500);
       }
     };
 
@@ -239,9 +276,12 @@ export default function PianoScreen({ navigation }) {
     { note: 'A#2', freq: 932.33, position: 12 },
   ];
 
-  // Use width (which is now the longer dimension in landscape)
-  const screenWidth = Math.max(dimensions.width, dimensions.height);
-  const whiteKeyWidth = (screenWidth - 80) / whiteKeys.length;
+  // Calculate dimensions for landscape mode
+  // In landscape, width is the longer dimension
+  const isLandscape = dimensions.width > dimensions.height;
+  const screenWidth = isLandscape ? dimensions.width : dimensions.height;
+  const screenHeight = isLandscape ? dimensions.height : dimensions.width;
+  const whiteKeyWidth = Math.max((screenWidth - 80) / whiteKeys.length, 30);
   const blackKeyWidth = whiteKeyWidth * 0.6;
 
   return (
@@ -411,12 +451,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 10,
   },
   pianoKeys: {
     width: '100%',
     height: '100%',
-    maxHeight: 350,
+    maxHeight: 400,
+    minHeight: 200,
     position: 'relative',
   },
   whiteKeysRow: {

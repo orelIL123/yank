@@ -10,7 +10,7 @@ const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-export default function NewsScreen({ navigation }) {
+export default function NewsScreen({ navigation, userRole }) {
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -112,7 +112,7 @@ export default function NewsScreen({ navigation }) {
               accessibilityLabel={`כתבה ${article.title}`}
             >
               <ImageBackground
-                source={article.imageUrl ? { uri: article.imageUrl } : require('../../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.jpg')}
+                source={article.imageUrl ? { uri: article.imageUrl } : require('../../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.png')}
                 style={styles.articleCover}
                 imageStyle={styles.articleCoverRadius}
               >

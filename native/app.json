@@ -3,7 +3,7 @@
     "name": "הינוקא",
     "slug": "yanuka",
     "owner": "orel895",
-    "version": "1.0.1",
+    "version": "1.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.hayanuka.app",
+      "buildNumber": "10",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -50,7 +51,8 @@
     },
     "scheme": "hayanuka",
     "plugins": [
-      "./plugins/with-firebase-modular-headers"
+      "./plugins/with-firebase-modular-headers",
+      "expo-localization"
     ]
   }
 }

@@ -8,13 +8,6 @@ service cloud.firestore {
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
-    // Helper function to check if user is authenticated and admin (with safe check)
-    function isAuthenticatedAdmin() {
-      return request.auth != null && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-    
     // Helper function to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
@@ -129,12 +122,32 @@ service cloud.firestore {
     
     match /shortLessons/{document=**} {
       allow read: if true;
-      allow write: if isAuthenticatedAdmin();
+      allow write: if isAdmin();
     }
     
     match /longLessons/{document=**} {
       allow read: if true;
-      allow write: if isAuthenticatedAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // Notifications - authenticated users can read, admin can write
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Daily Videos - authenticated users can read, admin can write
+    match /dailyVideos/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // Beit Midrash Videos - public read, admin write
+    match /beitMidrashVideos/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

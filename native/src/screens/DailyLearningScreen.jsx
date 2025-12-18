@@ -35,7 +35,7 @@ import { collection, getDocs, query, orderBy, limit, where, doc, updateDoc, incr
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
+// DocumentPicker will be imported dynamically when needed
 import YoutubePlayer from 'react-native-youtube-iframe';
 
 const { width, height } = Dimensions.get('window');
@@ -352,6 +352,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
 
   const handleUploadAudio = async () => {
     try {
+      const DocumentPicker = await import('expo-document-picker')
       const result = await DocumentPicker.getDocumentAsync({
         type: 'audio/*',
         copyToCacheDirectory: true,

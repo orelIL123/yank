@@ -3,6 +3,9 @@ import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
+// Note: Firebase Auth automatically persists to AsyncStorage in React Native
+// No explicit persistence configuration needed - it works out of the box
+
 const firebaseConfig = {
   apiKey: "AIzaSyC6CfvVURku2xMCgnhIGQbc4vQTKLP3SYA",
   authDomain: "yank-99f79.firebaseapp.com",
@@ -31,7 +34,11 @@ try {
 // Initialize services with error handling
 let auth, db, storage
 try {
+  // Firebase Auth automatically persists user sessions in React Native using AsyncStorage
+  // This means users will remain logged in across app restarts
   auth = getAuth(app)
+  console.log('Firebase Auth initialized - user sessions will persist across app restarts')
+  
   db = getFirestore(app)
   storage = getStorage(app)
 } catch (error) {

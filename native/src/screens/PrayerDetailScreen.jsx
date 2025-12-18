@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Share, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Share, ActivityIndicator, Dimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -7,28 +7,40 @@ import { Ionicons } from '@expo/vector-icons'
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
+const { width } = Dimensions.get('window')
 
 export default function PrayerDetailScreen({ route, navigation }) {
   const { prayer } = route.params || {}
   const [imageLoading, setImageLoading] = useState(true)
   const [imageError, setImageError] = useState(false)
   
-  // Get image source - ONLY from Firestore URL, no local fallbacks
-  const getImageSource = () => {
-    // Only use URL from Firestore
-    if (prayer?.imageUrl) {
+  // Get all images - support both single imageUrl and multiple imageUrls
+  const getImages = () => {
+    const images = []
+    
+    // Check for imageUrls array (multiple images)
+    if (prayer?.imageUrls && Array.isArray(prayer.imageUrls)) {
+      prayer.imageUrls.forEach(url => {
+        if (typeof url === 'string' && url.trim() !== '' && url.startsWith('http')) {
+          images.push({ uri: url })
+        }
+      })
+    }
+    
+    // Also check for single imageUrl (backward compatibility)
+    if (images.length === 0 && prayer?.imageUrl) {
       if (typeof prayer.imageUrl === 'string' && prayer.imageUrl.trim() !== '') {
         if (prayer.imageUrl.startsWith('http')) {
-          return { uri: prayer.imageUrl }
+          images.push({ uri: prayer.imageUrl })
         }
       }
     }
     
-    // No fallback - return null if no URL
-    return null
+    return images
   }
   
-  const imageSource = getImageSource()
+  const images = getImages()
+  const imageSource = images.length > 0 ? images[0] : null
   
   // Debug logging
   React.useEffect(() => {
@@ -100,31 +112,68 @@ export default function PrayerDetailScreen({ route, navigation }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Prayer Image */}
-        {imageSource ? (
-          <View style={styles.imageContainer}>
-            {imageLoading && (
-              <View style={styles.imageLoadingContainer}>
-                <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+        {/* Prayer Images */}
+        {images.length > 0 ? (
+          <View style={styles.imagesContainer}>
+            {images.length === 1 ? (
+              // Single image - full width
+              <View style={styles.imageContainer}>
+                {imageLoading && (
+                  <View style={styles.imageLoadingContainer}>
+                    <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+                  </View>
+                )}
+                <Image
+                  source={images[0]}
+                  style={styles.prayerImage}
+                  resizeMode="cover"
+                  onLoadStart={() => setImageLoading(true)}
+                  onLoadEnd={() => setImageLoading(false)}
+                  onError={(error) => {
+                    console.error('Image load error:', error.nativeEvent.error)
+                    setImageError(true)
+                    setImageLoading(false)
+                  }}
+                />
+                {imageError && (
+                  <View style={styles.imageErrorContainer}>
+                    <Ionicons name="image-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+                    <Text style={styles.imageErrorText}>לא ניתן לטעון תמונה</Text>
+                  </View>
+                )}
               </View>
-            )}
-            <Image
-              source={imageSource}
-              style={styles.prayerImage}
-              resizeMode="cover"
-              onLoadStart={() => setImageLoading(true)}
-              onLoadEnd={() => setImageLoading(false)}
-              onError={(error) => {
-                console.error('Image load error:', error.nativeEvent.error)
-                setImageError(true)
-                setImageLoading(false)
-              }}
-            />
-            {imageError && (
-              <View style={styles.imageErrorContainer}>
-                <Ionicons name="image-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-                <Text style={styles.imageErrorText}>לא ניתן לטעון תמונה</Text>
-              </View>
+            ) : (
+              // Multiple images - scrollable horizontal gallery
+              <ScrollView 
+                horizontal 
+                pagingEnabled 
+                showsHorizontalScrollIndicator={true}
+                contentContainerStyle={styles.imagesGallery}
+              >
+                {images.map((img, index) => (
+                  <View key={index} style={styles.imageContainer}>
+                    <Image
+                      source={img}
+                      style={styles.prayerImage}
+                      resizeMode="cover"
+                      onLoadStart={() => setImageLoading(true)}
+                      onLoadEnd={() => setImageLoading(false)}
+                      onError={(error) => {
+                        console.error('Image load error:', error.nativeEvent.error)
+                        setImageError(true)
+                        setImageLoading(false)
+                      }}
+                    />
+                    {images.length > 1 && (
+                      <View style={styles.imageCounter}>
+                        <Text style={styles.imageCounterText}>
+                          {index + 1} / {images.length}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
             )}
           </View>
         ) : (
@@ -227,17 +276,37 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  imagesContainer: {
+    marginBottom: 20,
+  },
+  imagesGallery: {
+    gap: 0,
+  },
   imageContainer: {
-    width: '100%',
+    width: width - 40,
     height: 250,
     borderRadius: 20,
     overflow: 'hidden',
-    marginBottom: 20,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 15,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
+    position: 'relative',
+  },
+  imageCounter: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  imageCounterText: {
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
   },
   prayerImage: {
     width: '100%',

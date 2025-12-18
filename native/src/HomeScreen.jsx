@@ -1,12 +1,13 @@
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { View, Text, StyleSheet, FlatList, Pressable, Animated, Platform, Dimensions, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Grayscale } from 'react-native-color-matrix-image-filters'
+import { Audio } from 'expo-av'
 import MenuDrawer from './components/MenuDrawer'
 import AppHeader from './components/AppHeader'
 import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore'
-import { db } from './config/firebase'
+import { db, auth } from './config/firebase'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -17,18 +18,18 @@ const BLACK = '#000000'
 const DEFAULT_CARDS = [
   { key: 'books', title: 'ספרים', desc: 'ספרי תורה וחידושים', icon: 'book-outline', image: require('../assets/photos/cards/ספרים/ספרים.jpg'), gradient: ['#667eea', '#764ba2'], size: 'large' },
   { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/תפילות הינוקא/תפילה_לחבקוק.png'), gradient: ['#f093fb', '#f5576c'], size: 'large' },
-  { key: 'newsletters', title: 'עלונים', desc: 'עלונים להורדה וצפייה', icon: 'document-text-outline', image: require('../assets/photos/cards/הינוקא.jpg'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
+  { key: 'newsletters', title: 'עלונים', desc: 'עלונים להורדה וצפייה', icon: 'document-text-outline', image: require('../assets/photos/cards/הינוקא.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
   { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/הינוקא1.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
   { key: 'chidushim', title: 'חידושים', desc: 'חידושי תורה ותובנות', icon: 'bulb-outline', image: require('../assets/photos/cards/הינוקא.png'), gradient: ['#fa709a', '#fee140'], size: 'small' },
   { key: 'yeshiva', title: 'מהנעשה בבית המדרש', desc: 'עדכונים וחדשות', icon: 'school-outline', image: require('../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.png'), gradient: ['#30cfd0', '#330867'], size: 'small' },
   { key: 'tzadikim', title: 'ספר תולדות אדם', desc: 'אלפי תמונות ומידע', icon: 'people-outline', image: require('../assets/photos/cards/הינוקא1.jpg'), gradient: ['#a8edea', '#fed6e3'], size: 'large' },
-  { key: 'learningLibrary', title: 'ספריית לימוד', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/הינוקא.jpg'), gradient: ['#667eea', '#764ba2'], size: 'large' },
+  { key: 'learningLibrary', title: 'ספריית לימוד', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/הינוקא.png'), gradient: ['#667eea', '#764ba2'], size: 'large' },
 ]
 
 // Carousel image order
 const IMAGES = [
   require('../assets/photos/cards/ספרים/ספרים.jpg'),
-  require('../assets/photos/cards/הינוקא.jpg'),
+  require('../assets/photos/cards/הינוקא.png'),
   require('../assets/photos/cards/הינוקא1.jpg'),
   require('../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.png'),
 ]
@@ -87,12 +88,34 @@ function Card({ item, index, scrollX, SNAP, CARD_WIDTH, CARD_HEIGHT, OVERLAP, on
         accessibilityLabel={`${item.title} - ${item.desc}`}
       >
         <Animated.View style={[styles.card, animatedStyle]}>
-          <ImageBackground
-            source={item.image || (item.imageUrl ? { uri: item.imageUrl } : IMAGES[index % IMAGES.length])}
-            resizeMode="cover"
-            style={StyleSheet.absoluteFill}
-            imageStyle={imageStyle}
-          />
+          {(() => {
+            // Determine image source: priority: imageUrl > image (require/built-in) > fallback
+            let imageSource = null;
+            if (item.imageUrl) {
+              // Use Firestore imageUrl if available
+              imageSource = { uri: item.imageUrl };
+            } else if (item.image) {
+              // Use built-in require() image
+              imageSource = item.image;
+            } else if (item.builtInImage) {
+              // Fallback to built-in image from defaultCard
+              imageSource = item.builtInImage;
+            } else {
+              // Last resort: use IMAGES array
+              imageSource = IMAGES[index % IMAGES.length];
+            }
+            
+            return imageSource ? (
+              <ImageBackground
+                source={imageSource}
+                resizeMode="cover"
+                style={StyleSheet.absoluteFill}
+                imageStyle={imageStyle}
+              />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: item.gradient?.[0] || PRIMARY_BLUE }]} />
+            );
+          })()}
           <LinearGradient
             colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.0)']}
             locations={[0, 0.45]}
@@ -140,6 +163,9 @@ export default function HomeScreen({ navigation }) {
   const [songsLoading, setSongsLoading] = useState(true)
   const [cards, setCards] = useState([])
   const [cardsLoading, setCardsLoading] = useState(true)
+  const [sound, setSound] = useState(null)
+  const [playingSongId, setPlayingSongId] = useState(null)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   const onShareQuote = React.useCallback(() => {
     Share.share({ message: `"${quote}"` }).catch(() => { })
@@ -169,8 +195,10 @@ export default function HomeScreen({ navigation }) {
               ...data,
               gradient: defaultCard?.gradient || ['#667eea', '#764ba2'],
               size: defaultCard?.size || 'small',
-              // Use imageUrl from Firestore if available, otherwise fallback to default
-              image: data.imageUrl ? { uri: data.imageUrl } : defaultCard?.image
+              // Use imageUrl from Firestore if available, otherwise use built-in image from defaultCard
+              image: data.imageUrl ? { uri: data.imageUrl } : (defaultCard?.image || null),
+              // Keep the built-in image as fallback even if imageUrl exists
+              builtInImage: defaultCard?.image || null
             }
           })
           setCards(cardsData)
@@ -205,6 +233,158 @@ export default function HomeScreen({ navigation }) {
       }
     }
     loadSongs()
+
+    // Set audio mode for playback
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        })
+      } catch (error) {
+        console.error('Error setting audio mode:', error)
+      }
+    }
+    setupAudio()
+  }, [])
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(console.error)
+      }
+    }
+  }, [sound])
+
+  // Update playback status
+  useEffect(() => {
+    if (sound) {
+      sound.setOnPlaybackStatusUpdate((status) => {
+        setIsPlaying(status.isLoaded && status.isPlaying)
+        if (status.didJustFinish) {
+          setPlayingSongId(null)
+          setIsPlaying(false)
+        }
+      })
+    }
+  }, [sound])
+
+  const handlePlaySong = async (song) => {
+    try {
+      // If it's a YouTube video, navigate to Music screen
+      if (song.youtubeId) {
+        navigation?.navigate('Music')
+        return
+      }
+
+      // Stop current audio if playing
+      if (sound) {
+        await sound.unloadAsync()
+        setSound(null)
+      }
+
+      // If same song is playing, pause/resume it
+      if (playingSongId === song.id && sound) {
+        if (isPlaying) {
+          await sound.pauseAsync()
+        } else {
+          await sound.playAsync()
+        }
+        return
+      }
+
+      // Check if song has audioUrl
+      if (!song.audioUrl || !song.audioUrl.trim()) {
+        Alert.alert(
+          'קובץ השמע אינו זמין', 
+          'ניגון זה זמין רק במסך הניגונים המלא',
+          [
+            { text: 'ביטול', style: 'cancel' },
+            { text: 'פתח מסך ניגונים', onPress: () => navigation?.navigate('Music') }
+          ]
+        )
+        return
+      }
+
+      // Validate URL
+      if (!song.audioUrl.startsWith('http://') && !song.audioUrl.startsWith('https://')) {
+        Alert.alert('שגיאה', 'קישור לא תקין לניגון זה')
+        return
+      }
+
+      // Load and play new song
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: song.audioUrl },
+        { 
+          shouldPlay: true,
+          isLooping: false,
+          volume: 1.0,
+        }
+      )
+
+      // Set up playback status listener
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded) {
+          setIsPlaying(status.isPlaying)
+          if (status.didJustFinish) {
+            setPlayingSongId(null)
+            setIsPlaying(false)
+          }
+        }
+      })
+
+      setSound(newSound)
+      setPlayingSongId(song.id)
+      setIsPlaying(true)
+    } catch (error) {
+      console.error('Error playing song:', error)
+      Alert.alert(
+        'שגיאה', 
+        'לא ניתן לנגן את הניגון. נסה לפתוח את מסך הניגונים המלא',
+        [
+          { text: 'ביטול', style: 'cancel' },
+          { text: 'פתח מסך ניגונים', onPress: () => navigation?.navigate('Music') }
+        ]
+      )
+    }
+  }
+
+  // Load notifications and count unread
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const q = query(
+          collection(db, 'notifications'),
+          where('isActive', '==', true),
+          orderBy('createdAt', 'desc')
+        )
+        const querySnapshot = await getDocs(q)
+        const userId = auth.currentUser?.uid
+        
+        if (!userId) {
+          setUnreadCount(0)
+          return
+        }
+
+        const unreadNotifications = querySnapshot.docs.filter(doc => {
+          const data = doc.data()
+          return !data.readBy || !data.readBy.includes(userId)
+        })
+        
+        setUnreadCount(unreadNotifications.length)
+      } catch (error) {
+        console.error('Error loading notifications:', error)
+      }
+    }
+    
+    loadNotifications()
+    // Refresh notifications every 30 seconds
+    const interval = setInterval(loadNotifications, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleCardPress = React.useCallback((key) => {
@@ -248,8 +428,8 @@ export default function HomeScreen({ navigation }) {
   }, [navigation])
 
   const handleNotificationPress = React.useCallback(() => {
-    Alert.alert('בקרוב', 'מערכת התראות תתווסף בקרוב')
-  }, [])
+    navigation?.navigate('Notifications')
+  }, [navigation])
 
   const openSocialLink = React.useCallback((url) => {
     Linking.openURL(url).catch(() => {
@@ -343,16 +523,82 @@ export default function HomeScreen({ navigation }) {
             ) : songs.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.podcastRow}>
                 {songs.map((song) => (
-                  <Pressable
+                  <View
                     key={song.id}
-                    style={styles.podcastCard}
-                    onPress={() => navigation?.navigate('Music')}
-                    accessibilityRole="button"
+                    style={[
+                      styles.podcastCard,
+                      playingSongId === song.id && styles.podcastCardPlaying
+                    ]}
                   >
-                    <Ionicons name="musical-notes" size={34} color={PRIMARY_BLUE} />
-                    <Text style={styles.podcastTitle} numberOfLines={1}>{song.title}</Text>
-                    <Text style={styles.podcastDesc} numberOfLines={1}>{song.description || 'ניגון'}</Text>
-                  </Pressable>
+                    <Pressable
+                      style={styles.podcastCardContent}
+                      onPress={() => navigation?.navigate('Music')}
+                      accessibilityRole="button"
+                    >
+                      {song.imageUrl ? (
+                        <View style={styles.songImageWrapper}>
+                          <Image
+                            source={{ uri: song.imageUrl }}
+                            style={styles.songPreviewImage}
+                            resizeMode="cover"
+                          />
+                          {playingSongId === song.id && isPlaying && (
+                            <View style={styles.playingOverlay}>
+                              <Ionicons name="musical-notes" size={16} color="#fff" />
+                            </View>
+                          )}
+                        </View>
+                      ) : (
+                        <View style={styles.songIconWrapper}>
+                          <Ionicons 
+                            name={playingSongId === song.id && isPlaying ? "musical-notes" : "musical-notes-outline"} 
+                            size={34} 
+                            color={playingSongId === song.id ? PRIMARY_BLUE : PRIMARY_BLUE} 
+                          />
+                        </View>
+                      )}
+                      <Text style={[
+                        styles.podcastTitle,
+                        playingSongId === song.id && styles.podcastTitlePlaying
+                      ]} numberOfLines={1}>{song.title}</Text>
+                      <Text style={styles.podcastDesc} numberOfLines={1}>{song.description || 'ניגון'}</Text>
+                    </Pressable>
+                    {song.audioUrl && song.audioUrl.trim() ? (
+                      <Pressable
+                        style={[
+                          styles.playButton,
+                          playingSongId === song.id && isPlaying && styles.playButtonActive
+                        ]}
+                        onPress={() => handlePlaySong(song)}
+                        accessibilityRole="button"
+                        accessibilityLabel={playingSongId === song.id && isPlaying ? "עצור" : "נגן"}
+                      >
+                        <Ionicons 
+                          name={playingSongId === song.id && isPlaying ? "pause" : "play"} 
+                          size={20} 
+                          color="#fff" 
+                        />
+                      </Pressable>
+                    ) : song.youtubeId ? (
+                      <Pressable
+                        style={[styles.playButton, styles.playButtonYoutube]}
+                        onPress={() => navigation?.navigate('Music')}
+                        accessibilityRole="button"
+                        accessibilityLabel="פתח במסך ניגונים"
+                      >
+                        <Ionicons name="logo-youtube" size={20} color="#fff" />
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={[styles.playButton, styles.playButtonDisabled]}
+                        onPress={() => navigation?.navigate('Music')}
+                        accessibilityRole="button"
+                        accessibilityLabel="פתח במסך ניגונים"
+                      >
+                        <Ionicons name="arrow-forward" size={18} color="#fff" />
+                      </Pressable>
+                    )}
+                  </View>
                 ))}
               </ScrollView>
             ) : (
@@ -714,11 +960,76 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    position: 'relative',
+  },
+  podcastCardPlaying: {
+    borderColor: PRIMARY_BLUE,
+    borderWidth: 2,
+    backgroundColor: '#f0f9ff',
+  },
+  podcastCardContent: {
+    alignItems: 'flex-end',
+    flex: 1,
+    width: '100%',
+  },
+  songImageWrapper: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginBottom: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    position: 'relative',
+  },
+  songPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  playingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(30,58,138,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  songIconWrapper: {
+    marginBottom: 8,
+  },
+  playButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: PRIMARY_BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: PRIMARY_BLUE,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  playButtonActive: {
+    backgroundColor: '#dc2626',
+  },
+  playButtonYoutube: {
+    backgroundColor: '#FF0000',
+  },
+  playButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.7,
   },
   podcastTitle: {
     color: DEEP_BLUE,
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
+    marginTop: 6,
+  },
+  podcastTitlePlaying: {
+    color: PRIMARY_BLUE,
   },
   podcastDesc: {
     color: '#6b7280',

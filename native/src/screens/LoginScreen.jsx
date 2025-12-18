@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,31 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { getRememberMe, setRememberMe, getSavedEmail, saveEmail, clearSavedEmail } from '../utils/preferences';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMeState] = useState(true);
+
+  // Load saved "Remember Me" preference and email on mount
+  useEffect(() => {
+    const loadPreferences = async () => {
+      const savedPreference = await getRememberMe();
+      setRememberMeState(savedPreference);
+      
+      // Load saved email if Remember Me was enabled
+      if (savedPreference) {
+        const savedEmail = await getSavedEmail();
+        if (savedEmail) {
+          setEmail(savedEmail);
+        }
+      }
+    };
+    loadPreferences();
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -34,6 +53,20 @@ export default function LoginScreen({ navigation }) {
       console.log('Attempting login with email:', email.trim());
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       console.log('Login successful! User:', userCredential.user.uid);
+      
+      // Save "Remember Me" preference
+      await setRememberMe(rememberMe);
+      console.log('Remember Me preference saved:', rememberMe);
+      
+      // Save email if Remember Me is enabled, otherwise clear it
+      if (rememberMe) {
+        await saveEmail(email.trim());
+        console.log('Email saved for Remember Me');
+      } else {
+        await clearSavedEmail();
+        console.log('Email cleared (Remember Me disabled)');
+      }
+      
       Keyboard.dismiss();
       
       // Give App.js a moment to detect auth state change, then navigate
@@ -132,6 +165,22 @@ export default function LoginScreen({ navigation }) {
               />
             </View>
           </View>
+
+          {/* Remember Me checkbox */}
+          <TouchableOpacity
+            style={styles.rememberMeContainer}
+            onPress={() => setRememberMeState(!rememberMe)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.checkboxContainer}>
+              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                {rememberMe && (
+                  <Ionicons name="checkmark" size={18} color="#1a1a2e" />
+                )}
+              </View>
+              <Text style={styles.rememberMeText}>זכור אותי</Text>
+            </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.loginButton}
@@ -281,5 +330,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Heebo_500Medium',
     textDecorationLine: 'underline',
+  },
+  rememberMeContainer: {
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginLeft: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#FFD700',
+    borderColor: '#FFD700',
+  },
+  rememberMeText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: 'Heebo_400Regular',
+    textAlign: 'right',
   },
 });

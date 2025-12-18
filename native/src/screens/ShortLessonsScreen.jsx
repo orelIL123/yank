@@ -12,7 +12,8 @@ import {
   Modal,
   TextInput,
   ScrollView,
-  Image
+  Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,6 +36,7 @@ function extractYouTubeId(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
     /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+    /youtube\.com\/shorts\/([^&\n?#/]+)/, // support YouTube Shorts / Reels-style links
   ];
   
   for (const pattern of patterns) {
@@ -82,6 +84,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     console.log('ShortLessonsScreen - userRole:', userRole, 'isAdmin:', adminStatus);
     loadLessons();
   }, [userRole]);
+
 
   useEffect(() => {
     // When lessons load, shuffle if needed
@@ -208,6 +211,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
   };
 
   const handleAddLesson = () => {
+    console.log('handleAddLesson called');
     setShowAddModal(true);
   };
 
@@ -258,7 +262,10 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
       loadLessons();
     } catch (error) {
       console.error('Error saving lesson:', error);
-      Alert.alert('שגיאה', editingLesson ? 'לא ניתן לעדכן את השיעור' : 'לא ניתן להוסיף את השיעור');
+      const errorMessage = error.code === 'permission-denied' 
+        ? 'אין הרשאה להוסיף שיעור. ודא שאתה מחובר כמנהל.'
+        : error.message || (editingLesson ? 'לא ניתן לעדכן את השיעור' : 'לא ניתן להוסיף את השיעור');
+      Alert.alert('שגיאה', errorMessage);
     } finally {
       setSaving(false);
     }
@@ -446,21 +453,6 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           </View>
         </View>
 
-        {/* Add Button (Admin only) */}
-        {isAdmin && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleAddLesson}
-          >
-            <LinearGradient
-              colors={[PRIMARY_BLUE, '#1e40af']}
-              style={styles.addButtonGradient}
-            >
-              <Ionicons name="add" size={28} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-
         {/* Video Counter */}
         <View style={styles.counterContainer}>
           <Text style={styles.counterText}>
@@ -489,30 +481,175 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
 
   if (lessons.length === 0) {
     return (
-      <View style={styles.container}>
-        <AppHeader
-          title="שיעורים קצרים"
-          subtitle="רילסים מהרב"
-          onBackPress={() => navigation.goBack()}
-        />
-        <View style={styles.emptyState}>
-          <Ionicons name="play-circle-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-          <Text style={styles.emptyText}>אין שיעורים זמינים כרגע</Text>
-          <Text style={styles.emptySubtext}>השיעורים יתווספו בקרוב</Text>
+      <>
+        <View style={styles.container}>
+          <AppHeader
+            title="שיעורים קצרים"
+            subtitle="רילסים מהרב"
+            onBackPress={() => navigation.goBack()}
+          />
+          <View style={styles.emptyState}>
+            <Ionicons name="play-circle-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+            <Text style={styles.emptyText}>אין שיעורים זמינים כרגע</Text>
+            <Text style={styles.emptySubtext}>השיעורים יתווספו בקרוב</Text>
+          </View>
+
+          {/* Floating Add Button */}
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.floatingAddButton}
+              onPress={handleAddLesson}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[PRIMARY_BLUE, '#1e40af']}
+                style={styles.floatingAddButtonGradient}
+              >
+                <Ionicons name="add" size={32} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
         </View>
-      </View>
+
+        {/* Modals */}
+        <Modal
+          visible={showAddModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => {
+            setShowAddModal(false);
+            setFormTitle('');
+            setFormDescription('');
+            setFormYoutubeUrl('');
+            setFormCategory('');
+          }}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>הוסף שיעור קצר חדש</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowAddModal(false);
+                    setFormTitle('');
+                    setFormDescription('');
+                    setFormYoutubeUrl('');
+                    setFormCategory('');
+                  }}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={28} color={DEEP_BLUE} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.modalBody}
+                contentContainerStyle={{ paddingBottom: 24 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>כותרת *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={formTitle}
+                    onChangeText={setFormTitle}
+                    placeholder="הכנס כותרת"
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>תיאור</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.formTextArea]}
+                    value={formDescription}
+                    onChangeText={setFormDescription}
+                    placeholder="הכנס תיאור (אופציונלי)"
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    numberOfLines={4}
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>קישור YouTube *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={formYoutubeUrl}
+                    onChangeText={setFormYoutubeUrl}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    placeholderTextColor="#9ca3af"
+                    autoCapitalize="none"
+                    keyboardType="url"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>קטגוריה</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={formCategory}
+                    onChangeText={setFormCategory}
+                    placeholder="הכנס קטגוריה (אופציונלי)"
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setShowAddModal(false);
+                    setFormTitle('');
+                    setFormDescription('');
+                    setFormYoutubeUrl('');
+                    setFormCategory('');
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>ביטול</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={handleSaveLesson}
+                  disabled={saving}
+                >
+                  <LinearGradient
+                    colors={[PRIMARY_BLUE, '#1e40af']}
+                    style={styles.saveButtonGradient}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>שמור</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </>
     );
   }
 
   const currentLessons = getCurrentLessons();
 
   return (
-    <View style={styles.container}>
-      <AppHeader
-        title="שיעורים קצרים"
-        subtitle="רילסים מהרב"
-        onBackPress={() => navigation.goBack()}
-      />
+    <>
+      <View style={styles.container}>
+        <AppHeader
+          title="שיעורים קצרים"
+          subtitle="רילסים מהרב"
+          onBackPress={() => navigation.goBack()}
+        />
       
       <FlatList
         ref={flatListRef}
@@ -542,6 +679,23 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
         }}
       />
 
+      {/* Floating Add Button */}
+      {isAdmin && (
+        <TouchableOpacity
+          style={styles.floatingAddButton}
+          onPress={handleAddLesson}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={[PRIMARY_BLUE, '#1e40af']}
+            style={styles.floatingAddButtonGradient}
+          >
+            <Ionicons name="add" size={32} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+      </View>
+
       {/* Add Lesson Modal */}
       <Modal
         visible={showAddModal}
@@ -555,6 +709,11 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           setFormCategory('');
         }}
       >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -573,7 +732,12 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>כותרת *</Text>
                 <TextInput
@@ -655,6 +819,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit Lesson Modal */}
@@ -671,6 +836,11 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           setFormCategory('');
         }}
       >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -690,7 +860,12 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>כותרת *</Text>
                 <TextInput
@@ -773,8 +948,9 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </>
   );
 }
 
@@ -934,23 +1110,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_600SemiBold',
     color: '#fff',
   },
-  addButton: {
+  floatingAddButton: {
     position: 'absolute',
-    bottom: Platform.select({ ios: 100, android: 80 }),
+    bottom: Platform.select({ ios: 120, android: 100 }),
     left: 20,
-    zIndex: 10,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     overflow: 'hidden',
     shadowColor: PRIMARY_BLUE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 10,
+    zIndex: 999,
   },
-  addButtonGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  floatingAddButtonGradient: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1051,9 +1228,9 @@ const styles = StyleSheet.create({
   },
   adminButtonsContainer: {
     position: 'absolute',
-    top: Platform.select({ ios: 100, android: 80 }),
-    left: 20,
-    zIndex: 10,
+    bottom: Platform.select({ ios: 200, android: 180 }),
+    right: 20,
+    zIndex: 20,
     flexDirection: 'row',
     gap: 8,
   },
