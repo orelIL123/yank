@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Dimensions,
-  Platform,
   Modal,
   TextInput,
   ScrollView,
+  Platform,
   Image
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, Timestamp } from 'firebase/firestore';
@@ -25,7 +23,6 @@ import AppHeader from '../components/AppHeader';
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
-const { width, height } = Dimensions.get('window');
 
 // Helper function to extract YouTube video ID from URL
 function extractYouTubeId(url) {
@@ -57,17 +54,13 @@ function getYouTubeThumbnail(videoId, quality = 'hqdefault') {
 export default function ShortLessonsScreen({ navigation, userRole }) {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedLesson, setSelectedLesson] = useState(null);
   const [isShuffled, setIsShuffled] = useState(false);
-  const [autoPlay, setAutoPlay] = useState(true);
   const [shuffledLessons, setShuffledLessons] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const flatListRef = useRef(null);
-  const playerRef = useRef(null);
   
   // Form state
   const [formTitle, setFormTitle] = useState('');
@@ -84,11 +77,15 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
   }, [userRole]);
 
   useEffect(() => {
-    // When lessons load, shuffle if needed
-    if (lessons.length > 0 && isShuffled) {
-      shuffleLessons();
+    // When lessons load, update shuffled list
+    if (lessons.length > 0) {
+      if (isShuffled) {
+        shuffleLessons();
+      } else {
+        setShuffledLessons([...lessons]);
+      }
     }
-  }, [lessons, isShuffled]);
+  }, [lessons]);
 
   const loadLessons = async () => {
     try {
@@ -109,9 +106,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
       }).filter(lesson => lesson.youtubeId); // Only include lessons with valid YouTube IDs
 
       setLessons(lessonsData);
-      if (lessonsData.length > 0) {
-        setShuffledLessons([...lessonsData]);
-      }
+      setShuffledLessons([...lessonsData]);
     } catch (error) {
       console.error('Error loading lessons:', error);
       console.error('Error code:', error.code);
@@ -136,9 +131,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           }).filter(lesson => lesson.youtubeId && lesson.isActive !== false);
 
           setLessons(lessonsData);
-          if (lessonsData.length > 0) {
-            setShuffledLessons([...lessonsData]);
-          }
+          setShuffledLessons([...lessonsData]);
           console.log('Loaded lessons without where clause:', lessonsData.length);
         } catch (fallbackError) {
           console.error('Fallback error:', fallbackError);
@@ -162,9 +155,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
               });
 
             setLessons(lessonsData);
-            if (lessonsData.length > 0) {
-              setShuffledLessons([...lessonsData]);
-            }
+            setShuffledLessons([...lessonsData]);
             console.log('Loaded lessons without orderBy:', lessonsData.length);
           } catch (finalError) {
             console.error('Final fallback error:', finalError);
@@ -182,29 +173,24 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
   const shuffleLessons = () => {
     const shuffled = [...lessons].sort(() => Math.random() - 0.5);
     setShuffledLessons(shuffled);
-    setCurrentIndex(0);
-    // Scroll to top
-    if (flatListRef.current) {
-      flatListRef.current.scrollToIndex({ index: 0, animated: false });
-    }
   };
 
   const toggleShuffle = () => {
     if (isShuffled) {
       // Reset to original order
       setShuffledLessons([...lessons]);
-      setCurrentIndex(0);
-      if (flatListRef.current) {
-        flatListRef.current.scrollToIndex({ index: 0, animated: false });
-      }
     } else {
       shuffleLessons();
     }
     setIsShuffled(!isShuffled);
   };
 
-  const toggleAutoPlay = () => {
-    setAutoPlay(!autoPlay);
+  const handleLessonPress = (lesson) => {
+    setSelectedLesson(lesson);
+  };
+
+  const handleClosePlayer = () => {
+    setSelectedLesson(null);
   };
 
   const handleAddLesson = () => {
@@ -301,89 +287,38 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     return isShuffled ? shuffledLessons : lessons;
   };
 
-  const onStateChange = useCallback((state) => {
-    if (state === "ended") {
-      setIsPlaying(false);
-      // Auto-play next video if enabled
-      if (autoPlay) {
-        const currentLessons = isShuffled ? shuffledLessons : lessons;
-        if (currentIndex < currentLessons.length - 1) {
-          const nextIndex = currentIndex + 1;
-          setCurrentIndex(nextIndex);
-          if (flatListRef.current) {
-            flatListRef.current.scrollToIndex({ 
-              index: nextIndex, 
-              animated: true 
-            });
-          }
-        }
-      }
-    } else if (state === "playing") {
-      setIsPlaying(true);
-    } else if (state === "paused") {
-      setIsPlaying(false);
-    }
-  }, [currentIndex, autoPlay, isShuffled, shuffledLessons, lessons]);
-
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length > 0) {
-      const newIndex = viewableItems[0].index;
-      if (newIndex !== null && newIndex !== currentIndex) {
-        setCurrentIndex(newIndex);
-        setIsPlaying(true); // Auto-play when scrolling to new video
-      }
-    }
-  }).current;
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 50
-  };
-
-  const renderLesson = ({ item, index }) => {
-    const isCurrent = index === currentIndex;
-    const currentLessons = getCurrentLessons();
-
+  const renderLesson = ({ item }) => {
+    const thumbnailUrl = getYouTubeThumbnail(item.youtubeId, 'hqdefault');
+    
     return (
-      <View style={styles.lessonContainer}>
-        {/* Thumbnail Background */}
-        {item.youtubeId && (
-          <>
-            <Image
-              source={{ uri: getYouTubeThumbnail(item.youtubeId, 'maxresdefault') }}
-              style={styles.backgroundThumbnail}
-              resizeMode="cover"
-            />
-            <View style={styles.thumbnailOverlay} />
-          </>
-        )}
-        
-        <View style={styles.videoContainer}>
-          <YoutubePlayer
-            ref={playerRef}
-            height={height * 0.7}
-            play={isCurrent && isPlaying}
-            videoId={item.youtubeId}
-            onChangeState={isCurrent ? onStateChange : undefined}
-            webViewStyle={{ opacity: 0.99 }}
-            initialPlayerParams={{
-              controls: 1,
-              modestbranding: 1,
-              rel: 0,
-            }}
-          />
-        </View>
-
-        {/* Lesson Info Overlay */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.infoOverlay}
-        >
+      <TouchableOpacity
+        style={styles.lessonCard}
+        onPress={() => handleLessonPress(item)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.lessonContent}>
+          <View style={styles.lessonThumbnailContainer}>
+            {thumbnailUrl ? (
+              <Image
+                source={{ uri: thumbnailUrl }}
+                style={styles.lessonThumbnail}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.lessonIconContainer}>
+                <Ionicons name="play-circle" size={32} color={PRIMARY_BLUE} />
+              </View>
+            )}
+            <View style={styles.playButtonOverlay}>
+              <Ionicons name="play-circle" size={40} color="#fff" />
+            </View>
+          </View>
           <View style={styles.lessonInfo}>
             <Text style={styles.lessonTitle} numberOfLines={2}>
               {item.title || 'שיעור קצר'}
             </Text>
             {item.description && (
-              <Text style={styles.lessonDescription} numberOfLines={3}>
+              <Text style={styles.lessonDescription} numberOfLines={2}>
                 {item.description}
               </Text>
             )}
@@ -393,81 +328,33 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
               </View>
             )}
           </View>
-        </LinearGradient>
-
-        {/* Edit/Delete Buttons (Admin only) */}
-        {isAdmin && (
-          <View style={styles.adminButtonsContainer}>
-            <TouchableOpacity
-              style={styles.adminButton}
-              onPress={() => handleEditLesson(item)}
-            >
-              <Ionicons name="create-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.adminButton, styles.deleteButton]}
-              onPress={() => handleDeleteLesson(item)}
-            >
-              <Ionicons name="trash-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Controls Overlay */}
-        <View style={styles.controlsOverlay}>
-          <View style={styles.controlsRow}>
-            <TouchableOpacity
-              style={[styles.controlButton, autoPlay && styles.controlButtonActive]}
-              onPress={toggleAutoPlay}
-            >
-              <Ionicons 
-                name={autoPlay ? "play-circle" : "play-circle-outline"} 
-                size={28} 
-                color={autoPlay ? PRIMARY_BLUE : "#fff"} 
-              />
-              <Text style={[styles.controlText, autoPlay && styles.controlTextActive]}>
-                ניגון אוטומטי
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.controlButton, isShuffled && styles.controlButtonActive]}
-              onPress={toggleShuffle}
-            >
-              <Ionicons 
-                name="shuffle" 
-                size={28} 
-                color={isShuffled ? PRIMARY_BLUE : "#fff"} 
-              />
-              <Text style={[styles.controlText, isShuffled && styles.controlTextActive]}>
-                ערבוב
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.lessonActions}>
+            {isAdmin && (
+              <>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEditLesson(item);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleDeleteLesson(item);
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                </TouchableOpacity>
+              </>
+            )}
+            <Ionicons name="chevron-back" size={24} color={PRIMARY_BLUE} />
           </View>
         </View>
-
-        {/* Add Button (Admin only) */}
-        {isAdmin && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleAddLesson}
-          >
-            <LinearGradient
-              colors={[PRIMARY_BLUE, '#1e40af']}
-              style={styles.addButtonGradient}
-            >
-              <Ionicons name="add" size={28} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-
-        {/* Video Counter */}
-        <View style={styles.counterContainer}>
-          <Text style={styles.counterText}>
-            {index + 1} / {currentLessons.length}
-          </Text>
-        </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -487,23 +374,6 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     );
   }
 
-  if (lessons.length === 0) {
-    return (
-      <View style={styles.container}>
-        <AppHeader
-          title="שיעורים קצרים"
-          subtitle="רילסים מהרב"
-          onBackPress={() => navigation.goBack()}
-        />
-        <View style={styles.emptyState}>
-          <Ionicons name="play-circle-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-          <Text style={styles.emptyText}>אין שיעורים זמינים כרגע</Text>
-          <Text style={styles.emptySubtext}>השיעורים יתווספו בקרוב</Text>
-        </View>
-      </View>
-    );
-  }
-
   const currentLessons = getCurrentLessons();
 
   return (
@@ -513,34 +383,98 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
         subtitle="רילסים מהרב"
         onBackPress={() => navigation.goBack()}
       />
-      
-      <FlatList
-        ref={flatListRef}
-        data={currentLessons}
-        keyExtractor={(item) => item.id}
-        renderItem={renderLesson}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        snapToInterval={height}
-        decelerationRate="fast"
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        getItemLayout={(data, index) => ({
-          length: height,
-          offset: height * index,
-          index,
-        })}
-        initialScrollIndex={0}
-        onScrollToIndexFailed={(info) => {
-          // Handle scroll to index failure
-          const wait = new Promise(resolve => setTimeout(resolve, 500));
-          wait.then(() => {
-            if (flatListRef.current) {
-              flatListRef.current.scrollToIndex({ index: info.index, animated: false });
-            }
-          });
-        }}
-      />
+
+      {/* Action Buttons Row */}
+      <View style={styles.actionRow}>
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleAddLesson}
+          >
+            <LinearGradient
+              colors={[PRIMARY_BLUE, '#1e40af']}
+              style={styles.addButtonGradient}
+            >
+              <Ionicons name="add" size={24} color="#fff" />
+              <Text style={styles.addButtonText}>הוסף שיעור</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+        
+        <TouchableOpacity
+          style={[styles.shuffleButton, isShuffled && styles.shuffleButtonActive]}
+          onPress={toggleShuffle}
+        >
+          <Ionicons 
+            name="shuffle" 
+            size={20} 
+            color={isShuffled ? '#fff' : PRIMARY_BLUE} 
+          />
+          <Text style={[styles.shuffleButtonText, isShuffled && styles.shuffleButtonTextActive]}>
+            {isShuffled ? 'בטל ערבוב' : 'ערבב'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {currentLessons.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="play-circle-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+          <Text style={styles.emptyText}>אין שיעורים זמינים כרגע</Text>
+          <Text style={styles.emptySubtext}>השיעורים יתווספו בקרוב</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={currentLessons}
+          keyExtractor={(item) => item.id}
+          renderItem={renderLesson}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      {/* YouTube Player Modal */}
+      {selectedLesson && (
+        <Modal
+          visible={!!selectedLesson}
+          animationType="slide"
+          onRequestClose={handleClosePlayer}
+        >
+          <View style={styles.playerContainer}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={handleClosePlayer}
+            >
+              <Ionicons name="close" size={32} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.playerWrapper}>
+              <YoutubePlayer
+                height={300}
+                play={true}
+                videoId={selectedLesson.youtubeId}
+                webViewStyle={{ opacity: 0.99 }}
+                initialPlayerParams={{
+                  controls: 1,
+                  modestbranding: 1,
+                  rel: 0,
+                }}
+              />
+            </View>
+            <View style={styles.playerInfo}>
+              <Text style={styles.playerTitle}>{selectedLesson.title}</Text>
+              {selectedLesson.description && (
+                <Text style={styles.playerDescription}>
+                  {selectedLesson.description}
+                </Text>
+              )}
+              {selectedLesson.category && (
+                <View style={styles.playerCategoryBadge}>
+                  <Text style={styles.playerCategoryText}>{selectedLesson.category}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Add Lesson Modal */}
       <Modal
@@ -781,13 +715,12 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: BG,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: BG,
   },
   loadingText: {
     marginTop: 15,
@@ -795,11 +728,162 @@ const styles = StyleSheet.create({
     color: PRIMARY_BLUE,
     fontFamily: 'Heebo_500Medium',
   },
+  actionRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  addButton: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: PRIMARY_BLUE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  addButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+  },
+  shuffleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    gap: 8,
+  },
+  shuffleButtonActive: {
+    backgroundColor: PRIMARY_BLUE,
+  },
+  shuffleButtonText: {
+    fontSize: 14,
+    fontFamily: 'Heebo_600SemiBold',
+    color: PRIMARY_BLUE,
+  },
+  shuffleButtonTextActive: {
+    color: '#fff',
+  },
+  listContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  lessonCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.08)',
+  },
+  lessonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 16,
+  },
+  lessonThumbnailContainer: {
+    width: 120,
+    height: 90,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginLeft: 12,
+    position: 'relative',
+    backgroundColor: 'rgba(30,58,138,0.1)',
+  },
+  lessonThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  playButtonOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lessonIconContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lessonInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  lessonActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(220,38,38,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lessonTitle: {
+    fontSize: 18,
+    fontFamily: 'Heebo_600SemiBold',
+    color: DEEP_BLUE,
+    marginBottom: 6,
+    textAlign: 'right',
+  },
+  lessonDescription: {
+    fontSize: 14,
+    fontFamily: 'Heebo_400Regular',
+    color: '#6b7280',
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  categoryBadge: {
+    backgroundColor: PRIMARY_BLUE,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-end',
+  },
+  categoryText: {
+    fontSize: 12,
+    fontFamily: 'Heebo_600SemiBold',
+    color: '#fff',
+  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: BG,
     paddingHorizontal: 40,
   },
   emptyText: {
@@ -816,143 +900,56 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_400Regular',
     textAlign: 'center',
   },
-  lessonContainer: {
-    width,
-    height,
+  playerContainer: {
+    flex: 1,
     backgroundColor: '#000',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: Platform.select({ ios: 50, android: 20 }),
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  videoContainer: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+  playerWrapper: {
+    marginTop: Platform.select({ ios: 100, android: 80 }),
+    paddingHorizontal: 16,
   },
-  backgroundThumbnail: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-  },
-  thumbnailOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  infoOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  playerInfo: {
     padding: 20,
-    paddingBottom: Platform.select({ ios: 40, android: 20 }),
+    backgroundColor: '#1a1a1a',
   },
-  lessonInfo: {
-    alignItems: 'flex-end',
-  },
-  lessonTitle: {
-    fontSize: 22,
+  playerTitle: {
+    fontSize: 20,
     fontFamily: 'Heebo_700Bold',
     color: '#fff',
     marginBottom: 8,
     textAlign: 'right',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
-  lessonDescription: {
+  playerDescription: {
     fontSize: 16,
     fontFamily: 'Heebo_400Regular',
-    color: 'rgba(255,255,255,0.9)',
-    marginBottom: 12,
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'right',
-    lineHeight: 22,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    lineHeight: 24,
+    marginBottom: 12,
   },
-  categoryBadge: {
+  playerCategoryBadge: {
     backgroundColor: PRIMARY_BLUE,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 12,
     alignSelf: 'flex-end',
   },
-  categoryText: {
+  playerCategoryText: {
     fontSize: 12,
     fontFamily: 'Heebo_600SemiBold',
     color: '#fff',
-  },
-  controlsOverlay: {
-    position: 'absolute',
-    top: Platform.select({ ios: 100, android: 80 }),
-    right: 20,
-    zIndex: 10,
-  },
-  controlsRow: {
-    gap: 12,
-  },
-  controlButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 25,
-    gap: 8,
-  },
-  controlButtonActive: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-  },
-  controlText: {
-    fontSize: 14,
-    fontFamily: 'Heebo_600SemiBold',
-    color: '#fff',
-  },
-  controlTextActive: {
-    color: PRIMARY_BLUE,
-  },
-  counterContainer: {
-    position: 'absolute',
-    top: Platform.select({ ios: 100, android: 80 }),
-    left: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    zIndex: 10,
-  },
-  counterText: {
-    fontSize: 14,
-    fontFamily: 'Heebo_600SemiBold',
-    color: '#fff',
-  },
-  addButton: {
-    position: 'absolute',
-    bottom: Platform.select({ ios: 100, android: 80 }),
-    left: 20,
-    zIndex: 10,
-    borderRadius: 30,
-    overflow: 'hidden',
-    shadowColor: PRIMARY_BLUE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  addButtonGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,
@@ -1049,24 +1046,4 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_600SemiBold',
     color: '#fff',
   },
-  adminButtonsContainer: {
-    position: 'absolute',
-    top: Platform.select({ ios: 100, android: 80 }),
-    left: 20,
-    zIndex: 10,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  adminButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteButton: {
-    backgroundColor: 'rgba(220,38,38,0.8)',
-  },
 });
-
