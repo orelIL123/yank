@@ -59,18 +59,15 @@ function getYouTubeThumbnail(videoId, quality = 'hqdefault') {
 export default function ShortLessonsScreen({ navigation, userRole }) {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedLesson, setSelectedLesson] = useState(null);
   const [isShuffled, setIsShuffled] = useState(false);
-  const [autoPlay, setAutoPlay] = useState(true);
   const [shuffledLessons, setShuffledLessons] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const flatListRef = useRef(null);
-  const playerRef = useRef(null);
-  
+
   // Form state
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -87,11 +84,15 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
 
 
   useEffect(() => {
-    // When lessons load, shuffle if needed
-    if (lessons.length > 0 && isShuffled) {
-      shuffleLessons();
+    // When lessons load, update shuffled list
+    if (lessons.length > 0) {
+      if (isShuffled) {
+        shuffleLessons();
+      } else {
+        setShuffledLessons([...lessons]);
+      }
     }
-  }, [lessons, isShuffled]);
+  }, [lessons]);
 
   const loadLessons = async () => {
     try {
@@ -185,10 +186,8 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
   const shuffleLessons = () => {
     const shuffled = [...lessons].sort(() => Math.random() - 0.5);
     setShuffledLessons(shuffled);
-    setCurrentIndex(0);
-    // Scroll to top
     if (flatListRef.current) {
-      flatListRef.current.scrollToIndex({ index: 0, animated: false });
+      flatListRef.current.scrollToOffset({ offset: 0, animated: false });
     }
   };
 
@@ -196,9 +195,8 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     if (isShuffled) {
       // Reset to original order
       setShuffledLessons([...lessons]);
-      setCurrentIndex(0);
       if (flatListRef.current) {
-        flatListRef.current.scrollToIndex({ index: 0, animated: false });
+        flatListRef.current.scrollToOffset({ offset: 0, animated: false });
       }
     } else {
       shuffleLessons();
@@ -206,12 +204,21 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     setIsShuffled(!isShuffled);
   };
 
-  const toggleAutoPlay = () => {
-    setAutoPlay(!autoPlay);
+  const handleRandomLesson = () => {
+    const currentLessons = isShuffled ? shuffledLessons : lessons;
+    if (!currentLessons.length) return;
+    const randomIndex = Math.floor(Math.random() * currentLessons.length);
+    const randomLesson = currentLessons[randomIndex];
+    setSelectedLesson(randomLesson);
+    if (flatListRef.current) {
+      flatListRef.current.scrollToIndex({
+        index: randomIndex,
+        animated: true,
+      });
+    }
   };
 
   const handleAddLesson = () => {
-    console.log('handleAddLesson called');
     setShowAddModal(true);
   };
 
@@ -304,93 +311,38 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     );
   };
 
-  const getCurrentLessons = () => {
-    return isShuffled ? shuffledLessons : lessons;
-  };
-
-  const onStateChange = useCallback((state) => {
-    if (state === "ended") {
-      setIsPlaying(false);
-      // Auto-play next video if enabled
-      if (autoPlay) {
-        const currentLessons = isShuffled ? shuffledLessons : lessons;
-        if (currentIndex < currentLessons.length - 1) {
-          const nextIndex = currentIndex + 1;
-          setCurrentIndex(nextIndex);
-          if (flatListRef.current) {
-            flatListRef.current.scrollToIndex({ 
-              index: nextIndex, 
-              animated: true 
-            });
-          }
-        }
-      }
-    } else if (state === "playing") {
-      setIsPlaying(true);
-    } else if (state === "paused") {
-      setIsPlaying(false);
-    }
-  }, [currentIndex, autoPlay, isShuffled, shuffledLessons, lessons]);
-
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length > 0) {
-      const newIndex = viewableItems[0].index;
-      if (newIndex !== null && newIndex !== currentIndex) {
-        setCurrentIndex(newIndex);
-        setIsPlaying(true); // Auto-play when scrolling to new video
-      }
-    }
-  }).current;
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 50
-  };
-
-  const renderLesson = ({ item, index }) => {
-    const isCurrent = index === currentIndex;
-    const currentLessons = getCurrentLessons();
+  const renderLesson = ({ item }) => {
+    const thumbnailUrl = getYouTubeThumbnail(item.youtubeId, 'hqdefault');
 
     return (
-      <View style={styles.lessonContainer}>
-        {/* Thumbnail Background */}
-        {item.youtubeId && (
-          <>
-            <Image
-              source={{ uri: getYouTubeThumbnail(item.youtubeId, 'maxresdefault') }}
-              style={styles.backgroundThumbnail}
-              resizeMode="cover"
-            />
-            <View style={styles.thumbnailOverlay} />
-          </>
-        )}
-        
-        <View style={styles.videoContainer}>
-          <YoutubePlayer
-            ref={playerRef}
-            height={height * 0.7}
-            play={isCurrent && isPlaying}
-            videoId={item.youtubeId}
-            onChangeState={isCurrent ? onStateChange : undefined}
-            webViewStyle={{ opacity: 0.99 }}
-            initialPlayerParams={{
-              controls: 1,
-              modestbranding: 1,
-              rel: 0,
-            }}
-          />
-        </View>
-
-        {/* Lesson Info Overlay */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.infoOverlay}
-        >
+      <TouchableOpacity
+        style={styles.lessonCard}
+        onPress={() => setSelectedLesson(item)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.lessonContent}>
+          <View style={styles.lessonThumbnailContainer}>
+            {thumbnailUrl ? (
+              <Image
+                source={{ uri: thumbnailUrl }}
+                style={styles.lessonThumbnail}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.lessonIconContainer}>
+                <Ionicons name="play-circle" size={32} color={PRIMARY_BLUE} />
+              </View>
+            )}
+            <View style={styles.playButtonOverlay}>
+              <Ionicons name="play-circle" size={40} color="#fff" />
+            </View>
+          </View>
           <View style={styles.lessonInfo}>
             <Text style={styles.lessonTitle} numberOfLines={2}>
               {item.title || 'שיעור קצר'}
             </Text>
             {item.description && (
-              <Text style={styles.lessonDescription} numberOfLines={3}>
+              <Text style={styles.lessonDescription} numberOfLines={2}>
                 {item.description}
               </Text>
             )}
@@ -400,66 +352,33 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
               </View>
             )}
           </View>
-        </LinearGradient>
-
-        {/* Edit/Delete Buttons (Admin only) */}
-        {isAdmin && (
-          <View style={styles.adminButtonsContainer}>
-            <TouchableOpacity
-              style={styles.adminButton}
-              onPress={() => handleEditLesson(item)}
-            >
-              <Ionicons name="create-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.adminButton, styles.deleteButton]}
-              onPress={() => handleDeleteLesson(item)}
-            >
-              <Ionicons name="trash-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Controls Overlay */}
-        <View style={styles.controlsOverlay}>
-          <View style={styles.controlsRow}>
-            <TouchableOpacity
-              style={[styles.controlButton, autoPlay && styles.controlButtonActive]}
-              onPress={toggleAutoPlay}
-            >
-              <Ionicons 
-                name={autoPlay ? "play-circle" : "play-circle-outline"} 
-                size={28} 
-                color={autoPlay ? PRIMARY_BLUE : "#fff"} 
-              />
-              <Text style={[styles.controlText, autoPlay && styles.controlTextActive]}>
-                ניגון אוטומטי
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.controlButton, isShuffled && styles.controlButtonActive]}
-              onPress={toggleShuffle}
-            >
-              <Ionicons 
-                name="shuffle" 
-                size={28} 
-                color={isShuffled ? PRIMARY_BLUE : "#fff"} 
-              />
-              <Text style={[styles.controlText, isShuffled && styles.controlTextActive]}>
-                ערבוב
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.lessonActions}>
+            {isAdmin && (
+              <>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEditLesson(item);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleDeleteLesson(item);
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                </TouchableOpacity>
+              </>
+            )}
+            <Ionicons name="chevron-back" size={24} color={PRIMARY_BLUE} />
           </View>
         </View>
-
-        {/* Video Counter */}
-        <View style={styles.counterContainer}>
-          <Text style={styles.counterText}>
-            {index + 1} / {currentLessons.length}
-          </Text>
-        </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -479,168 +398,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     );
   }
 
-  if (lessons.length === 0) {
-    return (
-      <>
-        <View style={styles.container}>
-          <AppHeader
-            title="שיעורים קצרים"
-            subtitle="רילסים מהרב"
-            onBackPress={() => navigation.goBack()}
-          />
-          <View style={styles.emptyState}>
-            <Ionicons name="play-circle-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-            <Text style={styles.emptyText}>אין שיעורים זמינים כרגע</Text>
-            <Text style={styles.emptySubtext}>השיעורים יתווספו בקרוב</Text>
-          </View>
-
-          {/* Floating Add Button */}
-          {isAdmin && (
-            <TouchableOpacity
-              style={styles.floatingAddButton}
-              onPress={handleAddLesson}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={[PRIMARY_BLUE, '#1e40af']}
-                style={styles.floatingAddButtonGradient}
-              >
-                <Ionicons name="add" size={32} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Modals */}
-        <Modal
-          visible={showAddModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => {
-            setShowAddModal(false);
-            setFormTitle('');
-            setFormDescription('');
-            setFormYoutubeUrl('');
-            setFormCategory('');
-          }}
-        >
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>הוסף שיעור קצר חדש</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowAddModal(false);
-                    setFormTitle('');
-                    setFormDescription('');
-                    setFormYoutubeUrl('');
-                    setFormCategory('');
-                  }}
-                  style={styles.modalCloseButton}
-                >
-                  <Ionicons name="close" size={28} color={DEEP_BLUE} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView
-                style={styles.modalBody}
-                contentContainerStyle={{ paddingBottom: 24 }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>כותרת *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={formTitle}
-                    onChangeText={setFormTitle}
-                    placeholder="הכנס כותרת"
-                    placeholderTextColor="#9ca3af"
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>תיאור</Text>
-                  <TextInput
-                    style={[styles.formInput, styles.formTextArea]}
-                    value={formDescription}
-                    onChangeText={setFormDescription}
-                    placeholder="הכנס תיאור (אופציונלי)"
-                    placeholderTextColor="#9ca3af"
-                    multiline
-                    numberOfLines={4}
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>קישור YouTube *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={formYoutubeUrl}
-                    onChangeText={setFormYoutubeUrl}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    placeholderTextColor="#9ca3af"
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>קטגוריה</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={formCategory}
-                    onChangeText={setFormCategory}
-                    placeholder="הכנס קטגוריה (אופציונלי)"
-                    placeholderTextColor="#9ca3af"
-                  />
-                </View>
-              </ScrollView>
-
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => {
-                    setShowAddModal(false);
-                    setFormTitle('');
-                    setFormDescription('');
-                    setFormYoutubeUrl('');
-                    setFormCategory('');
-                  }}
-                >
-                  <Text style={styles.cancelButtonText}>ביטול</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.saveButton}
-                  onPress={handleSaveLesson}
-                  disabled={saving}
-                >
-                  <LinearGradient
-                    colors={[PRIMARY_BLUE, '#1e40af']}
-                    style={styles.saveButtonGradient}
-                  >
-                    {saving ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={styles.saveButtonText}>שמור</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </>
-    );
-  }
-
-  const currentLessons = getCurrentLessons();
+  const currentLessons = isShuffled ? shuffledLessons : lessons;
 
   return (
     <>
@@ -650,50 +408,67 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           subtitle="רילסים מהרב"
           onBackPress={() => navigation.goBack()}
         />
-      
-      <FlatList
-        ref={flatListRef}
-        data={currentLessons}
-        keyExtractor={(item) => item.id}
-        renderItem={renderLesson}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        snapToInterval={height}
-        decelerationRate="fast"
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        getItemLayout={(data, index) => ({
-          length: height,
-          offset: height * index,
-          index,
-        })}
-        initialScrollIndex={0}
-        onScrollToIndexFailed={(info) => {
-          // Handle scroll to index failure
-          const wait = new Promise(resolve => setTimeout(resolve, 500));
-          wait.then(() => {
-            if (flatListRef.current) {
-              flatListRef.current.scrollToIndex({ index: info.index, animated: false });
-            }
-          });
-        }}
-      />
 
-      {/* Floating Add Button */}
-      {isAdmin && (
-        <TouchableOpacity
-          style={styles.floatingAddButton}
-          onPress={handleAddLesson}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={[PRIMARY_BLUE, '#1e40af']}
-            style={styles.floatingAddButtonGradient}
+        <View style={styles.controlsBar}>
+          <TouchableOpacity
+            style={[styles.controlPill, isShuffled && styles.controlPillActive]}
+            onPress={toggleShuffle}
           >
-            <Ionicons name="add" size={32} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
-      )}
+            <Ionicons
+              name="shuffle"
+              size={20}
+              color={isShuffled ? '#fff' : PRIMARY_BLUE}
+            />
+            <Text style={[styles.controlPillText, isShuffled && styles.controlPillTextActive]}>
+              ערבוב
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.controlPill}
+            onPress={handleRandomLesson}
+          >
+            <Ionicons
+              name="sparkles-outline"
+              size={20}
+              color={PRIMARY_BLUE}
+            />
+            <Text style={styles.controlPillText}>אקראי</Text>
+          </TouchableOpacity>
+        </View>
+
+        {currentLessons.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="play-circle-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+            <Text style={styles.emptyText}>אין שיעורים זמינים כרגע</Text>
+            <Text style={styles.emptySubtext}>השיעורים יתווספו בקרוב</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={currentLessons}
+            keyExtractor={(item) => item.id}
+            renderItem={renderLesson}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+
+        {/* Floating Add Button */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.floatingAddButton}
+            onPress={handleAddLesson}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={[PRIMARY_BLUE, '#1e40af']}
+              style={styles.floatingAddButtonGradient}
+            >
+              <Ionicons name="add" size={32} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Add Lesson Modal */}
@@ -713,7 +488,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-      >
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -840,7 +615,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
-      >
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -950,6 +725,45 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
         </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Player Modal */}
+      {selectedLesson && (
+        <Modal
+          visible={!!selectedLesson}
+          animationType="slide"
+          onRequestClose={() => setSelectedLesson(null)}
+        >
+          <View style={styles.playerContainer}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSelectedLesson(null)}
+            >
+              <Ionicons name="close" size={32} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.playerWrapper}>
+              <YoutubePlayer
+                height={300}
+                play={true}
+                videoId={selectedLesson.youtubeId}
+                webViewStyle={{ opacity: 0.99 }}
+                initialPlayerParams={{
+                  controls: 1,
+                  modestbranding: 1,
+                  rel: 0,
+                }}
+              />
+            </View>
+            <View style={styles.playerInfo}>
+              <Text style={styles.playerTitle}>{selectedLesson.title || 'שיעור קצר'}</Text>
+              {selectedLesson.description && (
+                <Text style={styles.playerDescription}>
+                  {selectedLesson.description}
+                </Text>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
     </>
   );
 }
