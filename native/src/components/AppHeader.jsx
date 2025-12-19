@@ -20,42 +20,49 @@ export default function AppHeader({
       style={styles.header}
     >
       <View style={styles.content}>
-        {showBackButton && (
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={onBackPress}
-          >
-            <Ionicons name="arrow-forward" size={24} color="#FFD700" />
-          </TouchableOpacity>
-        )}
+        {/* Left side buttons - positioned absolutely */}
+        <View style={styles.leftButtonsContainer}>
+          {showBackButton && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBackPress}
+            >
+              <Ionicons name="arrow-forward" size={24} color="#FFD700" />
+            </TouchableOpacity>
+          )}
 
-        {leftIcon && !showBackButton && (
-          <TouchableOpacity
-            style={styles.leftButton}
-            onPress={onLeftIconPress}
-          >
-            <Ionicons name={leftIcon} size={24} color="#FFD700" />
-            {badge > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
+          {leftIcon && !showBackButton && (
+            <TouchableOpacity
+              style={styles.leftButton}
+              onPress={onLeftIconPress}
+            >
+              <Ionicons name={leftIcon} size={24} color="#FFD700" />
+              {badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
 
+        {/* Center title - always centered */}
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{title}</Text>
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
         </View>
 
-        {rightIcon && (
-          <TouchableOpacity
-            style={styles.rightButton}
-            onPress={onRightIconPress}
-          >
-            <Ionicons name={rightIcon} size={24} color="#FFD700" />
-          </TouchableOpacity>
-        )}
+        {/* Right side buttons - positioned absolutely */}
+        <View style={styles.rightButtonsContainer}>
+          {rightIcon && (
+            <TouchableOpacity
+              style={styles.rightButton}
+              onPress={onRightIconPress}
+            >
+              <Ionicons name={rightIcon} size={24} color="#FFD700" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </LinearGradient>
   );
@@ -75,7 +82,14 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  leftButtonsContainer: {
+    position: 'absolute',
+    left: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   backButton: {
     padding: 8,
@@ -83,6 +97,12 @@ const styles = StyleSheet.create({
   leftButton: {
     padding: 8,
     position: 'relative',
+  },
+  rightButtonsContainer: {
+    position: 'absolute',
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   rightButton: {
     padding: 8,

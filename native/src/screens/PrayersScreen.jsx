@@ -5,6 +5,8 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -75,18 +77,11 @@ export default function PrayersScreen({ navigation, userRole }) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
-        <View style={styles.header}>
-          <Pressable
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-            accessibilityRole="button"
-            accessibilityLabel="חזרה"
-          >
-            <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-          </Pressable>
-          <Text style={styles.headerTitle}>תפילות הינוקא</Text>
-          <View style={{ width: 24 }} />
-        </View>
+      <AppHeader
+        title={t('תפילות הינוקא')}
+        showBackButton={true}
+        onBackPress={() => navigation.goBack()}
+      />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY_BLUE} />
           <Text style={styles.loadingText}>טוען תפילות...</Text>
@@ -98,29 +93,13 @@ export default function PrayersScreen({ navigation, userRole }) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="חזרה"
-        >
-          <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-        </Pressable>
-        <Text style={styles.headerTitle}>תפילות הינוקא</Text>
-        {isAdmin ? (
-          <Pressable
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddPrayer')}
-            accessibilityRole="button"
-            accessibilityLabel="הוסף תפילה"
-          >
-            <Ionicons name="add" size={28} color="#fff" />
-          </Pressable>
-        ) : (
-          <View style={{ width: 24 }} />
-        )}
-      </View>
+      <AppHeader
+        title={t('תפילות הינוקא')}
+        showBackButton={true}
+        onBackPress={() => navigation.goBack()}
+        rightIcon={isAdmin ? 'add' : undefined}
+        onRightIconPress={isAdmin ? () => navigation.navigate('AddPrayer') : undefined}
+      />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.subtitle}>תפילות מיוחדות וסגולות</Text>

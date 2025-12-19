@@ -25,7 +25,7 @@ const CATEGORIES = [
     icon: 'videocam',
     gradient: ['#ff6b6b', '#ee5a6f'],
     screen: 'ShortLessons',
-    image: require('../../assets/photos/cards/הינוקא.png')
+    image: require('../../assets/photos/cards/hinuka.png')
   },
   {
     id: 'longLessons',
@@ -34,7 +34,7 @@ const CATEGORIES = [
     icon: 'film',
     gradient: ['#4facfe', '#00f2fe'],
     screen: 'LongLessons',
-    image: require('../../assets/photos/cards/הינוקא1.jpg')
+    image: require('../../assets/photos/cards/hinuka1.jpg')
   },
 ];
 

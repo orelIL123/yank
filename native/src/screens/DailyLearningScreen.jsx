@@ -694,7 +694,6 @@ export default function DailyLearningScreen({ navigation, userRole }) {
               </View>
               <View style={styles.authorInfo}>
                 <Text style={styles.authorName}>הינוקא</Text>
-                <Text style={styles.authorRole}>מרצה ומחבר ספרים</Text>
               </View>
               <TouchableOpacity style={styles.shareButton} onPress={() => Share.share({ message: selectedLearning.title })}>
                 <Ionicons name="share-social-outline" size={20} color={COLORS.deepBlue} />

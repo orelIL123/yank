@@ -2411,6 +2411,7 @@ function NotificationsForm() {
     { value: 'musical-notes', label: 'ניגון', icon: 'musical-notes' },
     { value: 'book', label: 'תורה', icon: 'book' },
     { value: 'heart', label: 'תפילה', icon: 'heart' },
+    { value: 'videocam', label: 'לייב - שידור חי', icon: 'videocam' },
   ]
 
   const priorityOptions = [

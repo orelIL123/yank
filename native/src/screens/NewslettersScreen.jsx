@@ -3,26 +3,41 @@ import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, where, doc, deleteDoc } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system'
+import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-export default function NewslettersScreen({ navigation }) {
+const LANGUAGES = [
+  { key: 'hebrew', label: 'עברית', icon: 'language-outline' },
+  { key: 'french', label: 'Français', icon: 'language-outline' },
+  { key: 'russian', label: 'Русский', icon: 'language-outline' },
+  { key: 'english', label: 'English', icon: 'language-outline' },
+]
+
+export default function NewslettersScreen({ navigation, userRole }) {
     const [newsletters, setNewsletters] = useState([])
     const [loading, setLoading] = useState(true)
+    const [selectedLanguage, setSelectedLanguage] = useState('hebrew')
+    const isAdmin = userRole === 'admin'
 
     useEffect(() => {
         fetchNewsletters()
-    }, [])
+    }, [selectedLanguage])
 
     const fetchNewsletters = async () => {
         try {
-            const q = query(collection(db, 'newsletters'), orderBy('publishDate', 'desc'))
+            const q = query(
+                collection(db, 'newsletters'),
+                where('language', '==', selectedLanguage),
+                orderBy('publishDate', 'desc')
+            )
             const querySnapshot = await getDocs(q)
             const newslettersData = []
             querySnapshot.forEach((doc) => {
@@ -89,6 +104,33 @@ export default function NewslettersScreen({ navigation }) {
         } catch (error) {
             console.error('Error sharing:', error)
         }
+    }
+
+    const handleDeleteNewsletter = (newsletter) => {
+        Alert.alert(
+            'מחיקת עלון',
+            `האם אתה בטוח שברצונך למחוק את העלון "${newsletter.title}"?`,
+            [
+                {
+                    text: 'ביטול',
+                    style: 'cancel'
+                },
+                {
+                    text: 'מחק',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteDoc(doc(db, 'newsletters', newsletter.id))
+                            Alert.alert('הצלחה', 'העלון נמחק בהצלחה')
+                            fetchNewsletters()
+                        } catch (error) {
+                            console.error('Error deleting newsletter:', error)
+                            Alert.alert('שגיאה', 'לא ניתן למחוק את העלון')
+                        }
+                    }
+                }
+            ]
+        )
     }
 
     const renderNewsletter = ({ item }) => (
@@ -159,6 +201,19 @@ export default function NewslettersScreen({ navigation }) {
                         <Ionicons name="share-outline" size={20} color={PRIMARY_BLUE} />
                         <Text style={styles.actionButtonText}>שיתוף</Text>
                     </Pressable>
+
+                    {isAdmin && (
+                        <Pressable
+                            style={[styles.actionButton, { borderTopWidth: 1, borderTopColor: 'rgba(239,68,68,0.2)', paddingTop: 8, marginTop: 4 }]}
+                            onPress={(e) => {
+                                e.stopPropagation()
+                                handleDeleteNewsletter(item)
+                            }}
+                        >
+                            <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                            <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>מחק</Text>
+                        </Pressable>
+                    )}
                 </View>
             </View>
         </Pressable>
@@ -168,16 +223,42 @@ export default function NewslettersScreen({ navigation }) {
         <SafeAreaView style={styles.container}>
             <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
 
-            <View style={styles.header}>
-                <Pressable
-                    style={styles.backBtn}
-                    onPress={() => navigation.goBack()}
-                    accessibilityRole="button"
-                >
-                    <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-                </Pressable>
-                <Text style={styles.headerTitle}>עלונים</Text>
-                <View style={{ width: 36 }} />
+            <AppHeader
+                title={t('עלונים')}
+                showBackButton={true}
+                onBackPress={() => navigation.goBack()}
+                rightIcon={isAdmin ? 'add' : undefined}
+                onRightIconPress={isAdmin ? () => navigation.navigate('AddNewsletter') : undefined}
+            />
+
+            {/* Language selector */}
+            <View style={styles.languageSelector}>
+                {LANGUAGES.map((lang) => (
+                    <Pressable
+                        key={lang.key}
+                        style={[
+                            styles.languageButton,
+                            selectedLanguage === lang.key && styles.languageButtonActive
+                        ]}
+                        onPress={() => {
+                            setSelectedLanguage(lang.key)
+                            setLoading(true)
+                        }}
+                        accessibilityRole="button"
+                    >
+                        <Ionicons
+                            name={lang.icon}
+                            size={18}
+                            color={selectedLanguage === lang.key ? '#fff' : PRIMARY_BLUE}
+                        />
+                        <Text style={[
+                            styles.languageButtonText,
+                            selectedLanguage === lang.key && styles.languageButtonTextActive
+                        ]}>
+                            {lang.label}
+                        </Text>
+                    </Pressable>
+                ))}
             </View>
 
             {loading ? (
@@ -376,5 +457,51 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6b7280',
         fontFamily: 'Poppins_400Regular',
+    },
+    languageSelector: {
+        flexDirection: 'row',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        flexWrap: 'wrap',
+        backgroundColor: BG,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(11,27,58,0.05)',
+    },
+    languageButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 999,
+        backgroundColor: 'rgba(30,58,138,0.1)',
+        borderWidth: 1,
+        borderColor: PRIMARY_BLUE,
+    },
+    languageButtonActive: {
+        backgroundColor: PRIMARY_BLUE,
+        borderColor: PRIMARY_BLUE,
+    },
+    languageButtonText: {
+        fontSize: 12,
+        fontFamily: 'Poppins_600SemiBold',
+        color: PRIMARY_BLUE,
+    },
+    languageButtonTextActive: {
+        color: '#fff',
+    },
+    addButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: PRIMARY_BLUE,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: PRIMARY_BLUE,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
     },
 })

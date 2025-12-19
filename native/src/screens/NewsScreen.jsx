@@ -5,6 +5,8 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -57,18 +59,11 @@ export default function NewsScreen({ navigation, userRole }) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
-        <View style={styles.header}>
-          <Pressable
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-            accessibilityRole="button"
-            accessibilityLabel="חזרה"
-          >
-            <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-          </Pressable>
-          <Text style={styles.headerTitle}>מהנעשה בבית המדרש</Text>
-          <View style={{ width: 24 }} />
-        </View>
+        <AppHeader
+          title={t('מהנעשה בבית המדרש')}
+          showBackButton={true}
+          onBackPress={() => navigation.goBack()}
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY_BLUE} />
           <Text style={styles.loadingText}>טוען חדשות...</Text>
@@ -80,18 +75,11 @@ export default function NewsScreen({ navigation, userRole }) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="חזרה"
-        >
-          <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-        </Pressable>
-        <Text style={styles.headerTitle}>מהנעשה בבית המדרש</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <AppHeader
+        title={t('מהנעשה בבית המדרש')}
+        showBackButton={true}
+        onBackPress={() => navigation.goBack()}
+      />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.subtitle}>עדכונים וחדשות מבית המדרש</Text>
@@ -112,7 +100,7 @@ export default function NewsScreen({ navigation, userRole }) {
               accessibilityLabel={`כתבה ${article.title}`}
             >
               <ImageBackground
-                source={article.imageUrl ? { uri: article.imageUrl } : require('../../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.png')}
+                source={article.imageUrl ? { uri: article.imageUrl } : require('../../assets/photos/cards/yeshiva.png')}
                 style={styles.articleCover}
                 imageStyle={styles.articleCoverRadius}
               >

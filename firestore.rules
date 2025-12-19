@@ -104,5 +104,17 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    
+    // Rabbi students collection - public read, admin write
+    match /rabbiStudents/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Pidyon Nefesh collection - public read, admin write
+    match /pidyonNefesh/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }

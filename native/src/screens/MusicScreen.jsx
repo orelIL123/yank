@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Dimensions
+  Dimensions,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,11 +19,20 @@ import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 const { width } = Dimensions.get('window');
+
+function openSocialLink(url) {
+  if (!url) return;
+  Linking.openURL(url).catch((err) => {
+    console.error('Error opening social link:', err);
+    Alert.alert('שגיאה', 'לא ניתן לפתוח את הקישור כעת');
+  });
+}
 
 export default function MusicScreen({ navigation }) {
   const [songs, setSongs] = useState([]);
@@ -32,6 +42,7 @@ export default function MusicScreen({ navigation }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackStatus, setPlaybackStatus] = useState(null);
   const [youtubeId, setYoutubeId] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     loadSongs();
@@ -52,6 +63,13 @@ export default function MusicScreen({ navigation }) {
       }
     };
     setupAudio();
+
+    // Simple admin detection (adjust if you pass userRole into this screen)
+    // Here we assume admin מגיע דרך פרופס navigation (route params) או גלובלית בעתיד
+    const role = navigation?.getParent?.()?.getState?.()?.routes?.[0]?.params?.userRole;
+    if (role === 'admin') {
+      setIsAdmin(true);
+    }
 
     // Cleanup on unmount
     return () => {
@@ -203,9 +221,12 @@ export default function MusicScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <AppHeader
-        title="ניגונים"
+        title={t('ניגונים')}
         subtitle="ניגוני הגאון הינוקא"
         onBackPress={() => navigation.goBack()}
+        showBackButton={false}
+        rightIcon={isAdmin ? 'add' : undefined}
+        onRightIconPress={isAdmin ? () => navigation?.navigate('Admin') : undefined}
       />
 
       {/* Back Button */}
@@ -228,7 +249,7 @@ export default function MusicScreen({ navigation }) {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          {songs.length === 0 ? (
+            {songs.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="musical-notes-outline" size={80} color="#FFD700" style={{ opacity: 0.3 }} />
               <Text style={styles.emptyText}>אין ניגונים זמינים כרגע</Text>
@@ -354,6 +375,39 @@ export default function MusicScreen({ navigation }) {
             </>
           )}
 
+          {/* Follow Us (moved below song list so הכותרת העליונה תהיה "ניגונים") */}
+          <View style={styles.socialSection}>
+            <Text style={styles.socialSectionTitle}>עקבו אחרינו</Text>
+            <View style={styles.socialRow}>
+              <TouchableOpacity
+                style={styles.socialButton}
+                onPress={() => openSocialLink('https://www.instagram.com/yanuka_rav_shlomoyehuda/')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-instagram" size={24} color="#E4405F" />
+                <Text style={styles.socialLabel}>Instagram</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.socialButton}
+                onPress={() => openSocialLink('https://www.tiktok.com/@the_yanuka_official')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-tiktok" size={24} color="#000000" />
+                <Text style={styles.socialLabel}>TikTok</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.socialButton}
+                onPress={() => openSocialLink('https://www.youtube.com/channel/UC2G7zKbsBNpoVYbwb-NS56w')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-youtube" size={24} color="#FF0000" />
+                <Text style={styles.socialLabel}>YouTube</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <View style={styles.footer}>
             <Text style={styles.footerText}>
               "הניגון מעלה את הנפש ומקרב את הלב לקדושה"
@@ -368,7 +422,7 @@ export default function MusicScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: BG,
   },
   backButton: {
     position: 'absolute',
@@ -383,11 +437,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   gradientBg: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
+    display: 'none',
   },
   loadingContainer: {
     flex: 1,
@@ -405,6 +455,36 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+  },
+  socialSection: {
+    marginBottom: 24,
+  },
+  socialSectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Heebo_700Bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  socialRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    marginHorizontal: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  socialLabel: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#ffffff',
+    fontFamily: 'Heebo_500Medium',
   },
   songCard: {
     marginBottom: 15,

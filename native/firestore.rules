@@ -13,11 +13,20 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Users collection
+    // Users collection - CRITICAL SECURITY
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+
+      // ✅ SECURITY FIX: Users can update their own profile BUT NOT their role
+      // This prevents privilege escalation attacks (user making themselves admin)
+      allow update: if isAuthenticated() && request.auth.uid == userId &&
+        // Check if 'role' field is being changed
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+
+      // ✅ Only admins can update any user (including role changes)
+      allow update: if isAdmin();
+
       allow delete: if isAdmin();
     }
     
@@ -30,10 +39,21 @@ service cloud.firestore {
     // Prayer commitments - authenticated users only
     match /prayerCommitments/{commitmentId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
-      allow update: if isAuthenticated() && 
-        (request.auth.uid == resource.data.userId || 
-         request.auth.uid == resource.data.assignedToUserId);
+
+      // ✅ User can only create commitments with their own userId
+      allow create: if isAuthenticated() &&
+        request.auth.uid == request.resource.data.userId;
+
+      // ✅ Users can update their own commitments or commitments assigned to them
+      // But they cannot change userId or assignedToUserId (prevents hijacking)
+      allow update: if isAuthenticated() &&
+        (request.auth.uid == resource.data.userId ||
+         request.auth.uid == resource.data.assignedToUserId) &&
+        // Prevent changing ownership fields
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['userId', 'assignedToUserId']));
+
+      // ✅ Admins can update/delete anything
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
     
@@ -130,11 +150,23 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // Notifications - authenticated users can read, admin can write
+    // Notifications - authenticated users can read and mark as read, admin can write
     match /notifications/{notificationId} {
       allow read: if isAuthenticated();
       allow create: if isAdmin();
+
+      // ✅ SECURITY: Users can only update the 'readBy' array to mark as read
+      // This prevents users from modifying notification content
+      allow update: if isAuthenticated() &&
+        // Only 'readBy' field can be changed by regular users
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&
+        // User can only add their own UID to readBy array
+        request.resource.data.readBy.hasAll(resource.data.get('readBy', [])) &&
+        request.resource.data.readBy.hasAny([request.auth.uid]);
+
+      // ✅ Admins can update anything
       allow update: if isAdmin();
+
       allow delete: if isAdmin();
     }
     
@@ -146,6 +178,18 @@ service cloud.firestore {
     
     // Beit Midrash Videos - public read, admin write
     match /beitMidrashVideos/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Rabbi students collection - public read (shown on home screen), admin write
+    match /rabbiStudents/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Pidyon Nefesh collection - public read, admin write
+    match /pidyonNefesh/{document=**} {
       allow read: if true;
       allow write: if isAdmin();
     }

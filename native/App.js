@@ -28,6 +28,7 @@ import AboutScreen from './src/screens/AboutScreen'
 import MusicScreen from './src/screens/MusicScreen'
 import BooksScreen from './src/screens/BooksScreen'
 import NewslettersScreen from './src/screens/NewslettersScreen'
+import AddNewsletterScreen from './src/screens/AddNewsletterScreen'
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen'
 import TzadikimScreen from './src/screens/TzadikimScreen'
 import TzadikDetailScreen from './src/screens/TzadikDetailScreen'
@@ -37,6 +38,8 @@ import ShortLessonsScreen from './src/screens/ShortLessonsScreen'
 import LongLessonsScreen from './src/screens/LongLessonsScreen'
 import LearningLibraryScreen from './src/screens/LearningLibraryScreen'
 import NotificationsScreen from './src/screens/NotificationsScreen'
+import PidyonNefeshScreen from './src/screens/PidyonNefeshScreen'
+import MiBeitRabeinuScreen from './src/screens/MiBeitRabeinuScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
@@ -78,38 +81,12 @@ export default function App() {
         if (isInitialCheck) {
           console.log('Initial auth state check:', currentUser ? `User found (${currentUser.email}) - session restored` : 'No user - showing login')
           
-          // Check "Remember Me" preference on initial load
+          // Firebase Auth automatically persists the session
+          // The user will stay logged in until they explicitly log out
           if (currentUser) {
-            const rememberMe = await getRememberMe()
-            console.log('Remember Me preference:', rememberMe)
-            
-            if (!rememberMe) {
-              // User doesn't want to be remembered, sign them out
-              console.log('Remember Me is false - signing out user')
-              try {
-                await signOut(auth)
-                // The signOut will trigger onAuthStateChanged again with null user
-                // We'll handle that in the next callback, so we can return here
-                if (mounted) {
-                  setAuthLoading(false)
-                }
-                return
-              } catch (signOutError) {
-                console.error('Error signing out:', signOutError)
-                // If sign out fails, continue normally
-              }
-            } else {
-              // Remember Me is true - user should stay logged in
-              // Firebase Auth already persisted the session, so we just continue
-              console.log('Remember Me is true - user will stay logged in automatically')
-            }
+            console.log('User session restored automatically - Firebase Auth persistence active')
           } else {
-            // No user found - check if Remember Me was previously enabled
-            // If it was, we should try to restore the session (but Firebase handles this automatically)
-            const rememberMe = await getRememberMe()
-            console.log('No user found, Remember Me preference:', rememberMe)
-            // Firebase Auth will automatically restore the session if it exists
-            // If no session exists, user needs to log in again
+            console.log('No user session found - user needs to log in')
           }
           
           isInitialCheck = false
@@ -350,7 +327,11 @@ export default function App() {
           <Stack.Screen name="About" component={AboutScreen} />
           <Stack.Screen name="Music" component={MusicScreen} />
           <Stack.Screen name="Books" component={BooksScreen} />
-          <Stack.Screen name="Newsletters" component={NewslettersScreen} />
+          <Stack.Screen name="Newsletters">
+            {(props) => <NewslettersScreen {...props} userRole={userRole} />}
+          </Stack.Screen>
+          <Stack.Screen name="AddNewsletter" component={AddNewsletterScreen} />
+          <Stack.Screen name="EditNewsletter" component={AddNewsletterScreen} />
           <Stack.Screen name="Tzadikim">
             {(props) => <TzadikimScreen {...props} userRole={userRole} />}
           </Stack.Screen>
@@ -367,6 +348,8 @@ export default function App() {
           </Stack.Screen>
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="PidyonNefesh" component={PidyonNefeshScreen} />
+          <Stack.Screen name="MiBeitRabeinu" component={MiBeitRabeinuScreen} />
 
           {/* Admin screen - only for admins */}
           {userRole === 'admin' && (

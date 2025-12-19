@@ -6,7 +6,7 @@ import { Grayscale } from 'react-native-color-matrix-image-filters'
 import { Audio } from 'expo-av'
 import MenuDrawer from './components/MenuDrawer'
 import AppHeader from './components/AppHeader'
-import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, where, Timestamp } from 'firebase/firestore'
 import { db, auth } from './config/firebase'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -16,22 +16,22 @@ const BLACK = '#000000'
 
 // Default cards fallback
 const DEFAULT_CARDS = [
-  { key: 'books', title: 'ספרים', desc: 'ספרי תורה וחידושים', icon: 'book-outline', image: require('../assets/photos/cards/ספרים/ספרים.jpg'), gradient: ['#667eea', '#764ba2'], size: 'large' },
-  { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/תפילות הינוקא/תפילה_לחבקוק.png'), gradient: ['#f093fb', '#f5576c'], size: 'large' },
-  { key: 'newsletters', title: 'עלונים', desc: 'עלונים להורדה וצפייה', icon: 'document-text-outline', image: require('../assets/photos/cards/הינוקא.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
-  { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/הינוקא1.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
-  { key: 'chidushim', title: 'חידושים', desc: 'חידושי תורה ותובנות', icon: 'bulb-outline', image: require('../assets/photos/cards/הינוקא.png'), gradient: ['#fa709a', '#fee140'], size: 'small' },
-  { key: 'yeshiva', title: 'מהנעשה בבית המדרש', desc: 'עדכונים וחדשות', icon: 'school-outline', image: require('../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.png'), gradient: ['#30cfd0', '#330867'], size: 'small' },
-  { key: 'tzadikim', title: 'ספר תולדות אדם', desc: 'אלפי תמונות ומידע', icon: 'people-outline', image: require('../assets/photos/cards/הינוקא1.jpg'), gradient: ['#a8edea', '#fed6e3'], size: 'large' },
-  { key: 'learningLibrary', title: 'ספריית לימוד', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/הינוקא.png'), gradient: ['#667eea', '#764ba2'], size: 'large' },
+  { key: 'books', title: 'ספרים', desc: 'ספרי תורה וחידושים', icon: 'book-outline', image: require('../assets/photos/cards/books.jpg'), gradient: ['#667eea', '#764ba2'], size: 'large' },
+  { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/prayer.png'), gradient: ['#f093fb', '#f5576c'], size: 'large' },
+  { key: 'newsletters', title: 'עלונים', desc: 'עלונים להורדה וצפייה', icon: 'document-text-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
+  { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
+  { key: 'chidushim', title: 'חידושים', desc: 'חידושי תורה ותובנות', icon: 'bulb-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#fa709a', '#fee140'], size: 'small' },
+  { key: 'yeshiva', title: 'מהנעשה בבית המדרש', desc: 'עדכונים וחדשות', icon: 'school-outline', image: require('../assets/photos/cards/yeshiva.png'), gradient: ['#30cfd0', '#330867'], size: 'small' },
+  { key: 'tzadikim', title: 'ספר תולדות אדם', desc: 'אלפי תמונות ומידע', icon: 'people-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#a8edea', '#fed6e3'], size: 'large' },
+  { key: 'learningLibrary', title: 'ספריית לימוד', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#667eea', '#764ba2'], size: 'large' },
 ]
 
 // Carousel image order
 const IMAGES = [
-  require('../assets/photos/cards/ספרים/ספרים.jpg'),
-  require('../assets/photos/cards/הינוקא.png'),
-  require('../assets/photos/cards/הינוקא1.jpg'),
-  require('../assets/photos/cards/מהנעשה_בבית_המדרש/מהנעשה_בבית_המדרש.png'),
+  require('../assets/photos/cards/books.jpg'),
+  require('../assets/photos/cards/hinuka.png'),
+  require('../assets/photos/cards/hinuka1.jpg'),
+  require('../assets/photos/cards/yeshiva.png'),
 ]
 
 function useFadeIn(delay = 0) {
@@ -166,6 +166,10 @@ export default function HomeScreen({ navigation }) {
   const [sound, setSound] = useState(null)
   const [playingSongId, setPlayingSongId] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [pidyonList, setPidyonList] = useState([])
+  const [pidyonLoading, setPidyonLoading] = useState(true)
+  const [rabbiCategories, setRabbiCategories] = useState([])
+  const [rabbiCategoriesLoading, setRabbiCategoriesLoading] = useState(true)
 
   const onShareQuote = React.useCallback(() => {
     Share.share({ message: `"${quote}"` }).catch(() => { })
@@ -353,6 +357,70 @@ export default function HomeScreen({ navigation }) {
     }
   }
 
+  // Load Pidyon Nefesh list (today's only)
+  useEffect(() => {
+    const loadPidyonList = async () => {
+      try {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const todayTimestamp = Timestamp.fromDate(today)
+
+        const q = query(
+          collection(db, 'pidyonNefesh'),
+          where('createdAt', '>=', todayTimestamp),
+          orderBy('createdAt', 'desc'),
+          limit(10)
+        )
+        const querySnapshot = await getDocs(q)
+        const pidyonData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        setPidyonList(pidyonData)
+      } catch (error) {
+        console.error('Error loading pidyon list:', error)
+      } finally {
+        setPidyonLoading(false)
+      }
+    }
+    loadPidyonList()
+  }, [])
+
+  // Load Rabbi Categories
+  useEffect(() => {
+    const loadRabbiCategories = async () => {
+      try {
+        console.log('🔍 Loading rabbi categories for home screen...')
+        const q = query(
+          collection(db, 'rabbiStudents'),
+          where('isActive', '==', true),
+          orderBy('order', 'asc')
+        )
+        const querySnapshot = await getDocs(q)
+        console.log(`📊 Found ${querySnapshot.docs.length} categories in Firestore`)
+        
+        const categoriesData = querySnapshot.docs.map(doc => {
+          const data = doc.data()
+          console.log(`  📁 Category: ${data.name || doc.id}`)
+          return {
+            id: doc.id,
+            ...data
+          }
+        })
+        
+        console.log(`✅ Loaded ${categoriesData.length} categories for home screen`)
+        setRabbiCategories(categoriesData)
+      } catch (error) {
+        console.error('❌ Error loading rabbi categories:', error)
+        console.error('Error details:', error.message, error.code)
+        setRabbiCategories([])
+      } finally {
+        setRabbiCategoriesLoading(false)
+      }
+    }
+    loadRabbiCategories()
+  }, [])
+
   // Load notifications and count unread
   useEffect(() => {
     const loadNotifications = async () => {
@@ -409,7 +477,7 @@ export default function HomeScreen({ navigation }) {
       return
     }
     if (key === 'yeshiva') {
-      navigation?.navigate('News')
+      navigation?.navigate('MiBeitRabeinu')
       return
     }
     if (key === 'tzadikim') {
@@ -610,6 +678,105 @@ export default function HomeScreen({ navigation }) {
           </View>
 
 
+          {/* Pidyon Nefesh Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Pressable
+                onPress={() => navigation?.navigate('PidyonNefesh')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.sectionLinkText}>עוד →</Text>
+              </Pressable>
+              <Text style={styles.sectionTitle}>פדיון נפש - שמות לברכה</Text>
+            </View>
+            {pidyonLoading ? (
+              <View style={styles.pidyonLoadingContainer}>
+                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+              </View>
+            ) : pidyonList.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pidyonRow}>
+                {pidyonList.map((pidyon) => (
+                  <Pressable
+                    key={pidyon.id}
+                    style={styles.pidyonCard}
+                    onPress={() => navigation?.navigate('PidyonNefesh')}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.pidyonCardHeader}>
+                      <View style={styles.pidyonIconWrapper}>
+                        <Ionicons name="heart" size={24} color={PRIMARY_BLUE} />
+                      </View>
+                    </View>
+                    <Text style={styles.pidyonName} numberOfLines={1}>
+                      {pidyon.name}
+                    </Text>
+                    <Text style={styles.pidyonMotherName} numberOfLines={1}>
+                      בן/בת {pidyon.motherName}
+                    </Text>
+                    {pidyon.description && (
+                      <Text style={styles.pidyonDescription} numberOfLines={2}>
+                        {pidyon.description}
+                      </Text>
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.pidyonEmptyContainer}>
+                <Ionicons name="heart-outline" size={32} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+                <Text style={styles.pidyonEmptyText}>אין שמות לפדיון נפש היום</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Rabbi Categories Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Pressable
+                onPress={() => navigation?.navigate('MiBeitRabeinu')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.sectionLinkText}>עוד →</Text>
+              </Pressable>
+              <Text style={styles.sectionTitle}>מבית רבינו</Text>
+            </View>
+            {rabbiCategoriesLoading ? (
+              <View style={styles.pidyonLoadingContainer}>
+                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+              </View>
+            ) : rabbiCategories.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pidyonRow}>
+                {rabbiCategories.map((category) => (
+                  <Pressable
+                    key={category.id}
+                    style={styles.pidyonCard}
+                    onPress={() => navigation?.navigate('MiBeitRabeinu')}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.pidyonCardHeader}>
+                      <View style={styles.pidyonIconWrapper}>
+                        <Ionicons name="folder" size={24} color={PRIMARY_BLUE} />
+                      </View>
+                    </View>
+                    <Text style={styles.pidyonName} numberOfLines={2}>
+                      {category.name}
+                    </Text>
+                    {category.description && (
+                      <Text style={styles.pidyonDescription} numberOfLines={2}>
+                        {category.description}
+                      </Text>
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.pidyonEmptyContainer}>
+                <Ionicons name="folder-outline" size={32} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+                <Text style={styles.pidyonEmptyText}>אין קטגוריות זמינות כרגע</Text>
+              </View>
+            )}
+          </View>
+
           {/* Social Media Links */}
           <View style={styles.socialSection}>
             <Text style={styles.socialSectionTitle}>עקבו אחרינו</Text>
@@ -706,7 +873,7 @@ export default function HomeScreen({ navigation }) {
         {/* CENTER - Music (Featured Button) */}
         <Pressable
           accessibilityRole="button"
-          onPress={() => { setActiveTab('music'); navigation?.navigate('Courses') }}
+          onPress={() => { setActiveTab('music'); navigation?.navigate('Music') }}
           style={styles.centerNavButton}
         >
           <View style={styles.centerNavGlowOuter} />
@@ -739,7 +906,7 @@ export default function HomeScreen({ navigation }) {
           style={styles.navItemPressable}
         >
           <View style={styles.iconBox}>
-            <Ionicons name="person-circle-outline" size={22} color={activeTab === 'profile' ? PRIMARY_BLUE : '#B3B3B3'} />
+            <Ionicons name="person-outline" size={22} color={activeTab === 'profile' ? PRIMARY_BLUE : '#B3B3B3'} />
           </View>
           <Text style={[styles.navLabel, { color: activeTab === 'profile' ? PRIMARY_BLUE : '#B3B3B3' }]}>פרופיל</Text>
         </Pressable>
@@ -1375,6 +1542,74 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: PRIMARY_BLUE,
     fontFamily: 'Poppins_600SemiBold',
+  },
+  pidyonRow: {
+    gap: 10,
+    paddingHorizontal: 2,
+  },
+  pidyonCard: {
+    width: 150,
+    minHeight: 120,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.1)',
+    padding: 14,
+    alignItems: 'flex-end',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  pidyonCardHeader: {
+    width: '100%',
+    marginBottom: 10,
+  },
+  pidyonIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pidyonName: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 2,
+  },
+  pidyonMotherName: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: '#6b7280',
+    textAlign: 'right',
+    marginBottom: 6,
+  },
+  pidyonDescription: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: '#9ca3af',
+    textAlign: 'right',
+    lineHeight: 16,
+  },
+  pidyonLoadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pidyonEmptyContainer: {
+    paddingVertical: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  pidyonEmptyText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
   },
 })
 

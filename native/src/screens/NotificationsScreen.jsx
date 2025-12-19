@@ -87,11 +87,24 @@ export default function NotificationsScreen({ navigation }) {
 
   const handleNotificationPress = (notification) => {
     markAsRead(notification.id)
-    
+
     // If notification has a link, open it
     if (notification.link) {
-      // You can add navigation logic here based on link type
-      // For now, just mark as read
+      // If it's a YouTube link (live stream), open in browser
+      if (notification.link.includes('youtube.com') || notification.link.includes('youtu.be')) {
+        import('react-native').then(({ Linking }) => {
+          Linking.openURL(notification.link).catch(() => {
+            Alert.alert('שגיאה', 'לא ניתן לפתוח את הקישור')
+          })
+        })
+      } else {
+        // Handle other link types if needed
+        import('react-native').then(({ Linking }) => {
+          Linking.openURL(notification.link).catch(() => {
+            Alert.alert('שגיאה', 'לא ניתן לפתוח את הקישור')
+          })
+        })
+      }
     }
   }
 
