@@ -14,8 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, updateDoc, increment } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import db from '../services/database';
 
 const PRIMARY_BLUE = '#1e3a8a';
 const BG = '#FFFFFF';
@@ -29,10 +28,9 @@ export default function TzadikDetailScreen({ route, navigation }) {
   // Track view count
   React.useEffect(() => {
     if (tzadik?.id) {
-      const tzadikRef = doc(db, 'tzadikim', tzadik.id);
-      updateDoc(tzadikRef, {
-        viewCount: increment(1)
-      }).catch(err => console.error('Error updating view count:', err));
+      // Increment view count using database service
+      db.incrementField('tzadikim', tzadik.id, 'viewCount', 1)
+        .catch(err => console.error('Error updating view count:', err));
     }
   }, [tzadik?.id]);
 

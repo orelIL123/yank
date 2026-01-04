@@ -15,8 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, getDocs, query, orderBy, where, limit, startAfter } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import db from '../services/database';
 
 const PRIMARY_BLUE = '#1e3a8a';
 const BG = '#FFFFFF';
@@ -102,35 +101,27 @@ export default function TzadikimScreen({ navigation, userRole }) {
         setLoading(true);
       }
 
-      let q;
+      // Use database service with pagination
+      const options = {
+        orderBy: { field: 'name', direction: 'asc' },
+        limit: 20
+      };
+
+      // For pagination, use offset-based approach
       if (loadMore && lastVisible) {
-        q = query(
-          collection(db, 'tzadikim'),
-          orderBy('name', 'asc'),
-          startAfter(lastVisible),
-          limit(20)
-        );
-      } else {
-        q = query(
-          collection(db, 'tzadikim'),
-          orderBy('name', 'asc'),
-          limit(20)
-        );
+        options.startAfter = lastVisible; // Use stored offset
       }
 
-      const querySnapshot = await getDocs(q);
-      const tzadikimData = querySnapshot.docs.map(doc => {
-        const data = doc.data();
+      const tzadikimData = await db.getCollectionPaginated('tzadikim', options);
+      
+      console.log('Tzadikim loaded:', tzadikimData.length);
+      tzadikimData.forEach(tzadik => {
         console.log('Tzadik loaded:', {
-          id: doc.id,
-          name: data.name,
-          imageUrl: data.imageUrl,
-          hasImageUrl: !!data.imageUrl
+          id: tzadik.id,
+          name: tzadik.name,
+          imageUrl: tzadik.imageUrl,
+          hasImageUrl: !!tzadik.imageUrl
         });
-        return {
-          id: doc.id,
-          ...data
-        };
       });
 
       if (loadMore) {
@@ -139,8 +130,11 @@ export default function TzadikimScreen({ navigation, userRole }) {
         setTzadikim(tzadikimData);
       }
 
-      if (querySnapshot.docs.length > 0) {
-        setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      // Update lastVisible for pagination (store current count as offset)
+      if (tzadikimData.length > 0) {
+        setLastVisible(loadMore ? (tzadikim.length + tzadikimData.length) : tzadikimData.length);
+      } else {
+        setLastVisible(null); // No more data
       }
 
     } catch (error) {
