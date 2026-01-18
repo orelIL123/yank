@@ -6,10 +6,10 @@
  * לפני זה:
  * 1. לך ל: https://app.supabase.com/project/mtdgmesxbmnspfqfahug/settings/api
  * 2. העתק את ה-"service_role" key (לא ה-anon key!)
- * 3. הדבק אותו בשורה 12 למטה
+ * 3. הדבק אותו בשורה 15 למטה
  */
 
-import fetch from 'node-fetch'
+import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_URL = 'https://mtdgmesxbmnspfqfahug.supabase.co'
 
@@ -22,7 +22,7 @@ if (SERVICE_ROLE_KEY === 'PASTE_YOUR_SERVICE_ROLE_KEY_HERE') {
   console.log('1. Go to: https://app.supabase.com/project/mtdgmesxbmnspfqfahug/settings/api')
   console.log('2. Scroll down to "Project API keys"')
   console.log('3. Copy the "service_role" key (the long one, NOT anon)')
-  console.log('4. Paste it in line 12 of this file')
+  console.log('4. Paste it in line 15 of this file')
   console.log('5. Run: node native/scripts/fix-rls-simple.js')
   process.exit(1)
 }
@@ -46,7 +46,15 @@ async function fixRLS() {
   console.log('🔧 Fixing RLS policies...\n')
 
   try {
-    // Use Supabase REST API to execute SQL
+    // Create admin client
+    const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+
+    // Try to execute SQL via REST API
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/exec_sql`, {
       method: 'POST',
       headers: {
@@ -62,11 +70,12 @@ async function fixRLS() {
       console.log('\n🎉 Now try saving a quote in the app!')
     } else {
       const error = await response.text()
-      console.error('❌ Error:', error)
+      console.error('❌ API Error:', error)
       console.log('\n📝 Fallback: Please run this SQL manually in Supabase SQL Editor:')
       console.log('\n' + '='.repeat(60))
       console.log(SQL_QUERY)
       console.log('='.repeat(60))
+      console.log('\n🔗 Go to: https://app.supabase.com/project/mtdgmesxbmnspfqfahug/sql/new')
     }
   } catch (error) {
     console.error('❌ Error:', error.message)
@@ -74,6 +83,7 @@ async function fixRLS() {
     console.log('\n' + '='.repeat(60))
     console.log(SQL_QUERY)
     console.log('='.repeat(60))
+    console.log('\n🔗 Go to: https://app.supabase.com/project/mtdgmesxbmnspfqfahug/sql/new')
   }
 }
 
