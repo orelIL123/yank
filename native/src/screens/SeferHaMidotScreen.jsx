@@ -27,36 +27,39 @@ export default function SeferHaMidotScreen({ navigation }) {
   const [loading, setLoading] = useState(false)
   const [bookFound, setBookFound] = useState(null)
 
-  // Try to find Sefer HaMidot in Sefaria - using correct name: Sefer_HaMiddot
+  // Try to find Sefer HaMidot in Sefaria - using correct API endpoint
   useEffect(() => {
     const findBook = async () => {
       try {
-        console.log('🔍 Searching for Sefer HaMiddot in Sefaria...')
-        // The correct name according to Sefaria URL is Sefer_HaMiddot (with double d)
+        console.log('🔍 Loading Sefer HaMiddot from Sefaria API...')
+        // Use the direct API endpoint: https://www.sefaria.org/api/texts/Sefer_HaMiddot
         const correctName = 'Sefer_HaMiddot'
         
         try {
+          // First try to get the index/structure
           const index = await getIndexV2(correctName)
-          console.log('✅ Found book:', correctName, index.title || index.heTitle)
+          console.log('✅ Found book index:', correctName, index.title || index.heTitle)
           setBookFound({ name: correctName, index })
-        } catch (e) {
-          console.log('❌ Not found:', correctName, e.message)
-          // Fallback: try other variations
-          const possibleNames = [
-            'Sefer HaMiddot',
-            'Sefer_HaMidot',
-            'Sefer HaMidot'
-          ]
           
-          for (const name of possibleNames) {
-            try {
-              const index = await getIndexV2(name)
-              console.log('✅ Found book:', name)
-              setBookFound({ name, index })
-              break
-            } catch (err) {
-              console.log('❌ Not found:', name)
+          // Also try to get the full text structure
+          try {
+            const fullText = await getText(correctName, { lang: 'he' })
+            console.log('✅ Got full text structure')
+            if (fullText) {
+              setBookFound(prev => ({ ...prev, fullText }))
             }
+          } catch (e) {
+            console.log('⚠️ Could not get full text, will use index structure')
+          }
+        } catch (e) {
+          console.log('❌ Could not get index:', e.message)
+          // Try direct text endpoint
+          try {
+            const textData = await getText(correctName, { lang: 'he' })
+            console.log('✅ Got text directly')
+            setBookFound({ name: correctName, fullText: textData })
+          } catch (err) {
+            console.log('❌ Could not get text either:', err.message)
           }
         }
       } catch (error) {
@@ -72,39 +75,78 @@ export default function SeferHaMidotScreen({ navigation }) {
     setLoading(true)
     setCategoryContent(null)
 
-    // First try Sefaria API if book was found
-    if (bookFound) {
-      try {
-        // According to Sefaria structure at https://www.sefaria.org/Sefer_HaMiddot
-        // Map Hebrew titles to English category names as they appear in Sefaria
-        const categoryMap = {
-          'אהבה': 'Love',
-          'יראה': 'Fear of God',
-          'תפילה': 'Prayer',
-          'צדקה': 'Charity',
-          'תורה': 'Torah Study',
-          'עבודה': 'Torah Study', // Service/Work - using Torah Study as closest match
-          'בטחון': 'Trust in God',
-          'שמחה': 'Joy and Happiness'
+    // First try Sefaria API - use direct endpoint: /api/texts/Sefer_HaMiddot
+    try {
+      // According to Sefaria structure at https://www.sefaria.org/Sefer_HaMiddot
+      // Map Hebrew titles to English category names as they appear in Sefaria
+      const categoryMap = {
+        'אהבה': 'Love',
+        'יראה': 'Fear of God',
+        'תפילה': 'Prayer',
+        'צדקה': 'Charity',
+        'תורה': 'Torah Study',
+        'עבודה': 'Torah Study', // Service/Work - using Torah Study as closest match
+        'בטחון': 'Trust in God',
+        'שמחה': 'Joy and Happiness'
+      }
+      
+      const englishCategory = categoryMap[category.title] || category.title
+      const bookName = 'Sefer_HaMiddot'
+      
+      // Try different tref formats based on Sefaria API structure
+      const trefOptions = [
+        `${bookName}, ${englishCategory}`,
+        `${bookName}.${englishCategory}`,
+        `${bookName}, ${englishCategory}, Part I`,
+        `${bookName}, ${englishCategory}, Part II`,
+        `${bookName}.${englishCategory}.1`, // Try with section number
+        `${bookName}.${englishCategory}.2`,
+      ]
+      
+      for (const tref of trefOptions) {
+        try {
+          console.log(`🔍 Trying tref: ${tref}`)
+          const textData = await getText(tref, { lang: 'he' })
+          const formatted = formatTextForDisplay(textData)
+          if (formatted.hebrew || formatted.content) {
+            console.log(`✅ Success! Loaded content from Sefaria API`)
+            setCategoryContent({
+              title: category.title,
+              content: formatted.hebrew || formatted.content,
+              hebrew: formatted.hebrew || formatted.content,
+            })
+            setLoading(false)
+            return
+          }
+        } catch (e) {
+          console.log(`❌ Failed: ${tref} - ${e.message}`)
+        }
+      }
+      
+      // If book index was loaded, try to find category in the structure
+      if (bookFound && bookFound.index && bookFound.index.nodes) {
+        const findCategoryInIndex = (nodes, searchTitle) => {
+          for (const node of nodes) {
+            if (node.title === searchTitle || node.heTitle === searchTitle || 
+                node.title?.includes(englishCategory) || node.heTitle?.includes(category.title)) {
+              return node
+            }
+            if (node.nodes) {
+              const found = findCategoryInIndex(node.nodes, searchTitle)
+              if (found) return found
+            }
+          }
+          return null
         }
         
-        const englishCategory = categoryMap[category.title] || category.title
-        
-        // Try different tref formats based on Sefaria structure
-        const trefOptions = [
-          `${bookFound.name}, ${englishCategory}`,
-          `${bookFound.name}.${englishCategory}`,
-          `${bookFound.name}, ${englishCategory}, Part I`,
-          `${bookFound.name}, ${englishCategory}, Part II`,
-        ]
-        
-        for (const tref of trefOptions) {
+        const categoryNode = findCategoryInIndex(bookFound.index.nodes, category.title)
+        if (categoryNode && categoryNode.ref) {
           try {
-            console.log(`🔍 Trying tref: ${tref}`)
-            const textData = await getText(tref, { lang: 'he' })
+            console.log(`🔍 Trying via index ref: ${categoryNode.ref}`)
+            const textData = await getText(categoryNode.ref, { lang: 'he' })
             const formatted = formatTextForDisplay(textData)
             if (formatted.hebrew || formatted.content) {
-              console.log(`✅ Success! Loaded content from Sefaria`)
+              console.log(`✅ Success! Loaded via index structure`)
               setCategoryContent({
                 title: category.title,
                 content: formatted.hebrew || formatted.content,
@@ -114,50 +156,12 @@ export default function SeferHaMidotScreen({ navigation }) {
               return
             }
           } catch (e) {
-            console.log(`❌ Failed: ${tref} - ${e.message}`)
+            console.log(`❌ Failed to load via index: ${e.message}`)
           }
         }
-        
-        // If specific category not found, try to get the index structure
-        if (bookFound.index && bookFound.index.nodes) {
-          // Search in the index structure for matching category
-          const findCategoryInIndex = (nodes, searchTitle) => {
-            for (const node of nodes) {
-              if (node.title === searchTitle || node.heTitle === searchTitle || 
-                  node.title?.includes(englishCategory) || node.heTitle?.includes(category.title)) {
-                return node
-              }
-              if (node.nodes) {
-                const found = findCategoryInIndex(node.nodes, searchTitle)
-                if (found) return found
-              }
-            }
-            return null
-          }
-          
-          const categoryNode = findCategoryInIndex(bookFound.index.nodes, category.title)
-          if (categoryNode && categoryNode.ref) {
-            try {
-              const textData = await getText(categoryNode.ref, { lang: 'he' })
-              const formatted = formatTextForDisplay(textData)
-              if (formatted.hebrew || formatted.content) {
-                console.log(`✅ Success! Loaded via index structure`)
-                setCategoryContent({
-                  title: category.title,
-                  content: formatted.hebrew || formatted.content,
-                  hebrew: formatted.hebrew || formatted.content,
-                })
-                setLoading(false)
-                return
-              }
-            } catch (e) {
-              console.log(`❌ Failed to load via index: ${e.message}`)
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error loading from Sefaria:', error)
       }
+    } catch (error) {
+      console.error('Error loading from Sefaria:', error)
     }
 
     // If we couldn't load from Sefaria, show error
