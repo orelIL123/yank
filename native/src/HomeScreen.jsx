@@ -391,8 +391,12 @@ export default function HomeScreen({ navigation, userRole }) {
     loadPidyonList()
   }, [])
 
-  // Auto-scroll pidyon names in infinite loop
+  // Auto-scroll pidyon names - TEMPORARILY DISABLED FOR DEBUG
   useEffect(() => {
+    console.log('⚠️ Pidyon auto-scroll DISABLED for debugging touch issues')
+    return () => {}
+    
+    /* ORIGINAL CODE - DISABLED
     if (pidyonList.length === 0 || pidyonLoading || !pidyonScrollRef.current) return
 
     // Clear any existing interval
@@ -431,6 +435,7 @@ export default function HomeScreen({ navigation, userRole }) {
         clearInterval(pidyonScrollInterval.current)
       }
     }
+    */
   }, [pidyonList, pidyonLoading])
 
   // Load notifications and count unread
@@ -471,6 +476,7 @@ export default function HomeScreen({ navigation, userRole }) {
     console.log('🔵 handleCardPress called with key:', key)
     console.log('🔵 Navigation object exists:', !!navigation)
     console.log('🔵 Navigation.navigate exists:', !!navigation?.navigate)
+    console.log('🔵 Available routes:', navigation?.getState?.()?.routeNames)
     
     if (key === 'music') {
       console.log('🔵 Navigating to Music...')
@@ -541,13 +547,11 @@ export default function HomeScreen({ navigation, userRole }) {
         badge={unreadCount}
       />
 
-      {menuVisible && (
-        <MenuDrawer
-          visible={menuVisible}
-          onClose={() => setMenuVisible(false)}
-          navigation={navigation}
-        />
-      )}
+      <MenuDrawer
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        navigation={navigation}
+      />
 
       <View style={styles.main}>
         <ScrollView

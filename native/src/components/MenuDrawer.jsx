@@ -29,6 +29,9 @@ export default function MenuDrawer({ visible, onClose, navigation }) {
         }, 300)
     }
 
+    // Don't render anything if not visible - prevents touch blocking
+    if (!visible) return null
+
     return (
         <Modal
             visible={visible}
