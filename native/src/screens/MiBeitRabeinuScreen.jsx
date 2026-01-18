@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, ActivityIndicator, Alert, Modal, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, ActivityIndicator, Alert, Modal, Dimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'
-import { db } from '../config/firebase'
+
 import YoutubePlayer from 'react-native-youtube-iframe'
 import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
+import db from '../services/database'
+import { canManageVideos } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -39,48 +40,52 @@ function getYouTubeThumbnail(videoId, quality = 'hqdefault') {
   return `https://img.youtube.com/vi/${videoId}/${quality}.jpg`
 }
 
-export default function MiBeitRabeinuScreen({ navigation }) {
+export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissions }) {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedVideo, setSelectedVideo] = useState(null)
   const [playingVideo, setPlayingVideo] = useState(false)
+  const canManage = canManageVideos(userRole, userPermissions)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [saving, setSaving] = useState(false)
+  
+  // Form state
+  const [formTitle, setFormTitle] = useState('')
+  const [formDescription, setFormDescription] = useState('')
+  const [formYoutubeUrl, setFormYoutubeUrl] = useState('')
 
   useEffect(() => {
+    console.log('MiBeitRabeinuScreen - userRole:', userRole, 'canManage:', canManage)
     loadCategories()
-  }, [])
+  }, [userRole, userPermissions])
 
   const loadCategories = async () => {
     try {
       console.log('🔍 Loading categories from rabbiStudents collection...')
-      const q = query(
-        collection(db, 'rabbiStudents'),
-        where('isActive', '==', true),
-        orderBy('order', 'asc')
-      )
-      const querySnapshot = await getDocs(q)
-      console.log(`📊 Found ${querySnapshot.docs.length} categories`)
-      
+      const categoriesRaw = await db.getCollection('rabbiStudents', {
+        where: [['isActive', '==', true]],
+        orderBy: { field: 'order', direction: 'asc' }
+      })
+
+      console.log(`📊 Found ${categoriesRaw.length} categories`)
+
       const categoriesData = []
 
-      for (const docSnapshot of querySnapshot.docs) {
-        const categoryData = docSnapshot.data()
-        console.log(`📁 Loading category: ${categoryData.name || docSnapshot.id}`)
+      for (const categoryData of categoriesRaw) {
+        console.log(`📁 Loading category: ${categoryData.name || categoryData.id}`)
 
         // Load videos for each category
         try {
-          const videosQuery = query(
-            collection(db, 'rabbiStudents', docSnapshot.id, 'videos'),
-            orderBy('createdAt', 'desc')
-          )
-          const videosSnapshot = await getDocs(videosQuery)
-          console.log(`  📹 Found ${videosSnapshot.docs.length} videos`)
-          
-          const videos = videosSnapshot.docs.map(vDoc => {
-            const vData = vDoc.data()
+          const videos = await db.getSubcollection('rabbiStudents', categoryData.id, 'videos', {
+            orderBy: { field: 'createdAt', direction: 'desc' }
+          })
+
+          console.log(`  📹 Found ${videos.length} videos`)
+
+          const videosWithThumbnails = videos.map(vData => {
             const youtubeId = extractYouTubeId(vData.videoUrl || vData.youtubeUrl)
             return {
-              id: vDoc.id,
               ...vData,
               youtubeId,
               thumbnailUrl: youtubeId ? getYouTubeThumbnail(youtubeId) : null
@@ -88,15 +93,13 @@ export default function MiBeitRabeinuScreen({ navigation }) {
           }).filter(video => video.youtubeId)
 
           categoriesData.push({
-            id: docSnapshot.id,
             ...categoryData,
-            videos
+            videos: videosWithThumbnails
           })
         } catch (videoError) {
-          console.error(`  ⚠️ Error loading videos for category ${docSnapshot.id}:`, videoError)
+          console.error(`  ⚠️ Error loading videos for category ${categoryData.id}:`, videoError)
           // Add category even if videos failed to load
           categoriesData.push({
-            id: docSnapshot.id,
             ...categoryData,
             videos: []
           })
@@ -140,6 +143,81 @@ export default function MiBeitRabeinuScreen({ navigation }) {
     return new Date(date).toLocaleDateString('he-IL', { year: 'numeric', month: 'long', day: 'numeric' })
   }
 
+  const handleAddVideo = () => {
+    setShowAddModal(true)
+  }
+
+  const handleSaveVideo = async () => {
+    if (!formTitle.trim() || !formYoutubeUrl.trim()) {
+      Alert.alert('שגיאה', 'יש למלא כותרת וקישור YouTube')
+      return
+    }
+
+    if (!selectedCategory) {
+      Alert.alert('שגיאה', 'לא נבחרה קטגוריה')
+      return
+    }
+
+    const youtubeId = extractYouTubeId(formYoutubeUrl)
+    if (!youtubeId) {
+      Alert.alert('שגיאה', 'קישור YouTube לא תקין')
+      return
+    }
+
+    setSaving(true)
+    try {
+      // Add video to the category's subcollection
+      await db.addToSubcollection('rabbiStudents', selectedCategory.id, 'videos', {
+        title: formTitle.trim(),
+        description: formDescription.trim() || '',
+        videoUrl: formYoutubeUrl.trim(),
+        youtubeUrl: formYoutubeUrl.trim(),
+        createdAt: new Date().toISOString(),
+      })
+
+      Alert.alert('הצלחה', 'הסרטון נוסף בהצלחה')
+      setShowAddModal(false)
+      setFormTitle('')
+      setFormDescription('')
+      setFormYoutubeUrl('')
+
+      // Reload the specific category's videos
+      try {
+        const videos = await db.getSubcollection('rabbiStudents', selectedCategory.id, 'videos', {
+          orderBy: { field: 'createdAt', direction: 'desc' }
+        })
+
+        const videosWithThumbnails = videos.map(vData => {
+          const youtubeId = extractYouTubeId(vData.videoUrl || vData.youtubeUrl)
+          return {
+            ...vData,
+            youtubeId,
+            thumbnailUrl: youtubeId ? getYouTubeThumbnail(youtubeId) : null
+          }
+        }).filter(video => video.youtubeId)
+
+        // Update the selected category with new videos
+        setSelectedCategory({
+          ...selectedCategory,
+          videos: videosWithThumbnails
+        })
+      } catch (error) {
+        console.error('Error reloading videos:', error)
+        // Fallback: reload all categories
+        await loadCategories()
+        const updatedCategory = categories.find(cat => cat.id === selectedCategory.id)
+        if (updatedCategory) {
+          setSelectedCategory(updatedCategory)
+        }
+      }
+    } catch (error) {
+      console.error('Error saving video:', error)
+      Alert.alert('שגיאה', 'לא ניתן להוסיף את הסרטון')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -173,6 +251,21 @@ export default function MiBeitRabeinuScreen({ navigation }) {
             <Text style={styles.studentDescription}>{selectedCategory.description}</Text>
           )}
 
+          {canManage && (
+            <Pressable
+              style={styles.addButton}
+              onPress={handleAddVideo}
+            >
+              <LinearGradient
+                colors={[PRIMARY_BLUE, '#1e40af']}
+                style={styles.addButtonGradient}
+              >
+                <Ionicons name="add" size={24} color="#fff" />
+                <Text style={styles.addButtonText}>הוסף סרטון</Text>
+              </LinearGradient>
+            </Pressable>
+          )}
+
           {selectedCategory.videos.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="videocam-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
@@ -191,9 +284,10 @@ export default function MiBeitRabeinuScreen({ navigation }) {
                   source={video.thumbnailUrl ? { uri: video.thumbnailUrl } : require('../../assets/photos/cards/yeshiva.png')}
                   style={styles.videoThumbnail}
                   imageStyle={styles.videoThumbnailRadius}
+                  pointerEvents="box-none"
                 >
-                  <LinearGradient colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.1)']} style={StyleSheet.absoluteFill} />
-                  <View style={styles.videoTopRow}>
+                  <LinearGradient colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.1)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+                  <View style={styles.videoTopRow} pointerEvents="none">
                     {video.createdAt && (
                       <View style={styles.datePill}>
                         <Ionicons name="calendar-outline" size={14} color="#fff" />
@@ -204,7 +298,7 @@ export default function MiBeitRabeinuScreen({ navigation }) {
                       <Ionicons name="play" size={36} color="#ffffff" style={{ marginLeft: 4 }} />
                     </View>
                   </View>
-                  <View style={styles.videoBottom}>
+                  <View style={styles.videoBottom} pointerEvents="none">
                     <Text style={styles.videoTitle}>{video.title || 'סרטון'}</Text>
                     {video.description && (
                       <Text style={styles.videoDescription} numberOfLines={2}>{video.description}</Text>
@@ -251,6 +345,113 @@ export default function MiBeitRabeinuScreen({ navigation }) {
               </View>
             )}
           </View>
+        </Modal>
+
+        {/* Add Video Modal */}
+        <Modal
+          visible={showAddModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowAddModal(false)}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>הוסף סרטון חדש</Text>
+                  <Pressable
+                    onPress={() => {
+                      setShowAddModal(false)
+                      setFormTitle('')
+                      setFormDescription('')
+                      setFormYoutubeUrl('')
+                    }}
+                    style={styles.modalCloseButton}
+                  >
+                    <Ionicons name="close" size={28} color={DEEP_BLUE} />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={styles.modalBody}
+                  contentContainerStyle={{ paddingBottom: 24 }}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>כותרת *</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={formTitle}
+                      onChangeText={setFormTitle}
+                      placeholder="הכנס כותרת"
+                      placeholderTextColor="#9ca3af"
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>תיאור</Text>
+                    <TextInput
+                      style={[styles.formInput, styles.formTextArea]}
+                      value={formDescription}
+                      onChangeText={setFormDescription}
+                      placeholder="הכנס תיאור (אופציונלי)"
+                      placeholderTextColor="#9ca3af"
+                      multiline
+                      numberOfLines={4}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>קישור YouTube *</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={formYoutubeUrl}
+                      onChangeText={setFormYoutubeUrl}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      placeholderTextColor="#9ca3af"
+                      autoCapitalize="none"
+                      keyboardType="url"
+                    />
+                  </View>
+                </ScrollView>
+
+                <View style={styles.modalFooter}>
+                  <Pressable
+                    style={styles.cancelButton}
+                    onPress={() => {
+                      setShowAddModal(false)
+                      setFormTitle('')
+                      setFormDescription('')
+                      setFormYoutubeUrl('')
+                    }}
+                  >
+                    <Text style={styles.cancelButtonText}>ביטול</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.saveButton}
+                    onPress={handleSaveVideo}
+                    disabled={saving}
+                  >
+                    <LinearGradient
+                      colors={[PRIMARY_BLUE, '#1e40af']}
+                      style={styles.saveButtonGradient}
+                    >
+                      {saving ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.saveButtonText}>שמור</Text>
+                      )}
+                    </LinearGradient>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
       </SafeAreaView>
     )
@@ -566,5 +767,123 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: PRIMARY_BLUE,
     textAlign: 'right',
+  },
+  addButton: {
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: PRIMARY_BLUE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  addButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: BG,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(11,27,58,0.1)',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontFamily: 'Poppins_700Bold',
+    color: DEEP_BLUE,
+  },
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(11,27,58,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  formLabel: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  formInput: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    color: DEEP_BLUE,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.1)',
+    textAlign: 'right',
+  },
+  formTextArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(11,27,58,0.1)',
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+  },
+  saveButton: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  saveButtonGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#fff',
   },
 })

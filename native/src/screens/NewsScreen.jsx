@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, Share, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
-import { db } from '../config/firebase'
+
 import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
+import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -22,16 +22,10 @@ export default function NewsScreen({ navigation, userRole }) {
 
   const loadNews = async () => {
     try {
-      const q = query(
-        collection(db, 'news'),
-        orderBy('date', 'desc'),
-        limit(20)
-      )
-      const querySnapshot = await getDocs(q)
-      const articlesData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const articlesData = await db.getCollection('news', {
+        orderBy: { field: 'date', direction: 'desc' },
+        limit: 20
+      })
       setArticles(articlesData)
     } catch (error) {
       console.error('Error loading news:', error)
@@ -103,15 +97,19 @@ export default function NewsScreen({ navigation, userRole }) {
                 source={article.imageUrl ? { uri: article.imageUrl } : require('../../assets/photos/cards/yeshiva.png')}
                 style={styles.articleCover}
                 imageStyle={styles.articleCoverRadius}
+                pointerEvents="box-none"
               >
-                <LinearGradient colors={[ 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.1)' ]} style={StyleSheet.absoluteFill} />
-                <View style={styles.articleTopRow}>
-                  <View style={styles.datePill}>
+                <LinearGradient colors={[ 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.1)' ]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+                <View style={styles.articleTopRow} pointerEvents="box-none">
+                  <View style={styles.datePill} pointerEvents="none">
                     <Ionicons name="calendar-outline" size={14} color={PRIMARY_BLUE} />
                     <Text style={styles.dateText}>{formatDate(article.date)}</Text>
                   </View>
                   <Pressable
-                    onPress={() => handleShare(article)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleShare(article);
+                    }}
                     style={styles.shareIconBtn}
                     hitSlop={12}
                     accessibilityRole="button"
@@ -120,7 +118,7 @@ export default function NewsScreen({ navigation, userRole }) {
                     <Ionicons name="share-social-outline" size={18} color={PRIMARY_BLUE} />
                   </Pressable>
                 </View>
-                <View style={styles.articleBottom}>
+                <View style={styles.articleBottom} pointerEvents="none">
                   <Text style={styles.articleTitle}>{article.title}</Text>
                   <Text style={styles.articleSummary} numberOfLines={2}>{article.summary || article.content}</Text>
                 </View>

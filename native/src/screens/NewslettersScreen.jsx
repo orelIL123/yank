@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, where, doc, deleteDoc } from 'firebase/firestore'
-import { db } from '../config/firebase'
+
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system'
 import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
+import db from '../services/database'
+import { canManageNewsletters } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -21,11 +22,11 @@ const LANGUAGES = [
   { key: 'english', label: 'English', icon: 'language-outline' },
 ]
 
-export default function NewslettersScreen({ navigation, userRole }) {
+export default function NewslettersScreen({ navigation, userRole, userPermissions }) {
     const [newsletters, setNewsletters] = useState([])
     const [loading, setLoading] = useState(true)
     const [selectedLanguage, setSelectedLanguage] = useState('hebrew')
-    const isAdmin = userRole === 'admin'
+    const canManage = canManageNewsletters(userRole, userPermissions)
 
     useEffect(() => {
         fetchNewsletters()
@@ -33,15 +34,9 @@ export default function NewslettersScreen({ navigation, userRole }) {
 
     const fetchNewsletters = async () => {
         try {
-            const q = query(
-                collection(db, 'newsletters'),
-                where('language', '==', selectedLanguage),
-                orderBy('publishDate', 'desc')
-            )
-            const querySnapshot = await getDocs(q)
-            const newslettersData = []
-            querySnapshot.forEach((doc) => {
-                newslettersData.push({ id: doc.id, ...doc.data() })
+            const newslettersData = await db.getCollection('newsletters', {
+                where: [['language', '==', selectedLanguage]],
+                orderBy: { field: 'publishDate', direction: 'desc' }
             })
             setNewsletters(newslettersData)
         } catch (error) {
@@ -120,7 +115,7 @@ export default function NewslettersScreen({ navigation, userRole }) {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await deleteDoc(doc(db, 'newsletters', newsletter.id))
+                            await db.deleteDocument('newsletters', newsletter.id)
                             Alert.alert('הצלחה', 'העלון נמחק בהצלחה')
                             fetchNewsletters()
                         } catch (error) {
@@ -138,23 +133,25 @@ export default function NewslettersScreen({ navigation, userRole }) {
             style={styles.newsletterCard}
             onPress={() => handleNewsletterPress(item)}
         >
-            <View style={styles.newsletterImageContainer}>
+            <View style={styles.newsletterImageContainer} pointerEvents="box-none">
                 {item.thumbnailUrl || item.fileType === 'image' ? (
                     <Image
                         source={{ uri: item.thumbnailUrl || item.fileUrl }}
                         style={styles.newsletterImage}
                         resizeMode="cover"
+                        pointerEvents="none"
                     />
                 ) : (
-                    <View style={styles.pdfPlaceholder}>
+                    <View style={styles.pdfPlaceholder} pointerEvents="none">
                         <Ionicons name="document-text" size={60} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
                     </View>
                 )}
                 <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.7)']}
                     style={styles.imageGradient}
+                    pointerEvents="none"
                 />
-                <View style={styles.newsletterBadge}>
+                <View style={styles.newsletterBadge} pointerEvents="none">
                     <Ionicons
                         name={item.fileType === 'pdf' ? 'document-text' : 'image'}
                         size={16}
@@ -202,7 +199,7 @@ export default function NewslettersScreen({ navigation, userRole }) {
                         <Text style={styles.actionButtonText}>שיתוף</Text>
                     </Pressable>
 
-                    {isAdmin && (
+                    {canManage && (
                         <Pressable
                             style={[styles.actionButton, { borderTopWidth: 1, borderTopColor: 'rgba(239,68,68,0.2)', paddingTop: 8, marginTop: 4 }]}
                             onPress={(e) => {
@@ -227,8 +224,8 @@ export default function NewslettersScreen({ navigation, userRole }) {
                 title={t('עלונים')}
                 showBackButton={true}
                 onBackPress={() => navigation.goBack()}
-                rightIcon={isAdmin ? 'add' : undefined}
-                onRightIconPress={isAdmin ? () => navigation.navigate('AddNewsletter') : undefined}
+                rightIcon={canManage ? 'add' : undefined}
+                onRightIconPress={canManage ? () => navigation.navigate('AddNewsletter') : undefined}
             />
 
             {/* Language selector */}

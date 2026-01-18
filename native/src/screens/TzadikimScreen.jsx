@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Alert,
   Image,
@@ -27,13 +28,27 @@ const CARD_SIZE = (width - 48) / 2; // 2 columns with padding
 const TzadikCard = ({ item, navigation }) => {
   const [imageError, setImageError] = useState(false);
   
+  const handlePress = () => {
+    console.log('🔵 Tzadik card pressed:', item.name);
+    console.log('🔵 Navigation object exists:', !!navigation);
+    try {
+      navigation.navigate('TzadikDetail', { tzadik: item });
+      console.log('🔵 Navigation successful');
+    } catch (error) {
+      console.error('🔴 Navigation error:', error);
+      Alert.alert('שגיאה', 'לא ניתן לפתוח את פרטי הצדיק');
+    }
+  };
+  
   return (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => navigation.navigate('TzadikDetail', { tzadik: item })}
-      activeOpacity={0.8}
+    <Pressable
+      style={({ pressed }) => [
+        styles.card,
+        pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
+      ]}
+      onPress={handlePress}
     >
-      <View style={styles.cardImageContainer}>
+      <View style={styles.cardImageContainer} pointerEvents="none">
         {item.imageUrl && !imageError ? (
           <Image
             source={{ uri: item.imageUrl }}
@@ -53,7 +68,7 @@ const TzadikCard = ({ item, navigation }) => {
           </View>
         )}
       </View>
-      <View style={styles.cardContent}>
+      <View style={styles.cardContent} pointerEvents="none">
         <Text style={styles.cardName} numberOfLines={2}>
           {item.name}
         </Text>
@@ -63,7 +78,7 @@ const TzadikCard = ({ item, navigation }) => {
           </Text>
         )}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 };
 

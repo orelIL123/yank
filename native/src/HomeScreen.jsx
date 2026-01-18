@@ -1,13 +1,14 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, FlatList, Pressable, Animated, Platform, Dimensions, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, FlatList, Pressable, Animated, Platform, Dimensions, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator, Modal, TextInput } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Grayscale } from 'react-native-color-matrix-image-filters'
 import { Audio } from 'expo-av'
 import MenuDrawer from './components/MenuDrawer'
 import AppHeader from './components/AppHeader'
-import { collection, getDocs, query, orderBy, limit, where, Timestamp } from 'firebase/firestore'
-import { db, auth } from './config/firebase'
+import { auth } from './config/firebase'
+import db from './services/database'
+import cache from './utils/cache'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -20,7 +21,6 @@ const DEFAULT_CARDS = [
   { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/prayer.png'), gradient: ['#f093fb', '#f5576c'], size: 'large' },
   { key: 'newsletters', title: 'עלונים', desc: 'עלונים להורדה וצפייה', icon: 'document-text-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
   { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
-  { key: 'chidushim', title: 'חידושים', desc: 'חידושי תורה ותובנות', icon: 'bulb-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#fa709a', '#fee140'], size: 'small' },
   { key: 'yeshiva', title: 'מהנעשה בבית המדרש', desc: 'עדכונים וחדשות', icon: 'school-outline', image: require('../assets/photos/cards/yeshiva.png'), gradient: ['#30cfd0', '#330867'], size: 'small' },
   { key: 'tzadikim', title: 'ספר תולדות אדם', desc: 'אלפי תמונות ומידע', icon: 'people-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#a8edea', '#fed6e3'], size: 'large' },
   { key: 'learningLibrary', title: 'ספריית לימוד', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#667eea', '#764ba2'], size: 'large' },
@@ -87,7 +87,7 @@ function Card({ item, index, scrollX, SNAP, CARD_WIDTH, CARD_HEIGHT, OVERLAP, on
         accessibilityRole="button"
         accessibilityLabel={`${item.title} - ${item.desc}`}
       >
-        <Animated.View style={[styles.card, animatedStyle]}>
+        <Animated.View style={[styles.card, animatedStyle]} pointerEvents="box-none">
           {(() => {
             // Determine image source: priority: imageUrl > image (require/built-in) > fallback
             let imageSource = null;
@@ -111,15 +111,17 @@ function Card({ item, index, scrollX, SNAP, CARD_WIDTH, CARD_HEIGHT, OVERLAP, on
                 resizeMode="cover"
                 style={StyleSheet.absoluteFill}
                 imageStyle={imageStyle}
+                pointerEvents="none"
               />
             ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: item.gradient?.[0] || PRIMARY_BLUE }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: item.gradient?.[0] || PRIMARY_BLUE }]} pointerEvents="none" />
             );
           })()}
           <LinearGradient
             colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.0)']}
             locations={[0, 0.45]}
             style={StyleSheet.absoluteFill}
+            pointerEvents="none"
           />
         </Animated.View>
       </Pressable>
@@ -127,12 +129,13 @@ function Card({ item, index, scrollX, SNAP, CARD_WIDTH, CARD_HEIGHT, OVERLAP, on
   )
 }
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, userRole }) {
+  const isAdmin = userRole === 'admin'
   const { width } = Dimensions.get('window')
   const SPACING = 12
-  const CARD_WIDTH = Math.min(width * 0.76, 360)
+  const CARD_WIDTH = Math.min(width * 0.68, 340)
   const CARD_HEIGHT = Math.round(CARD_WIDTH * (16 / 9))
-  const OVERLAP = 56
+  const OVERLAP = 64
   const SNAP = CARD_WIDTH - OVERLAP
   const sideInset = (width - CARD_WIDTH) / 2
 
@@ -156,7 +159,13 @@ export default function HomeScreen({ navigation }) {
       { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 2.0] }) },
     ],
   }
-  const quote = 'ציטוט יומי - הרב הינוקא'
+  const [quote, setQuote] = useState('ציטוט יומי - הרב הינוקא')
+  const [quoteAuthor, setQuoteAuthor] = useState('הרב הינוקא')
+  const [quoteLoading, setQuoteLoading] = useState(true)
+  const [showQuoteEditModal, setShowQuoteEditModal] = useState(false)
+  const [editingQuote, setEditingQuote] = useState('')
+  const [editingAuthor, setEditingAuthor] = useState('')
+  const [savingQuote, setSavingQuote] = useState(false)
   const [unreadCount, setUnreadCount] = React.useState(0)
   const [menuVisible, setMenuVisible] = React.useState(false)
   const [songs, setSongs] = useState([])
@@ -168,75 +177,130 @@ export default function HomeScreen({ navigation }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [pidyonList, setPidyonList] = useState([])
   const [pidyonLoading, setPidyonLoading] = useState(true)
-  const [rabbiCategories, setRabbiCategories] = useState([])
-  const [rabbiCategoriesLoading, setRabbiCategoriesLoading] = useState(true)
+  const pidyonScrollRef = React.useRef(null)
+  const pidyonScrollInterval = React.useRef(null)
+  const pidyonScrollPosition = React.useRef(0)
 
   const onShareQuote = React.useCallback(() => {
-    Share.share({ message: `"${quote}"` }).catch(() => { })
-  }, [quote])
+    Share.share({ message: `"${quote}" - ${quoteAuthor}` }).catch(() => { })
+  }, [quote, quoteAuthor])
 
-  // Load cards from Firestore
+  // Load daily quote
   useEffect(() => {
-    const loadCards = async () => {
+    const loadQuote = async () => {
       try {
-        const q = query(
-          collection(db, 'homeCards'),
-          where('isActive', '==', true),
-          orderBy('order', 'asc')
-        )
-        const querySnapshot = await getDocs(q)
+        const config = await db.getAppConfig()
+        if (config) {
+          setQuote(config.daily_quote || 'ציטוט יומי - הרב הינוקא')
+          setQuoteAuthor(config.quote_author || 'הרב הינוקא')
+        }
+      } catch (error) {
+        console.error('Error loading quote:', error)
+        // Keep default quote on error
+      } finally {
+        setQuoteLoading(false)
+      }
+    }
+    loadQuote()
+  }, [])
 
-        if (querySnapshot.empty) {
-          // Use default cards if no cards in Firestore
-          console.log('No cards found in Firestore, using defaults')
-          setCards(DEFAULT_CARDS)
+  const handleEditQuote = () => {
+    setEditingQuote(quote)
+    setEditingAuthor(quoteAuthor)
+    setShowQuoteEditModal(true)
+  }
+
+  const handleSaveQuote = async () => {
+    if (!editingQuote.trim()) {
+      Alert.alert('שגיאה', 'יש להזין ציטוט')
+      return
+    }
+
+    try {
+      setSavingQuote(true)
+      await db.updateAppConfig({
+        daily_quote: editingQuote.trim(),
+        quote_author: editingAuthor.trim() || 'הרב הינוקא'
+      })
+      setQuote(editingQuote.trim())
+      setQuoteAuthor(editingAuthor.trim() || 'הרב הינוקא')
+      setShowQuoteEditModal(false)
+      Alert.alert('הצלחה', 'הציטוט עודכן בהצלחה')
+      // Clear cache to force reload
+      cache.delete('homeCards')
+      cache.delete('homeSongs')
+    } catch (error) {
+      console.error('Error saving quote:', error)
+      Alert.alert('שגיאה', 'לא ניתן לשמור את הציטוט')
+    } finally {
+      setSavingQuote(false)
+    }
+  }
+
+  // PERFORMANCE FIX: Load all home screen data in parallel with caching
+  useEffect(() => {
+    const loadHomeData = async () => {
+      try {
+        // Check cache first (30 min TTL)
+        const cachedCards = cache.get('homeCards')
+        const cachedSongs = cache.get('homeSongs')
+
+        if (cachedCards && cachedSongs) {
+          console.log('Using cached home data')
+          setCards(cachedCards)
+          setSongs(cachedSongs)
+          setCardsLoading(false)
+          setSongsLoading(false)
+          return
+        }
+
+        // Run all queries in parallel with Promise.all
+        const [cardsData, songsData] = await Promise.all([
+          db.getCollection('homeCards', {
+            where: [['isActive', '==', true]],
+            orderBy: { field: 'order', direction: 'asc' }
+          }),
+          db.getCollection('music', {
+            orderBy: { field: 'createdAt', direction: 'desc' },
+            limit: 3
+          })
+        ])
+
+        // Process cards
+        let processedCards
+        if (!cardsData || cardsData.length === 0) {
+          console.log('No cards found in database, using defaults')
+          processedCards = DEFAULT_CARDS
         } else {
-          const cardsData = querySnapshot.docs.map(doc => {
-            const data = doc.data()
-            // Find default card for fallback gradient/size if exists
+          processedCards = cardsData.map(data => {
             const defaultCard = DEFAULT_CARDS.find(c => c.key === data.key)
             return {
               ...data,
               gradient: defaultCard?.gradient || ['#667eea', '#764ba2'],
               size: defaultCard?.size || 'small',
-              // Use imageUrl from Firestore if available, otherwise use built-in image from defaultCard
               image: data.imageUrl ? { uri: data.imageUrl } : (defaultCard?.image || null),
-              // Keep the built-in image as fallback even if imageUrl exists
               builtInImage: defaultCard?.image || null
             }
           })
-          setCards(cardsData)
-          console.log('Loaded cards from Firestore:', cardsData.length)
+          console.log('Loaded cards from database:', processedCards.length)
         }
+
+        // Update state
+        setCards(processedCards)
+        setSongs(songsData)
+
+        // Cache the data (30 minutes TTL)
+        cache.set('homeCards', processedCards, 30 * 60 * 1000)
+        cache.set('homeSongs', songsData, 30 * 60 * 1000)
+
       } catch (error) {
-        console.error('Error loading cards:', error)
-        // Fallback to default cards on error
+        console.error('Error loading home data:', error)
         setCards(DEFAULT_CARDS)
       } finally {
         setCardsLoading(false)
-      }
-    }
-    loadCards()
-  }, [])
-
-  // Load songs from Firestore
-  useEffect(() => {
-    const loadSongs = async () => {
-      try {
-        const q = query(collection(db, 'music'), orderBy('createdAt', 'desc'), limit(3))
-        const querySnapshot = await getDocs(q)
-        const songsData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setSongs(songsData)
-      } catch (error) {
-        console.error('Error loading songs:', error)
-      } finally {
         setSongsLoading(false)
       }
     }
-    loadSongs()
 
     // Set audio mode for playback
     const setupAudio = async () => {
@@ -252,7 +316,9 @@ export default function HomeScreen({ navigation }) {
         console.error('Error setting audio mode:', error)
       }
     }
-    setupAudio()
+
+    // Load data and setup audio in parallel
+    Promise.all([loadHomeData(), setupAudio()])
   }, [])
 
   // Cleanup sound on unmount
@@ -357,26 +423,15 @@ export default function HomeScreen({ navigation }) {
     }
   }
 
-  // Load Pidyon Nefesh list (today's only)
+  // Load Pidyon Nefesh list for scrolling display
   useEffect(() => {
     const loadPidyonList = async () => {
       try {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const todayTimestamp = Timestamp.fromDate(today)
-
-        const q = query(
-          collection(db, 'pidyonNefesh'),
-          where('createdAt', '>=', todayTimestamp),
-          orderBy('createdAt', 'desc'),
-          limit(10)
-        )
-        const querySnapshot = await getDocs(q)
-        const pidyonData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setPidyonList(pidyonData)
+        const pidyonData = await db.getCollection('pidyonNefesh', {
+          orderBy: { field: 'createdAt', direction: 'desc' },
+          limit: 50 // Limit for performance
+        })
+        setPidyonList(pidyonData || [])
       } catch (error) {
         console.error('Error loading pidyon list:', error)
       } finally {
@@ -386,80 +441,83 @@ export default function HomeScreen({ navigation }) {
     loadPidyonList()
   }, [])
 
-  // Load Rabbi Categories
+  // Auto-scroll pidyon names in infinite loop
   useEffect(() => {
-    const loadRabbiCategories = async () => {
-      try {
-        console.log('🔍 Loading rabbi categories for home screen...')
-        const q = query(
-          collection(db, 'rabbiStudents'),
-          where('isActive', '==', true),
-          orderBy('order', 'asc')
-        )
-        const querySnapshot = await getDocs(q)
-        console.log(`📊 Found ${querySnapshot.docs.length} categories in Firestore`)
-        
-        const categoriesData = querySnapshot.docs.map(doc => {
-          const data = doc.data()
-          console.log(`  📁 Category: ${data.name || doc.id}`)
-          return {
-            id: doc.id,
-            ...data
+    if (pidyonList.length === 0 || pidyonLoading || !pidyonScrollRef.current) return
+
+    // Clear any existing interval
+    if (pidyonScrollInterval.current) {
+      clearInterval(pidyonScrollInterval.current)
+    }
+
+    // Calculate card width (card + gap)
+    const cardWidth = 140 + 12 // minWidth + gap
+
+    const startAutoScroll = () => {
+      pidyonScrollInterval.current = setInterval(() => {
+        if (pidyonScrollRef.current) {
+          pidyonScrollPosition.current += 1
+          const maxScroll = pidyonList.length * cardWidth
+          
+          // Reset to 0 when reaching the end (seamless loop)
+          if (pidyonScrollPosition.current >= maxScroll) {
+            pidyonScrollPosition.current = 0
           }
-        })
-        
-        console.log(`✅ Loaded ${categoriesData.length} categories for home screen`)
-        setRabbiCategories(categoriesData)
-      } catch (error) {
-        console.error('❌ Error loading rabbi categories:', error)
-        console.error('Error details:', error.message, error.code)
-        setRabbiCategories([])
-      } finally {
-        setRabbiCategoriesLoading(false)
+          
+          pidyonScrollRef.current.scrollTo({
+            x: pidyonScrollPosition.current,
+            animated: true,
+          })
+        }
+      }, 50) // Update every 50ms for smooth scrolling
+    }
+
+    // Wait a bit before starting scroll
+    const timeout = setTimeout(startAutoScroll, 1000)
+    
+    return () => {
+      clearTimeout(timeout)
+      if (pidyonScrollInterval.current) {
+        clearInterval(pidyonScrollInterval.current)
       }
     }
-    loadRabbiCategories()
-  }, [])
+  }, [pidyonList, pidyonLoading])
 
   // Load notifications and count unread
   useEffect(() => {
     const loadNotifications = async () => {
       try {
-        const q = query(
-          collection(db, 'notifications'),
-          where('isActive', '==', true),
-          orderBy('createdAt', 'desc')
-        )
-        const querySnapshot = await getDocs(q)
+        // PERFORMANCE FIX: Limit to 30 most recent notifications only
+        const notificationsData = await db.getCollection('notifications', {
+          where: [['isActive', '==', true]],
+          orderBy: { field: 'createdAt', direction: 'desc' },
+          limit: 30
+        })
+
         const userId = auth.currentUser?.uid
-        
+
         if (!userId) {
           setUnreadCount(0)
           return
         }
 
-        const unreadNotifications = querySnapshot.docs.filter(doc => {
-          const data = doc.data()
-          return !data.readBy || !data.readBy.includes(userId)
+        const unreadNotifications = notificationsData.filter(notification => {
+          return !notification.readBy || !notification.readBy.includes(userId)
         })
-        
+
         setUnreadCount(unreadNotifications.length)
       } catch (error) {
         console.error('Error loading notifications:', error)
       }
     }
-    
+
     loadNotifications()
-    // Refresh notifications every 30 seconds
-    const interval = setInterval(loadNotifications, 30000)
-    return () => clearInterval(interval)
+    // PERFORMANCE FIX: Removed 30-second polling - use manual refresh instead
+    // Polling every 30 seconds is expensive and unnecessary
+    // Notifications will refresh when user returns to home screen
   }, [])
 
   const handleCardPress = React.useCallback((key) => {
-    if (key === 'chidushim') {
-      navigation?.navigate('DailyLearning')
-      return
-    }
     if (key === 'dailyLearning') {
       navigation?.navigate('DailyLearning')
       return
@@ -508,7 +566,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <AppHeader
-        title="רבי שלמה יהודה בארי"
+        title="הינוקא"
         subtitle="הודו לה׳ כי טוב"
         showBackButton={false}
         rightIcon="menu"
@@ -560,17 +618,31 @@ export default function HomeScreen({ navigation }) {
           {/* Quote */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
+              {isAdmin && (
+                <Pressable onPress={handleEditQuote} style={styles.editBtn} accessibilityRole="button">
+                  <Ionicons name="create-outline" size={18} color={PRIMARY_BLUE} />
+                </Pressable>
+              )}
               <Text style={styles.sectionTitle}>בלייר עליון</Text>
             </View>
-            <View style={styles.quoteCard}>
-              <Text style={styles.quoteText}>"{quote}"</Text>
-              <View style={styles.quoteFooter}>
-                <Pressable onPress={onShareQuote} style={styles.shareBtn} accessibilityRole="button">
-                  <Ionicons name="share-social-outline" size={16} color="#ffffff" />
-                  <Text style={styles.shareBtnText}>שיתוף</Text>
-                </Pressable>
+            {quoteLoading ? (
+              <View style={styles.quoteCard}>
+                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
               </View>
-            </View>
+            ) : (
+              <View style={styles.quoteCard}>
+                <Text style={styles.quoteText}>"{quote}"</Text>
+                {quoteAuthor && quoteAuthor !== 'הרב הינוקא' && (
+                  <Text style={styles.quoteAuthor}>— {quoteAuthor}</Text>
+                )}
+                <View style={styles.quoteFooter}>
+                  <Pressable onPress={onShareQuote} style={styles.shareBtn} accessibilityRole="button">
+                    <Ionicons name="share-social-outline" size={16} color="#ffffff" />
+                    <Text style={styles.shareBtnText}>שיתוף</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Niggunim / Music */}
@@ -678,104 +750,60 @@ export default function HomeScreen({ navigation }) {
           </View>
 
 
-          {/* Pidyon Nefesh Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Pressable
-                onPress={() => navigation?.navigate('PidyonNefesh')}
-                accessibilityRole="button"
-              >
-                <Text style={styles.sectionLinkText}>עוד →</Text>
-              </Pressable>
-              <Text style={styles.sectionTitle}>פדיון נפש - שמות לברכה</Text>
-            </View>
-            {pidyonLoading ? (
-              <View style={styles.pidyonLoadingContainer}>
-                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+          {/* Pidyon Nefesh Section with Auto-scrolling */}
+          {pidyonList.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Pressable
+                  onPress={() => navigation?.navigate('PidyonNefesh')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.sectionLinkText}>עוד →</Text>
+                </Pressable>
+                <Text style={styles.sectionTitle}>פדיון נפש</Text>
               </View>
-            ) : pidyonList.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pidyonRow}>
-                {pidyonList.map((pidyon) => (
-                  <Pressable
-                    key={pidyon.id}
-                    style={styles.pidyonCard}
-                    onPress={() => navigation?.navigate('PidyonNefesh')}
-                    accessibilityRole="button"
+              {pidyonLoading ? (
+                <View style={styles.pidyonLoadingContainer}>
+                  <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+                </View>
+              ) : (
+                <View style={styles.pidyonContainer}>
+                  <ScrollView
+                    ref={pidyonScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    scrollEventThrottle={16}
+                    style={styles.pidyonScrollView}
+                    contentContainerStyle={styles.pidyonScrollContent}
+                    onScroll={(e) => {
+                      // Update position for seamless loop
+                      pidyonScrollPosition.current = e.nativeEvent.contentOffset.x
+                    }}
+                    scrollEnabled={false} // Disable manual scrolling, only auto-scroll
                   >
-                    <View style={styles.pidyonCardHeader}>
-                      <View style={styles.pidyonIconWrapper}>
-                        <Ionicons name="heart" size={24} color={PRIMARY_BLUE} />
+                    {/* Render list multiple times for seamless infinite loop */}
+                    {[...pidyonList, ...pidyonList, ...pidyonList].map((pidyon, idx) => (
+                      <View key={`${pidyon.id}-${idx}`} style={styles.pidyonCardInline}>
+                        <View style={styles.pidyonIconWrapper}>
+                          <Ionicons name="heart" size={20} color={PRIMARY_BLUE} />
+                        </View>
+                        <View style={styles.pidyonTextInline}>
+                          <Text style={styles.pidyonNameInline} numberOfLines={1}>
+                            {pidyon.user_name || pidyon.name}
+                          </Text>
+                          {pidyon.motherName && (
+                            <Text style={styles.pidyonMotherNameInline} numberOfLines={1}>
+                              בן/בת {pidyon.motherName}
+                            </Text>
+                          )}
+                        </View>
                       </View>
-                    </View>
-                    <Text style={styles.pidyonName} numberOfLines={1}>
-                      {pidyon.name}
-                    </Text>
-                    <Text style={styles.pidyonMotherName} numberOfLines={1}>
-                      בן/בת {pidyon.motherName}
-                    </Text>
-                    {pidyon.description && (
-                      <Text style={styles.pidyonDescription} numberOfLines={2}>
-                        {pidyon.description}
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={styles.pidyonEmptyContainer}>
-                <Ionicons name="heart-outline" size={32} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-                <Text style={styles.pidyonEmptyText}>אין שמות לפדיון נפש היום</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Rabbi Categories Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Pressable
-                onPress={() => navigation?.navigate('MiBeitRabeinu')}
-                accessibilityRole="button"
-              >
-                <Text style={styles.sectionLinkText}>עוד →</Text>
-              </Pressable>
-              <Text style={styles.sectionTitle}>מבית רבינו</Text>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
-            {rabbiCategoriesLoading ? (
-              <View style={styles.pidyonLoadingContainer}>
-                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
-              </View>
-            ) : rabbiCategories.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pidyonRow}>
-                {rabbiCategories.map((category) => (
-                  <Pressable
-                    key={category.id}
-                    style={styles.pidyonCard}
-                    onPress={() => navigation?.navigate('MiBeitRabeinu')}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.pidyonCardHeader}>
-                      <View style={styles.pidyonIconWrapper}>
-                        <Ionicons name="folder" size={24} color={PRIMARY_BLUE} />
-                      </View>
-                    </View>
-                    <Text style={styles.pidyonName} numberOfLines={2}>
-                      {category.name}
-                    </Text>
-                    {category.description && (
-                      <Text style={styles.pidyonDescription} numberOfLines={2}>
-                        {category.description}
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={styles.pidyonEmptyContainer}>
-                <Ionicons name="folder-outline" size={32} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-                <Text style={styles.pidyonEmptyText}>אין קטגוריות זמינות כרגע</Text>
-              </View>
-            )}
-          </View>
+          )}
 
           {/* Social Media Links */}
           <View style={styles.socialSection}>
@@ -845,6 +873,71 @@ export default function HomeScreen({ navigation }) {
 
         </ScrollView>
       </View>
+
+      {/* Quote Edit Modal */}
+      <Modal
+        visible={showQuoteEditModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowQuoteEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>עריכת ציטוט יומי</Text>
+              <Pressable onPress={() => setShowQuoteEditModal(false)}>
+                <Ionicons name="close" size={24} color={DEEP_BLUE} />
+              </Pressable>
+            </View>
+
+            <View style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>ציטוט *</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={editingQuote}
+                  onChangeText={setEditingQuote}
+                  placeholder="הזן ציטוט..."
+                  multiline
+                  numberOfLines={4}
+                  textAlign="right"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>מחבר (אופציונלי)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editingAuthor}
+                  onChangeText={setEditingAuthor}
+                  placeholder="הרב הינוקא"
+                  textAlign="right"
+                />
+              </View>
+            </View>
+
+            <View style={styles.modalFooter}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowQuoteEditModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>ביטול</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonSave, savingQuote && styles.modalButtonDisabled]}
+                onPress={handleSaveQuote}
+                disabled={savingQuote}
+              >
+                {savingQuote ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalButtonTextSave}>שמור</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.bottomNav}>
         <Pressable
@@ -1077,6 +1170,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     fontFamily: 'Poppins_500Medium',
     letterSpacing: 0.2,
+    marginBottom: 8,
   },
   quoteFooter: {
     marginTop: 10,
@@ -1086,8 +1180,11 @@ const styles = StyleSheet.create({
   },
   quoteAuthor: {
     color: '#6b7280',
-    fontSize: 12,
-    fontFamily: 'Poppins_400Regular',
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    textAlign: 'right',
+    marginBottom: 12,
+    fontStyle: 'italic',
   },
   shareBtn: {
     flexDirection: 'row',
@@ -1600,6 +1697,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pidyonContainer: {
+    overflow: 'hidden',
+    borderRadius: 14,
+    height: 60,
+  },
+  pidyonScrollView: {
+    flexGrow: 0,
+  },
+  pidyonScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingRight: 16,
+    paddingLeft: 16,
+  },
+  pidyonCardInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minWidth: 140,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    gap: 10,
+  },
+  pidyonIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pidyonTextInline: {
+    flex: 1,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  pidyonNameInline: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+  },
+  pidyonMotherNameInline: {
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+  },
   pidyonEmptyContainer: {
     paddingVertical: 30,
     alignItems: 'center',
@@ -1610,6 +1764,106 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#6b7280',
+  },
+  // Edit button
+  editBtn: {
+    padding: 4,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: BG,
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(11,27,58,0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: 'Poppins_400Regular',
+    color: DEEP_BLUE,
+    backgroundColor: '#f9fafb',
+    textAlign: 'right',
+  },
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(11,27,58,0.1)',
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#f3f4f6',
+  },
+  modalButtonSave: {
+    backgroundColor: PRIMARY_BLUE,
+  },
+  modalButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalButtonTextCancel: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+  },
+  modalButtonTextSave: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#fff',
   },
 })
 

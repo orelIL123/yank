@@ -49,6 +49,7 @@ export default function CoursesScreen({ navigation }) {
           onPress={() => navigation.goBack()}
           accessibilityRole="button"
           accessibilityLabel="חזרה"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
         </Pressable>
@@ -67,15 +68,15 @@ export default function CoursesScreen({ navigation }) {
             accessibilityRole="button"
             accessibilityLabel={`ניגון ${niggun.title}`}
           >
-            <ImageBackground source={niggun.cover} style={styles.coverImage} imageStyle={styles.coverImageRadius}>
-              <LinearGradient colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.15)']} style={StyleSheet.absoluteFill} />
-              <View style={styles.courseLabelRow}>
+            <ImageBackground source={niggun.cover} style={styles.coverImage} imageStyle={styles.coverImageRadius} pointerEvents="box-none">
+              <LinearGradient colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.15)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+              <View style={styles.courseLabelRow} pointerEvents="none">
                 <View style={styles.levelPill}>
                   <Text style={styles.levelText}>{niggun.level}</Text>
                 </View>
                 <Ionicons name="musical-notes" size={28} color={PRIMARY_BLUE} />
               </View>
-              <View style={styles.courseTextBlock}>
+              <View style={styles.courseTextBlock} pointerEvents="none">
                 <Text style={styles.courseTitle}>{niggun.title}</Text>
                 <View style={styles.courseMetaRow}>
                   <Ionicons name="time-outline" size={14} color="#f3f4f6" />
