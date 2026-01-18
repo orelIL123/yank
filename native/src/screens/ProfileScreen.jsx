@@ -1,9 +1,11 @@
-import React from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert } from 'react-native'
+import React, { useState } from 'react'
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert, ActivityIndicator } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
-import { signOut } from 'firebase/auth'
-import { auth } from '../config/firebase'
+import { signOut, deleteUser } from 'firebase/auth'
+import { auth, db as firestoreDb } from '../config/firebase'
+import { doc, deleteDoc } from 'firebase/firestore'
+import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -11,6 +13,7 @@ const DEEP_BLUE = '#0b1b3a'
 
 export default function ProfileScreen({ navigation, user, userRole }) {
   const isAdmin = userRole === 'admin'
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const handleLogout = () => {
     Alert.alert(
@@ -37,8 +40,77 @@ export default function ProfileScreen({ navigation, user, userRole }) {
     )
   }
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'מחיקת חשבון',
+      'האם אתה בטוח שברצונך למחוק את החשבון שלך? פעולה זו אינה הפיכה וכל הנתונים שלך יימחקו לצמיתות.',
+      [
+        {
+          text: 'ביטול',
+          style: 'cancel'
+        },
+        {
+          text: 'מחק חשבון',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user) return
+
+            setIsDeleting(true)
+            try {
+              const userId = user.uid
+
+              // Delete user's prayer commitments from Supabase
+              try {
+                const commitments = await db.getCollection('prayerCommitments', {
+                  where: [['userId', '==', userId]]
+                })
+                
+                // Also delete commitments where user is praying for someone
+                const prayingForCommitments = await db.getCollection('prayerCommitments', {
+                  where: [['prayingForUserId', '==', userId]]
+                })
+                
+                const allCommitments = [...commitments, ...prayingForCommitments]
+                const deletePromises = allCommitments.map(commitment => 
+                  db.deleteDocument('prayerCommitments', commitment.id)
+                )
+                await Promise.all(deletePromises)
+              } catch (error) {
+                console.error('Error deleting prayer commitments:', error)
+                // Continue even if this fails
+              }
+
+              // Delete user document from Firestore
+              try {
+                await deleteDoc(doc(firestoreDb, 'users', userId))
+              } catch (error) {
+                console.error('Error deleting user document:', error)
+                // Continue even if this fails - user might not have a document
+              }
+
+              // Delete Firebase Auth account
+              await deleteUser(user)
+
+              Alert.alert('החשבון נמחק', 'החשבון שלך נמחק בהצלחה')
+            } catch (error) {
+              console.error('Delete account error:', error)
+              let errorMessage = 'אירעה שגיאה במחיקת החשבון'
+              
+              if (error.code === 'auth/requires-recent-login') {
+                errorMessage = 'נדרש להתחבר מחדש כדי למחוק את החשבון. אנא התנתק והתחבר שוב.'
+              }
+              
+              Alert.alert('שגיאה', errorMessage)
+              setIsDeleting(false)
+            }
+          }
+        }
+      ]
+    )
+  }
+
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable
@@ -53,7 +125,12 @@ export default function ProfileScreen({ navigation, user, userRole }) {
         <View style={{ width: 28 }} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
         {/* Profile Avatar */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarCircle}>
@@ -89,20 +166,26 @@ export default function ProfileScreen({ navigation, user, userRole }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>הגדרות חשבון</Text>
 
-          <Pressable style={styles.optionCard} accessibilityRole="button">
-            <View style={styles.optionContent}>
-              <View style={styles.optionRight}>
-                <Ionicons name="chevron-back" size={20} color="#9ca3af" />
-                <View style={styles.optionText}>
-                  <Text style={styles.optionTitle}>פרטים אישיים</Text>
-                  <Text style={styles.optionDesc}>שם, אימייל ופרטי התקשרות</Text>
+          {user && (
+            <Pressable 
+              style={styles.optionCard} 
+              accessibilityRole="button"
+              onPress={() => navigation?.navigate('PersonalDetails')}
+            >
+              <View style={styles.optionContent}>
+                <View style={styles.optionRight}>
+                  <Ionicons name="chevron-back" size={20} color="#9ca3af" />
+                  <View style={styles.optionText}>
+                    <Text style={styles.optionTitle}>פרטים אישיים</Text>
+                    <Text style={styles.optionDesc}>שם, אימייל ופרטי התקשרות</Text>
+                  </View>
+                </View>
+                <View style={styles.optionIcon}>
+                  <Ionicons name="person-outline" size={22} color={PRIMARY_BLUE} />
                 </View>
               </View>
-              <View style={styles.optionIcon}>
-                <Ionicons name="person-outline" size={22} color={PRIMARY_BLUE} />
-              </View>
-            </View>
-          </Pressable>
+            </Pressable>
+          )}
 
           {user && (
             <Pressable
@@ -125,7 +208,11 @@ export default function ProfileScreen({ navigation, user, userRole }) {
             </Pressable>
           )}
 
-          <Pressable style={styles.optionCard} accessibilityRole="button">
+          <Pressable 
+            style={styles.optionCard} 
+            accessibilityRole="button"
+            onPress={() => navigation?.navigate('Notifications')}
+          >
             <View style={styles.optionContent}>
               <View style={styles.optionRight}>
                 <Ionicons name="chevron-back" size={20} color="#9ca3af" />
@@ -141,27 +228,6 @@ export default function ProfileScreen({ navigation, user, userRole }) {
           </Pressable>
         </View>
 
-        {/* Subscription Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>מנוי</Text>
-
-          <View style={styles.subscriptionCard}>
-            <LinearGradient
-              colors={['#0b1b3a', '#162a56']}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.subscriptionContent}>
-              <Ionicons name="star" size={32} color={PRIMARY_BLUE} />
-              <Text style={styles.subscriptionTitle}>חבר פרימיום</Text>
-              <Text style={styles.subscriptionDesc}>
-                גישה מלאה לכל התכנים, התראות והקהילה
-              </Text>
-              <Pressable style={styles.upgradeButton} accessibilityRole="button">
-                <Text style={styles.upgradeButtonText}>שדרג מנוי</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
 
         {/* Admin Section - Only visible to admins */}
         {isAdmin && (
@@ -212,7 +278,11 @@ export default function ProfileScreen({ navigation, user, userRole }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>נוספים</Text>
 
-          <Pressable style={styles.optionCard} accessibilityRole="button">
+          <Pressable 
+            style={styles.optionCard} 
+            accessibilityRole="button"
+            onPress={() => navigation?.navigate('HelpSupport')}
+          >
             <View style={styles.optionContent}>
               <View style={styles.optionRight}>
                 <Ionicons name="chevron-back" size={20} color="#9ca3af" />
@@ -227,7 +297,11 @@ export default function ProfileScreen({ navigation, user, userRole }) {
             </View>
           </Pressable>
 
-          <Pressable style={styles.optionCard} accessibilityRole="button">
+          <Pressable 
+            style={styles.optionCard} 
+            accessibilityRole="button"
+            onPress={() => navigation?.navigate('About')}
+          >
             <View style={styles.optionContent}>
               <View style={styles.optionRight}>
                 <Ionicons name="chevron-back" size={20} color="#9ca3af" />
@@ -243,13 +317,36 @@ export default function ProfileScreen({ navigation, user, userRole }) {
           </Pressable>
         </View>
 
-        {/* Logout/Login Button */}
+        {/* Account Actions */}
         <View style={styles.section}>
           {user ? (
-            <Pressable style={styles.logoutButton} accessibilityRole="button" onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={22} color="#dc2626" />
-              <Text style={styles.logoutText}>התנתק</Text>
-            </Pressable>
+            <>
+              <Pressable 
+                style={styles.logoutButton} 
+                accessibilityRole="button" 
+                onPress={handleLogout}
+                disabled={isDeleting}
+              >
+                <Ionicons name="log-out-outline" size={22} color="#dc2626" />
+                <Text style={styles.logoutText}>התנתק</Text>
+              </Pressable>
+              
+              <Pressable 
+                style={[styles.deleteButton, isDeleting && styles.deleteButtonDisabled]} 
+                accessibilityRole="button" 
+                onPress={handleDeleteAccount}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Ionicons name="trash-outline" size={22} color="#ffffff" />
+                )}
+                <Text style={styles.deleteButtonText}>
+                  {isDeleting ? 'מוחק...' : 'מחק חשבון'}
+                </Text>
+              </Pressable>
+            </>
           ) : (
             <Pressable
               style={styles.loginButton}
@@ -264,7 +361,7 @@ export default function ProfileScreen({ navigation, user, userRole }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   )
 }
 
@@ -297,6 +394,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
   },
   avatarSection: {
     alignItems: 'center',
@@ -477,5 +578,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
     color: PRIMARY_BLUE,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: '#dc2626',
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginTop: 12,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.6,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#ffffff',
   },
 })

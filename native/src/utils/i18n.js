@@ -102,3 +102,7 @@ export const getAllTranslations = (key) => {
     en: translations.en[key] || key,
   }
 }
+
+
+
+

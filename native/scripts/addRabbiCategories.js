@@ -69,3 +69,7 @@ async function addCategories() {
 }
 
 addCategories()
+
+
+
+

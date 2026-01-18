@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 // DocumentPicker will be imported dynamically when needed
-import { collection, addDoc, doc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
-import { db, auth } from '../config/firebase'
+
+import { auth } from '../config/firebase'
+import db from '../services/database'
 import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath, pickPDF, uploadPDFToStorage, generatePrayerPDFPath } from '../utils/storage'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -40,11 +41,18 @@ export default function AdminScreen({ navigation, route }) {
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
           accessibilityRole="button"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
         </Pressable>
         <Text style={styles.headerTitle}>🔐 פאנל אדמין</Text>
-        <View style={{ width: 36 }} />
+        <Pressable
+          style={styles.permissionsBtn}
+          onPress={() => navigation.navigate('ManagePermissions')}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="people" size={24} color={PRIMARY_BLUE} />
+        </Pressable>
       </View>
 
       {/* Tabs */}
@@ -156,8 +164,8 @@ function CardsForm() {
         order: form.order || 0,
         isActive: true,
         route: form.key, // Navigation route
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }, { merge: true })
 
       Alert.alert(
@@ -379,13 +387,13 @@ function BooksForm() {
 
     try {
       setSaving(true)
-      await addDoc(collection(db, 'books'), {
+      await db.addDocument('books', {
         title: form.title,
         note: form.note || '',
         price: form.price || '',
         link: form.link || '',
         imageUrl: form.imageUrl || '',
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert(
@@ -609,15 +617,15 @@ function NewslettersForm() {
       setUploading(true)
 
       // Save to Firestore
-      await addDoc(collection(db, 'newsletters'), {
+      await db.addDocument('newsletters', {
         title: form.title,
         description: form.description,
         category: form.category,
         fileType: form.fileType,
         fileUrl: form.fileUrl || '',
         thumbnailUrl: form.fileType === 'image' ? form.fileUrl : '',
-        publishDate: serverTimestamp(),
-        createdAt: serverTimestamp(),
+        publishDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert(
@@ -800,7 +808,7 @@ function MusicForm() {
         youtubeId: form.youtubeId,
         category: form.category,
         imageUrl: `https://i.ytimg.com/vi/${form.youtubeId}/hqdefault.jpg`,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert(
@@ -1006,12 +1014,12 @@ function DailyLearningForm() {
       }
 
       // Save to Firestore
-      await addDoc(collection(db, 'dailyLearning'), {
+      await db.addDocument('dailyLearning', {
         title: form.title,
         content: form.content || '',
         category: form.category,
         author: form.author || 'הרב שלמה יהודה בארי',
-        date: Timestamp.fromDate(learningDate),
+        date: learningDate.toISOString(),
         audioUrl: form.audioUrl || '',
         imageUrl: form.imageUrl || '',
         youtubeId: form.youtubeId || '',
@@ -1020,7 +1028,7 @@ function DailyLearningForm() {
         playCount: 0,
         soulElevations: 0,
         isActive: true,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert(
@@ -1358,13 +1366,13 @@ function PrayersForm() {
 
     try {
       setSaving(true)
-      await addDoc(collection(db, 'prayers'), {
+      await db.addDocument('prayers', {
         title: form.title,
         content: form.content,
         category: form.category,
         imageUrl: form.imageUrl || '',
         pdfUrl: form.pdfUrl || '',
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert(
@@ -1605,12 +1613,12 @@ function ChidushimForm() {
 
     try {
       setSaving(true)
-      await addDoc(collection(db, 'chidushim'), {
+      await db.addDocument('chidushim', {
         title: form.title,
         content: form.content,
         category: form.category,
         imageUrl: form.imageUrl || '',
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert(
@@ -1812,14 +1820,14 @@ function YeshivaForm() {
 
     try {
       setSaving(true)
-      await addDoc(collection(db, 'news'), {
+      await db.addDocument('news', {
         title: form.title,
         content: form.content,
         category: form.category,
         imageUrl: form.imageUrl || '',
         isPublished: true,
-        date: serverTimestamp(),
-        createdAt: serverTimestamp(),
+        date: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert(
@@ -1918,13 +1926,13 @@ function YeshivaForm() {
 
           setSavingShortLesson(true)
           try {
-            await addDoc(collection(db, 'shortLessons'), {
+            await db.addDocument('shortLessons', {
               title: shortLessonForm.title.trim(),
               description: shortLessonForm.description.trim() || '',
               youtubeUrl: shortLessonForm.youtubeUrl.trim(),
               category: shortLessonForm.category.trim() || '',
               isActive: true,
-              createdAt: serverTimestamp(),
+              createdAt: new Date().toISOString(),
               order: 0
             })
 
@@ -2158,15 +2166,15 @@ function TzadikimForm() {
         title: form.title || '',
         biography: form.biography || '',
         location: form.location || '',
-        birthDate: form.birthDate ? Timestamp.fromDate(new Date(form.birthDate)) : null,
-        deathDate: form.deathDate ? Timestamp.fromDate(new Date(form.deathDate)) : null,
+        birthDate: form.birthDate ? new Date(form.birthDate.toISOString()) : null,
+        deathDate: form.deathDate ? new Date(form.deathDate.toISOString()) : null,
         period: form.period || '',
         imageUrl: form.imageUrl || '',
         books: booksArray,
         sourceUrl: form.sourceUrl || '',
         wikiUrl: form.wikiUrl || '',
         viewCount: 0,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
       }
       
       console.log('Saving tzadik with data:', { ...tzadikData, imageUrl: form.imageUrl })
@@ -2434,7 +2442,7 @@ function NotificationsForm() {
     try {
       setSaving(true)
 
-      await addDoc(collection(db, 'notifications'), {
+      await db.addDocument('notifications', {
         title: form.title,
         message: form.message,
         icon: form.icon,
@@ -2442,7 +2450,7 @@ function NotificationsForm() {
         link: form.link || null,
         isActive: true,
         readBy: [],
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
         createdBy: auth.currentUser?.uid || 'admin',
       })
 
@@ -2609,6 +2617,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(212,175,55,0.12)',
+  },
+  permissionsBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,

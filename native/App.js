@@ -23,7 +23,7 @@ import PrayerCommitmentScreen from './src/screens/PrayerCommitmentScreen'
 import PdfViewerScreen from './src/screens/PdfViewerScreen'
 import ContactRabbiScreen from './src/screens/ContactRabbiScreen'
 import LoginScreen from './src/screens/LoginScreen'
-import RegisterScreen from './src/screens/RegisterScreen'
+// RegisterScreen removed - registration disabled temporarily
 import AboutScreen from './src/screens/AboutScreen'
 import MusicScreen from './src/screens/MusicScreen'
 import BooksScreen from './src/screens/BooksScreen'
@@ -40,6 +40,10 @@ import LearningLibraryScreen from './src/screens/LearningLibraryScreen'
 import NotificationsScreen from './src/screens/NotificationsScreen'
 import PidyonNefeshScreen from './src/screens/PidyonNefeshScreen'
 import MiBeitRabeinuScreen from './src/screens/MiBeitRabeinuScreen'
+import ParshiotHaNasiimScreen from './src/screens/ParshiotHaNasiimScreen'
+import ManagePermissionsScreen from './src/screens/ManagePermissionsScreen'
+import PersonalDetailsScreen from './src/screens/PersonalDetailsScreen'
+import HelpSupportScreen from './src/screens/HelpSupportScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
@@ -48,9 +52,10 @@ import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } f
 const Stack = createNativeStackNavigator()
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true)
+  const [showSplash, setShowSplash] = useState(false)
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
+  const [userPermissions, setUserPermissions] = useState([])
   const [authLoading, setAuthLoading] = useState(true)
   const fadeAnim = useRef(new Animated.Value(1)).current
   const navigationRef = useRef(null)
@@ -97,28 +102,32 @@ export default function App() {
         setUser(currentUser)
 
         if (currentUser) {
-          // Fetch user role from Firestore
+          // Fetch user role and permissions from Firestore
           try {
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
             if (userDoc.exists() && mounted) {
-              const role = userDoc.data().role
+              const userData = userDoc.data()
+              const role = userData.role
+              const permissions = userData.permissions || []
               console.log('User role:', role)
+              console.log('User permissions:', permissions)
               setUserRole(role)
+              setUserPermissions(permissions)
             } else {
               console.log('User document not found in Firestore')
             }
           } catch (error) {
-            console.error('Error fetching user role:', error)
-            // Don't crash if role fetch fails
+            console.error('Error fetching user data:', error)
+            // Don't crash if fetch fails
           }
 
-          // Navigate to Home after successful login or session restoration
+          // Navigate to Home only if we're not already in the main app
           if (navigationRef.current && mounted) {
             try {
               const currentRoute = navigationRef.current.getCurrentRoute()
-              // Only navigate if we're not already on Home
-              if (currentRoute?.name !== 'Home') {
-                console.log('Navigating to Home - user session active')
+              // Only navigate if we're on Login/Register or nothing
+              if (!currentRoute || currentRoute.name === 'Login' || currentRoute.name === 'Register') {
+                console.log('Navigating to Home - initial login/session')
                 navigationRef.current.reset({
                   index: 0,
                   routes: [{ name: 'Home' }],
@@ -131,6 +140,7 @@ export default function App() {
         } else {
           if (mounted) {
             setUserRole(null)
+            setUserPermissions([])
           }
           // Only navigate to Login if this is not the initial check (user explicitly logged out)
           // OR if we're not already on an auth screen
@@ -245,15 +255,18 @@ export default function App() {
   //   ...
   // }, [])
 
-  // Navigate based on auth state after loading completes
+  // Navigate based on auth state after loading completes - DISABLED TO FIX NAVIGATION LOOP
+  // This was causing the app to reset navigation back to Home after every screen change
+  /*
   useEffect(() => {
     if (!authLoading && navigationRef.current) {
       const currentRoute = navigationRef.current.getCurrentRoute()
+      console.log('Auth transition check. Current route:', currentRoute?.name, 'User:', !!user)
 
       if (user) {
-        // User is logged in - navigate to Home if not already there
-        if (currentRoute?.name !== 'Home') {
-          console.log('User logged in, navigating to Home')
+        // User is logged in - navigate to Home ONLY if we are still on Login/Register
+        if (!currentRoute || currentRoute.name === 'Login' || currentRoute.name === 'Register') {
+          console.log('*** NAVIGATION RESET TO HOME ***')
           navigationRef.current.reset({
             index: 0,
             routes: [{ name: 'Home' }],
@@ -262,7 +275,7 @@ export default function App() {
       } else {
         // User is logged out - navigate to Login if not already on auth screen
         if (currentRoute?.name !== 'Login' && currentRoute?.name !== 'Register') {
-          console.log('User logged out, navigating to Login')
+          console.log('*** NAVIGATION RESET TO LOGIN ***')
           navigationRef.current.reset({
             index: 0,
             routes: [{ name: 'Login' }],
@@ -271,6 +284,7 @@ export default function App() {
       }
     }
   }, [user, authLoading])
+  */
 
   if (!fontsLoaded || authLoading) {
     return (
@@ -283,7 +297,13 @@ export default function App() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer 
+        ref={navigationRef}
+        onStateChange={(state) => {
+          const currentRoute = navigationRef.current?.getCurrentRoute()
+          console.log('🔴 NAVIGATION STATE CHANGED - Current screen:', currentRoute?.name)
+        }}
+      >
         <StatusBar style="dark" />
         <Stack.Navigator
           screenOptions={{ headerShown: false }}
@@ -295,28 +315,28 @@ export default function App() {
         >
           {/* Auth screens - always available */}
           <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
+          {/* Register screen removed - registration disabled temporarily */}
 
           {/* Main app screens - accessible to all users (guests and authenticated) */}
           <Stack.Screen name="Home">
-            {(props) => <HomeScreen {...props} user={user} userRole={userRole} />}
+            {(props) => <HomeScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="DailyInsight" component={DailyInsightScreen} />
           <Stack.Screen name="DailyLearning">
-            {(props) => <DailyLearningScreen {...props} userRole={userRole} />}
+            {(props) => <DailyLearningScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="Courses">
-            {(props) => <CoursesScreen {...props} user={user} userRole={userRole} />}
+            {(props) => <CoursesScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="News">
-            {(props) => <NewsScreen {...props} userRole={userRole} />}
+            {(props) => <NewsScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="Profile">
-            {(props) => <ProfileScreen {...props} user={user} userRole={userRole} />}
+            {(props) => <ProfileScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="LiveAlerts" component={LiveAlertsScreen} />
           <Stack.Screen name="Prayers">
-            {(props) => <PrayersScreen {...props} user={user} userRole={userRole} />}
+            {(props) => <PrayersScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="PrayerDetail" component={PrayerDetailScreen} />
           <Stack.Screen name="PrayerCommitment" component={PrayerCommitmentScreen} />
@@ -325,31 +345,43 @@ export default function App() {
           <Stack.Screen name="PdfViewer" component={PdfViewerScreen} />
           <Stack.Screen name="ContactRabbi" component={ContactRabbiScreen} />
           <Stack.Screen name="About" component={AboutScreen} />
-          <Stack.Screen name="Music" component={MusicScreen} />
-          <Stack.Screen name="Books" component={BooksScreen} />
+          <Stack.Screen name="Music">
+            {(props) => <MusicScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
+          <Stack.Screen name="Books">
+            {(props) => <BooksScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
           <Stack.Screen name="Newsletters">
-            {(props) => <NewslettersScreen {...props} userRole={userRole} />}
+            {(props) => <NewslettersScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="AddNewsletter" component={AddNewsletterScreen} />
           <Stack.Screen name="EditNewsletter" component={AddNewsletterScreen} />
           <Stack.Screen name="Tzadikim">
-            {(props) => <TzadikimScreen {...props} userRole={userRole} />}
+            {(props) => <TzadikimScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="TzadikDetail" component={TzadikDetailScreen} />
           <Stack.Screen name="Piano" component={PianoScreen} />
           <Stack.Screen name="LearningLibrary">
-            {(props) => <LearningLibraryScreen {...props} userRole={userRole} />}
+            {(props) => <LearningLibraryScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="ShortLessons">
-            {(props) => <ShortLessonsScreen {...props} userRole={userRole} />}
+            {(props) => <ShortLessonsScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="LongLessons">
-            {(props) => <LongLessonsScreen {...props} userRole={userRole} />}
+            {(props) => <LongLessonsScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="PersonalDetails">
+            {(props) => <PersonalDetailsScreen {...props} user={user} />}
+          </Stack.Screen>
+          <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
           <Stack.Screen name="PidyonNefesh" component={PidyonNefeshScreen} />
-          <Stack.Screen name="MiBeitRabeinu" component={MiBeitRabeinuScreen} />
+          <Stack.Screen name="MiBeitRabeinu">
+            {(props) => <MiBeitRabeinuScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
+          <Stack.Screen name="ParshiotHaNasiim" component={ParshiotHaNasiimScreen} />
+          <Stack.Screen name="ManagePermissions" component={ManagePermissionsScreen} />
 
           {/* Admin screen - only for admins */}
           {userRole === 'admin' && (
@@ -368,7 +400,8 @@ export default function App() {
               right: 0,
               bottom: 0,
               opacity: fadeAnim,
-              backgroundColor: '#000'
+              backgroundColor: '#000',
+              zIndex: -1 // Move to background
             }
           ]}
         >

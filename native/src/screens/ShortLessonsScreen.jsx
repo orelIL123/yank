@@ -18,10 +18,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, Timestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+;
+;
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
+import db from '../services/database'
+import { canManageLearning } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -56,7 +58,7 @@ function getYouTubeThumbnail(videoId, quality = 'hqdefault') {
   return `https://img.youtube.com/vi/${videoId}/${quality}.jpg`;
 }
 
-export default function ShortLessonsScreen({ navigation, userRole }) {
+export default function ShortLessonsScreen({ navigation, userRole, userPermissions }) {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLesson, setSelectedLesson] = useState(null);
@@ -65,7 +67,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const canManage = canManageLearning(userRole, userPermissions);
   const flatListRef = useRef(null);
 
   // Form state
@@ -76,12 +78,9 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const adminStatus = userRole === 'admin';
-    setIsAdmin(adminStatus);
-    console.log('ShortLessonsScreen - userRole:', userRole, 'isAdmin:', adminStatus);
+    console.log('ShortLessonsScreen - userRole:', userRole, 'canManage:', canManage);
     loadLessons();
-  }, [userRole]);
-
+  }, [userRole, userPermissions]);
 
   useEffect(() => {
     // When lessons load, update shuffled list
@@ -96,88 +95,26 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
 
   const loadLessons = async () => {
     try {
-      const q = query(
-        collection(db, 'shortLessons'),
-        where('isActive', '==', true),
-        orderBy('createdAt', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      const lessonsData = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        const youtubeId = extractYouTubeId(data.youtubeUrl);
+      const lessonsData = await db.getCollection('shortLessons', {
+        where: [['isActive', '==', true]],
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      });
+
+      const processedLessons = lessonsData.map(lesson => {
+        const youtubeId = extractYouTubeId(lesson.youtubeUrl);
         return {
-          id: doc.id,
-          ...data,
+          ...lesson,
           youtubeId
         };
-      }).filter(lesson => lesson.youtubeId); // Only include lessons with valid YouTube IDs
+      }).filter(lesson => lesson.youtubeId);
 
-      setLessons(lessonsData);
-      if (lessonsData.length > 0) {
-        setShuffledLessons([...lessonsData]);
+      setLessons(processedLessons);
+      if (processedLessons.length > 0) {
+        setShuffledLessons([...processedLessons]);
       }
     } catch (error) {
       console.error('Error loading lessons:', error);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
-      // If it's a permissions error or index building, try without the where clause
-      if (error.code === 'permission-denied' || error.code === 'failed-precondition') {
-        try {
-          console.log('Trying to load without where clause...');
-          const q = query(
-            collection(db, 'shortLessons'),
-            orderBy('createdAt', 'desc')
-          );
-          const querySnapshot = await getDocs(q);
-          const lessonsData = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            const youtubeId = extractYouTubeId(data.youtubeUrl);
-            return {
-              id: doc.id,
-              ...data,
-              youtubeId
-            };
-          }).filter(lesson => lesson.youtubeId && lesson.isActive !== false);
-
-          setLessons(lessonsData);
-          if (lessonsData.length > 0) {
-            setShuffledLessons([...lessonsData]);
-          }
-          console.log('Loaded lessons without where clause:', lessonsData.length);
-        } catch (fallbackError) {
-          console.error('Fallback error:', fallbackError);
-          // Last resort - try without orderBy
-          try {
-            const q = query(collection(db, 'shortLessons'));
-            const querySnapshot = await getDocs(q);
-            const lessonsData = querySnapshot.docs.map(doc => {
-              const data = doc.data();
-              const youtubeId = extractYouTubeId(data.youtubeUrl);
-              return {
-                id: doc.id,
-                ...data,
-                youtubeId
-              };
-            }).filter(lesson => lesson.youtubeId && lesson.isActive !== false)
-              .sort((a, b) => {
-                const aTime = a.createdAt?.toMillis() || 0;
-                const bTime = b.createdAt?.toMillis() || 0;
-                return bTime - aTime;
-              });
-
-            setLessons(lessonsData);
-            if (lessonsData.length > 0) {
-              setShuffledLessons([...lessonsData]);
-            }
-            console.log('Loaded lessons without orderBy:', lessonsData.length);
-          } catch (finalError) {
-            console.error('Final fallback error:', finalError);
-            Alert.alert('שגיאה', 'לא ניתן לטעון את השיעורים. האינדקסים עדיין נבנים - נסה שוב בעוד כמה דקות.');
-          }
-        }
-      } else {
-        Alert.alert('שגיאה', 'לא ניתן לטעון את השיעורים');
-      }
+      Alert.alert('שגיאה', 'לא ניתן לטעון את השיעורים');
     } finally {
       setLoading(false);
     }
@@ -238,7 +175,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
     try {
       if (editingLesson) {
         // Update existing lesson
-        await updateDoc(doc(db, 'shortLessons', editingLesson.id), {
+        await db.updateDocument('shortLessons', editingLesson.id, {
           title: formTitle.trim(),
           description: formDescription.trim() || '',
           youtubeUrl: formYoutubeUrl.trim(),
@@ -247,13 +184,13 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
         Alert.alert('הצלחה', 'השיעור עודכן בהצלחה');
       } else {
         // Add new lesson
-        await addDoc(collection(db, 'shortLessons'), {
+        await db.addDocument('shortLessons', {
           title: formTitle.trim(),
           description: formDescription.trim() || '',
           youtubeUrl: formYoutubeUrl.trim(),
           category: formCategory.trim() || '',
           isActive: true,
-          createdAt: Timestamp.now(),
+          createdAt: new Date().toISOString(),
           order: 0
         });
         Alert.alert('הצלחה', 'השיעור נוסף בהצלחה');
@@ -298,7 +235,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, 'shortLessons', lesson.id));
+              await db.deleteDocument('shortLessons', lesson.id);
               Alert.alert('הצלחה', 'השיעור נמחק בהצלחה');
               loadLessons();
             } catch (error) {
@@ -353,7 +290,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
             )}
           </View>
           <View style={styles.lessonActions}>
-            {isAdmin && (
+            {canManage && (
               <>
                 <TouchableOpacity
                   style={styles.editButton}
@@ -455,7 +392,7 @@ export default function ShortLessonsScreen({ navigation, userRole }) {
         )}
 
         {/* Floating Add Button */}
-        {isAdmin && (
+        {canManage && (
           <TouchableOpacity
             style={styles.floatingAddButton}
             onPress={handleAddLesson}
@@ -1013,9 +950,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   lessonThumbnailContainer: {
-    width: 96,
-    height: 72,
-    borderRadius: 10,
+    width: 85,
+    height: 64,
+    borderRadius: 8,
     overflow: 'hidden',
     marginLeft: 12,
     position: 'relative',
@@ -1036,9 +973,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lessonIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: 'rgba(30,58,138,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1074,6 +1011,7 @@ const styles = StyleSheet.create({
     color: DEEP_BLUE,
     marginBottom: 6,
     textAlign: 'right',
+    lineHeight: 22,
   },
   lessonDescription: {
     fontSize: 13,

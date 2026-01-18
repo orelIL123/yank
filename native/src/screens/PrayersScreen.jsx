@@ -3,19 +3,20 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore'
-import { db } from '../config/firebase'
+
 import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
+import db from '../services/database'
+import { canManagePrayers } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-export default function PrayersScreen({ navigation, userRole }) {
+export default function PrayersScreen({ navigation, userRole, userPermissions }) {
   const [prayers, setPrayers] = useState([])
   const [loading, setLoading] = useState(true)
-  const isAdmin = userRole === 'admin'
+  const canManage = canManagePrayers(userRole, userPermissions)
 
   useEffect(() => {
     loadPrayers()
@@ -23,12 +24,9 @@ export default function PrayersScreen({ navigation, userRole }) {
 
   const loadPrayers = async () => {
     try {
-      const q = query(collection(db, 'prayers'), orderBy('createdAt', 'desc'))
-      const querySnapshot = await getDocs(q)
-      const prayersData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const prayersData = await db.getCollection('prayers', {
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      })
       setPrayers(prayersData)
     } catch (error) {
       console.error('Error loading prayers:', error)
@@ -97,8 +95,8 @@ export default function PrayersScreen({ navigation, userRole }) {
         title={t('תפילות הינוקא')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
-        rightIcon={isAdmin ? 'add' : undefined}
-        onRightIconPress={isAdmin ? () => navigation.navigate('AddPrayer') : undefined}
+        rightIcon={canManage ? 'add' : undefined}
+        onRightIconPress={canManage ? () => navigation.navigate('AddPrayer') : undefined}
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -151,7 +149,7 @@ export default function PrayersScreen({ navigation, userRole }) {
                   <Ionicons name="chevron-forward" size={24} color={PRIMARY_BLUE} />
                 </View>
               </Pressable>
-              {isAdmin && (
+              {canManage && (
                 <View style={styles.adminActions}>
                   <Pressable
                     style={styles.editButton}

@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView, Share, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import db from '../services/database'
 
 // Color system inspired by the other app
 const PRIMARY_RED = '#DC2626'
@@ -164,16 +163,10 @@ export default function DailyInsightScreen({ navigation }) {
 
   const loadInsights = async () => {
     try {
-      const q = query(
-        collection(db, 'dailyInsights'),
-        orderBy('date', 'desc'),
-        limit(10)
-      )
-      const querySnapshot = await getDocs(q)
-      const insightsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const insightsData = await db.getCollection('dailyInsights', {
+        orderBy: { field: 'date', direction: 'desc' },
+        limit: 10
+      })
       setInsights(insightsData)
       if (insightsData.length > 0 && !selectedInsight) {
         setSelectedInsight(insightsData[0])

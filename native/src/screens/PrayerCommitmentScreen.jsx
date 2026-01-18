@@ -3,8 +3,9 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, addDoc, updateDoc, query, where, orderBy, Timestamp, doc, increment, getDoc } from 'firebase/firestore'
-import { db, auth } from '../config/firebase'
+
+import { auth } from '../config/firebase'
+import db from '../services/database'
 import * as FileSystem from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 import { sendLocalNotification } from '../utils/notifications'
@@ -39,12 +40,9 @@ export default function PrayerCommitmentScreen({ navigation }) {
 
   const loadPrayers = async () => {
     try {
-      const q = query(collection(db, 'prayers'), orderBy('createdAt', 'desc'))
-      const querySnapshot = await getDocs(q)
-      const prayersData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const prayersData = await db.getCollection('prayers', {
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      })
       setPrayers(prayersData)
     } catch (error) {
       console.error('Error loading prayers:', error)
@@ -59,16 +57,10 @@ export default function PrayerCommitmentScreen({ navigation }) {
       }
 
       // טעינת ההתחייבויות שלי (על מי אני מתפלל)
-      const q = query(
-        collection(db, 'prayerCommitments'),
-        where('userId', '==', auth.currentUser.uid),
-        orderBy('createdAt', 'desc')
-      )
-      const querySnapshot = await getDocs(q)
-      const commitmentsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const commitmentsData = await db.getCollection('prayerCommitments', {
+        where: [['userId', '==', auth.currentUser.uid]],
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      })
       setCommitments(commitmentsData)
     } catch (error) {
       console.error('Error loading commitments:', error)
@@ -83,20 +75,17 @@ export default function PrayerCommitmentScreen({ navigation }) {
       if (!auth.currentUser) return
 
       // טעינת מי מתפלל עליי - רק את הראשון
-      const q = query(
-        collection(db, 'prayerCommitments'),
-        where('prayingForUserId', '==', auth.currentUser.uid),
-        where('status', '==', 'active'),
-        orderBy('createdAt', 'desc'),
-        limit(1)
-      )
-      const querySnapshot = await getDocs(q)
-      if (!querySnapshot.empty) {
-        const doc = querySnapshot.docs[0]
-        setPrayingForMe({
-          id: doc.id,
-          ...doc.data()
-        })
+      const prayingData = await db.getCollection('prayerCommitments', {
+        where: [
+          ['prayingForUserId', '==', auth.currentUser.uid],
+          ['status', '==', 'active']
+        ],
+        orderBy: { field: 'createdAt', direction: 'desc' },
+        limit: 1
+      })
+
+      if (prayingData && prayingData.length > 0) {
+        setPrayingForMe(prayingData[0])
       } else {
         setPrayingForMe(null)
       }
@@ -104,7 +93,6 @@ export default function PrayerCommitmentScreen({ navigation }) {
       console.error('Error loading praying for me:', error)
     }
   }
-
 
   const handleSubmit = async () => {
     if (!formData.userName.trim()) {
@@ -124,7 +112,7 @@ export default function PrayerCommitmentScreen({ navigation }) {
 
     setSubmitting(true)
     try {
-      const startDate = Timestamp.now()
+      const startDate = new Date().toISOString()
       const endDate = Timestamp.fromMillis(startDate.toMillis() + (7 * 24 * 60 * 60 * 1000))
 
       // מצא מישהו אחר שצריך אותה ישועה (אוטומטי)
@@ -138,9 +126,7 @@ export default function PrayerCommitmentScreen({ navigation }) {
           where('status', '==', 'active'),
           limit(50) // נביא 50 ונסנן ידנית
         )
-        const matchSnapshot = await getDocs(matchQuery)
-        
-        // מצא מישהו שאין עליו עוד מתפללים (או הכי פחות)
+                // מצא מישהו שאין עליו עוד מתפללים (או הכי פחות)
         let bestMatch = null
         let minPrayingCount = Infinity
         
@@ -212,8 +198,8 @@ export default function PrayerCommitmentScreen({ navigation }) {
           day6: { completed: false, date: null },
           day7: { completed: false, date: null }
         },
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       })
 
       // רענון הרשימות
@@ -243,8 +229,8 @@ export default function PrayerCommitmentScreen({ navigation }) {
       const commitmentRef = doc(db, 'prayerCommitments', commitmentId)
       await updateDoc(commitmentRef, {
         [`dailyProgress.${day}.completed`]: true,
-        [`dailyProgress.${day}.date`]: Timestamp.now(),
-        updatedAt: Timestamp.now()
+        [`dailyProgress.${day}.date`]: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       })
       loadCommitments()
     } catch (error) {

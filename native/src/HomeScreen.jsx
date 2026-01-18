@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, Pressable, Animated, Platform, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator, Modal, TextInput } from 'react-native'
+import { View, Text, StyleSheet, Pressable, Animated, Platform, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator, Modal, TextInput, TouchableOpacity } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Audio } from 'expo-av'
@@ -37,6 +37,14 @@ const IMAGES = [
 
 export default function HomeScreen({ navigation, userRole }) {
   const isAdmin = userRole === 'admin'
+
+  // Debug: Log when HomeScreen mounts/unmounts
+  React.useEffect(() => {
+    console.log('🟢 HomeScreen MOUNTED')
+    return () => {
+      console.log('🔴 HomeScreen UNMOUNTED')
+    }
+  }, [])
 
   const [activeTab, setActiveTab] = React.useState('home')
   const pulse = React.useRef(new Animated.Value(0)).current
@@ -460,34 +468,53 @@ export default function HomeScreen({ navigation, userRole }) {
   }, [])
 
   const handleCardPress = React.useCallback((key) => {
+    console.log('🔵 handleCardPress called with key:', key)
+    console.log('🔵 Navigation object exists:', !!navigation)
+    console.log('🔵 Navigation.navigate exists:', !!navigation?.navigate)
+    
     if (key === 'music') {
+      console.log('🔵 Navigating to Music...')
       navigation?.navigate('Music')
+      console.log('🔵 Navigate called for Music')
       return
     }
     if (key === 'dailyLearning') {
+      console.log('🔵 Navigating to DailyLearning...')
       navigation?.navigate('DailyLearning')
+      console.log('🔵 Navigate called for DailyLearning')
       return
     }
     if (key === 'kodeshStore') {
+      console.log('🔵 Navigating to Books...')
       navigation?.navigate('Books')
+      console.log('🔵 Navigate called for Books')
       return
     }
     if (key === 'prayers') {
+      console.log('🔵 Navigating to Prayers...')
       navigation?.navigate('Prayers')
+      console.log('🔵 Navigate called for Prayers')
       return
     }
     if (key === 'yeshiva') {
+      console.log('🔵 Navigating to MiBeitRabeinu...')
       navigation?.navigate('MiBeitRabeinu')
+      console.log('🔵 Navigate called for MiBeitRabeinu')
       return
     }
     if (key === 'shortLessons') {
+      console.log('🔵 Navigating to LearningLibrary...')
       navigation?.navigate('LearningLibrary')
+      console.log('🔵 Navigate called for LearningLibrary')
       return
     }
     if (key === 'learningLibrary') {
+      console.log('🔵 Navigating to LearningLibrary...')
       navigation?.navigate('LearningLibrary')
+      console.log('🔵 Navigate called for LearningLibrary')
       return
     }
+    console.warn('⚠️ Unknown card key:', key)
     Alert.alert('בקרוב', 'המסך הזה עדיין בפיתוח')
   }, [navigation])
 
@@ -514,16 +541,19 @@ export default function HomeScreen({ navigation, userRole }) {
         badge={unreadCount}
       />
 
-      <MenuDrawer
-        visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
-        navigation={navigation}
-      />
+      {menuVisible && (
+        <MenuDrawer
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          navigation={navigation}
+        />
+      )}
 
       <View style={styles.main}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={true}
         >
           {/* Hero (Main Topic) */}
           <Pressable
@@ -602,12 +632,17 @@ export default function HomeScreen({ navigation, userRole }) {
               .filter((c) => HOME_GRID_KEYS.includes(c.key))
               .sort((a, b) => HOME_GRID_KEYS.indexOf(a.key) - HOME_GRID_KEYS.indexOf(b.key))
               .map((item, index) => (
-                <Pressable
+                <TouchableOpacity
                   key={item.key}
                   style={[styles.flatCard, styles.flatCardSmall]}
-                  onPress={() => handleCardPress(item.key)}
+                  onPress={() => {
+                    console.log('TouchableOpacity pressed for:', item.key, item.title)
+                    handleCardPress(item.key)
+                  }}
+                  activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel={`${item.title} - ${item.desc}`}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   {(() => {
                     let imageSource = null
@@ -644,14 +679,14 @@ export default function HomeScreen({ navigation, userRole }) {
                     <View style={styles.flatCardIcon}>
                       <Ionicons
                         name={typeof item.icon === 'string' && item.icon.trim() ? item.icon : 'apps-outline'}
-                        size={28}
+                        size={26}
                         color={item.gradient?.[0] || PRIMARY_BLUE}
                       />
                     </View>
-                    <Text style={styles.flatCardTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.flatCardTitle} numberOfLines={2}>{item.title}</Text>
                     <Text style={styles.flatCardDesc} numberOfLines={2}>{item.desc}</Text>
                   </View>
-                </Pressable>
+                </TouchableOpacity>
               ))}
           </View>
 
@@ -866,7 +901,7 @@ export default function HomeScreen({ navigation, userRole }) {
           style={styles.navItemPressable}
         >
           <View style={styles.iconBox}>
-            <Animated.View style={[styles.pulseRing, pulseStyle]} />
+            <Animated.View style={[styles.pulseRing, pulseStyle]} pointerEvents="none" />
             <Ionicons name="home-outline" size={22} color={activeTab === 'home' ? PRIMARY_BLUE : '#B3B3B3'} />
           </View>
           <Text style={[styles.navLabel, { color: activeTab === 'home' ? PRIMARY_BLUE : '#B3B3B3' }]}>בית</Text>
@@ -889,17 +924,18 @@ export default function HomeScreen({ navigation, userRole }) {
           onPress={() => { setActiveTab('music'); navigation?.navigate('Music') }}
           style={styles.centerNavButton}
         >
-          <View style={styles.centerNavGlowOuter} />
+          <View style={styles.centerNavGlowOuter} pointerEvents="none" />
           <LinearGradient
+            pointerEvents="none"
             colors={[PRIMARY_BLUE, '#1e40af', PRIMARY_BLUE]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.centerNavGradient}
           >
-            <View style={styles.centerNavGlow} />
+            <View style={styles.centerNavGlow} pointerEvents="none" />
             <Ionicons name="musical-notes" size={28} color="#fff" />
           </LinearGradient>
-          <Text style={styles.centerNavLabel}>ניגונים</Text>
+          <Text style={styles.centerNavLabel} pointerEvents="none">ניגונים</Text>
         </Pressable>
 
         <Pressable
@@ -1031,7 +1067,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 8,
     paddingBottom: 72,
-    marginTop: -4,
   },
   scrollContent: {
     paddingBottom: 92,
@@ -1060,32 +1095,28 @@ const styles = StyleSheet.create({
   flatCardSmall: {
     // 3 cards per row
     width: '31.5%',
-    minHeight: 110,
+    minHeight: 140,
   },
   flatCardLarge: {
     width: '100%',
     minHeight: 160,
   },
   flatCardContent: {
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    // Percentage heights can fail unless the parent has an explicit height.
-    // This caused card content (icon/title/desc) to disappear on some builds,
-    // leaving only the faint ImageBackground visible.
     flex: 1,
     width: '100%',
     position: 'relative',
-    zIndex: 2,
   },
   flatCardIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -1094,18 +1125,19 @@ const styles = StyleSheet.create({
   },
   flatCardTitle: {
     color: DEEP_BLUE,
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Heebo_700Bold',
-    marginBottom: 6,
+    marginBottom: 4,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    lineHeight: 20,
   },
   flatCardDesc: {
     color: '#6b7280',
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Poppins_400Regular',
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
   },
   lastTopicCard: {
     backgroundColor: '#ffffff',
@@ -1598,6 +1630,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 },
     elevation: 8,
+    overflow: 'visible',
   },
   navItemPressable: {
     alignItems: 'center',
@@ -1679,13 +1712,13 @@ const styles = StyleSheet.create({
   },
   centerNavGlowOuter: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: PRIMARY_BLUE,
-    opacity: 0.2,
-    top: -28,
-    left: -28,
+    opacity: 0.15,
+    top: -18,
+    left: -18,
   },
   centerNavGradient: {
     width: 64,

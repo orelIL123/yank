@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, Activit
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
-import { db } from '../config/firebase'
+
 import YoutubePlayer from 'react-native-youtube-iframe'
 import AppHeader from '../components/AppHeader'
+import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -50,17 +50,15 @@ export default function BeitMidrashScreen({ navigation }) {
 
   const loadVideos = async () => {
     try {
-      const q = query(
-        collection(db, 'beitMidrashVideos'),
-        orderBy('date', 'desc'),
-        limit(50)
-      )
-      const querySnapshot = await getDocs(q)
-      const videosData = querySnapshot.docs.map(doc => {
-        const data = doc.data()
+      const rawVideosData = await db.getCollection('beitMidrashVideos', {
+        orderBy: { field: 'date', direction: 'desc' },
+        limit: 50
+      })
+
+      const videosData = rawVideosData.map(data => {
         const youtubeId = extractYouTubeId(data.videoUrl || data.youtubeUrl)
         return {
-          id: doc.id,
+          id: data.id,
           ...data,
           youtubeId,
           thumbnailUrl: youtubeId ? getYouTubeThumbnail(youtubeId) : null
@@ -401,5 +399,4 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 })
-
 

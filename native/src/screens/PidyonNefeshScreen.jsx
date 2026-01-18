@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, addDoc, Timestamp, where } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -28,15 +27,9 @@ export default function PidyonNefeshScreen({ navigation }) {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
 
-      const q = query(
-        collection(db, 'pidyonNefesh'),
-        orderBy('createdAt', 'desc')
-      )
-      const querySnapshot = await getDocs(q)
-      const pidyonData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const pidyonData = await db.getCollection('pidyonNefesh', {
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      })
       setPidyonList(pidyonData)
     } catch (error) {
       console.error('Error loading pidyon nefesh list:', error)
@@ -60,11 +53,11 @@ export default function PidyonNefeshScreen({ navigation }) {
     try {
       setSubmitting(true)
 
-      await addDoc(collection(db, 'pidyonNefesh'), {
+      await db.addDocument('pidyonNefesh', {
         name: name.trim(),
         motherName: motherName.trim(),
         description: description.trim(),
-        createdAt: Timestamp.now(),
+        createdAt: new Date().toISOString(),
       })
 
       Alert.alert('הצלחה', 'הפדיון נפש נוסף בהצלחה')

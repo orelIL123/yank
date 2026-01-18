@@ -13,8 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy, where, doc, updateDoc, Timestamp } from 'firebase/firestore'
-import { db, auth } from '../config/firebase'
+
+import { auth } from '../config/firebase'
+import db from '../services/database'
 import AppHeader from '../components/AppHeader'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -33,16 +34,10 @@ export default function NotificationsScreen({ navigation }) {
 
   const loadNotifications = async () => {
     try {
-      const q = query(
-        collection(db, 'notifications'),
-        where('isActive', '==', true),
-        orderBy('createdAt', 'desc')
-      )
-      const querySnapshot = await getDocs(q)
-      const notificationsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const notificationsData = await db.getCollection('notifications', {
+        where: [['isActive', '==', true]],
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      })
       setNotifications(notificationsData)
     } catch (error) {
       console.error('Error loading notifications:', error)

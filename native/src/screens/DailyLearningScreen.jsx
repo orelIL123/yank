@@ -31,9 +31,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
-import { collection, getDocs, query, orderBy, limit, where, doc, updateDoc, increment, addDoc, deleteDoc, Timestamp, setDoc } from 'firebase/firestore';
+;
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../config/firebase';
+import { storage } from '../config/firebase';
+import db from '../services/database'
 import * as ImagePicker from 'expo-image-picker';
 // DocumentPicker will be imported dynamically when needed
 import YoutubePlayer from 'react-native-youtube-iframe';
@@ -183,13 +184,10 @@ export default function DailyLearningScreen({ navigation, userRole }) {
 
   const loadLearnings = async () => {
     try {
-      const q = query(
-        collection(db, 'dailyLearning'),
-        orderBy('date', 'desc'),
-        limit(10)
-      );
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = await db.getCollection('dailyLearning', {
+        orderBy: { field: 'date', direction: 'desc' },
+        limit: 10
+      });
       setLearnings(data);
       if (data.length > 0 && !selectedLearning) {
         setSelectedLearning(data[0]);
@@ -207,13 +205,10 @@ export default function DailyLearningScreen({ navigation, userRole }) {
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
 
-      const q = query(
-        collection(db, 'dailyVideos'),
-        where('createdAt', '>=', Timestamp.fromDate(yesterday)),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = await db.getCollection('dailyVideos', {
+        where: [['createdAt', '>=', yesterday.toISOString()]],
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      });
       setDailyVideos(data);
     } catch (error) {
       console.error('Error loading videos:', error);
@@ -258,7 +253,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
   const handleSaveContent = async () => {
     if (!selectedLearning) return;
     try {
-      await updateDoc(doc(db, 'dailyLearning', selectedLearning.id), {
+      await db.updateDocument('dailyLearning', selectedLearning.id, {
         title: editTitle,
         content: editContent,
       });
@@ -282,7 +277,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     const updatedDedications = [...(selectedLearning.dedications || []), newDedication];
 
     try {
-      await updateDoc(doc(db, 'dailyLearning', selectedLearning.id), {
+      await db.updateDocument('dailyLearning', selectedLearning.id, {
         dedications: updatedDedications
       });
       setNewDedicationName('');
@@ -297,7 +292,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     if (!selectedLearning) return;
     const updatedDedications = selectedLearning.dedications.filter(d => d.id !== dedicationId);
     try {
-      await updateDoc(doc(db, 'dailyLearning', selectedLearning.id), {
+      await db.updateDocument('dailyLearning', selectedLearning.id, {
         dedications: updatedDedications
       });
       setSelectedLearning(prev => ({ ...prev, dedications: updatedDedications }));
@@ -334,8 +329,8 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         Alert.alert('העלאה', 'מעלה סרטון... אנא המתן');
         const videoUrl = await uploadMedia(result.assets[0].uri, 'daily_videos');
 
-        await addDoc(collection(db, 'dailyVideos'), {
-          createdAt: Timestamp.now(),
+        await db.addDocument('dailyVideos', {
+          createdAt: new Date().toISOString(),
           thumbnail: 'https://via.placeholder.com/150', // Ideally generate thumbnail
           videoUrl: videoUrl,
           duration: result.assets[0].duration || 0
@@ -365,7 +360,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         const audioUrl = await uploadMedia(file.uri, 'daily_audio');
 
         if (selectedLearning) {
-          await updateDoc(doc(db, 'dailyLearning', selectedLearning.id), {
+          await db.updateDocument('dailyLearning', selectedLearning.id, {
             audioUrl: audioUrl,
           });
           setSelectedLearning(prev => ({ ...prev, audioUrl: audioUrl }));
@@ -380,10 +375,10 @@ export default function DailyLearningScreen({ navigation, userRole }) {
 
   const handleCreateNew = async () => {
     try {
-      const newDocRef = await addDoc(collection(db, 'dailyLearning'), {
+      const newDocRef = await db.addDocument('dailyLearning', {
         title: 'כותרת חדשה',
         content: 'כתוב כאן את התוכן היומי...',
-        date: Timestamp.now(),
+        date: new Date().toISOString(),
         category: 'זריקת אמונה',
         readTime: '2 דקות',
         author: 'הינוקא',
@@ -442,7 +437,12 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         <FloatingParticles />
 
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()} 
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
             <Ionicons name="arrow-back" size={24} color={COLORS.deepBlue} />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
@@ -496,7 +496,12 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()} 
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
             <Ionicons name="arrow-back" size={24} color={COLORS.deepBlue} />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>

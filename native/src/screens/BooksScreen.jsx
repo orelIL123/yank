@@ -3,14 +3,14 @@ import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, getDocs, query, orderBy } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
 export default function BooksScreen({ navigation }) {
+    console.log('📕 BooksScreen RENDERED')
     const [books, setBooks] = useState([])
     const [loading, setLoading] = useState(true)
     const [imageErrors, setImageErrors] = useState(new Set())
@@ -21,19 +21,19 @@ export default function BooksScreen({ navigation }) {
 
     const fetchBooks = async () => {
         try {
-            const q = query(collection(db, 'books'), orderBy('createdAt', 'desc'))
-            const querySnapshot = await getDocs(q)
-            const booksData = []
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                console.log('Book loaded:', {
-                    id: doc.id,
-                    title: data.title,
-                    imageUrl: data.imageUrl,
-                    hasImageUrl: !!data.imageUrl
-                });
-                booksData.push({ id: doc.id, ...data })
+            const booksData = await db.getCollection('books', {
+                orderBy: { field: 'createdAt', direction: 'desc' }
             })
+
+            booksData.forEach((book) => {
+                console.log('Book loaded:', {
+                    id: book.id,
+                    title: book.title,
+                    imageUrl: book.imageUrl,
+                    hasImageUrl: !!book.imageUrl
+                });
+            })
+
             setBooks(booksData)
         } catch (error) {
             console.error('Error fetching books:', error)
@@ -118,7 +118,7 @@ export default function BooksScreen({ navigation }) {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: '#FF0000' }]}>
             <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
 
             <View style={styles.header}>

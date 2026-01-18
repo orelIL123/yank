@@ -1,10 +1,8 @@
 import { initializeApp, getApps } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
-
-// Note: Firebase Auth automatically persists to AsyncStorage in React Native
-// No explicit persistence configuration needed - it works out of the box
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const firebaseConfig = {
   apiKey: "AIzaSyC6CfvVURku2xMCgnhIGQbc4vQTKLP3SYA",
@@ -34,11 +32,23 @@ try {
 // Initialize services with error handling
 let auth, db, storage
 try {
-  // Firebase Auth automatically persists user sessions in React Native using AsyncStorage
-  // This means users will remain logged in across app restarts
-  auth = getAuth(app)
-  console.log('Firebase Auth initialized - user sessions will persist across app restarts')
-  
+  // Check if Auth is already initialized
+  try {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage)
+    })
+    console.log('Firebase Auth initialized with AsyncStorage - user sessions will persist')
+  } catch (authError) {
+    // If already initialized, just get the existing instance
+    if (authError.code === 'auth/already-initialized') {
+      const { getAuth } = require('firebase/auth')
+      auth = getAuth(app)
+      console.log('Firebase Auth already initialized - using existing instance')
+    } else {
+      throw authError
+    }
+  }
+
   db = getFirestore(app)
   storage = getStorage(app)
 } catch (error) {

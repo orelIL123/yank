@@ -15,8 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db } from '../services/database';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
 import { t } from '../utils/i18n';
@@ -95,12 +94,9 @@ export default function MusicScreen({ navigation }) {
 
   const loadSongs = async () => {
     try {
-      const q = query(collection(db, 'music'), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      const songsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const songsData = await db.getCollection('music', {
+        orderBy: { field: 'createdAt', direction: 'desc' }
+      });
       setSongs(songsData);
     } catch (error) {
       console.error('Error loading songs:', error);

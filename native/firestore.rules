@@ -27,7 +27,9 @@ service cloud.firestore {
       // ✅ Only admins can update any user (including role changes)
       allow update: if isAdmin();
 
-      allow delete: if isAdmin();
+      // ✅ Users can delete their own account (required by App Store)
+      // Admins can also delete any user
+      allow delete: if (isAuthenticated() && request.auth.uid == userId) || isAdmin();
     }
     
     // Public read, admin write for all content collections

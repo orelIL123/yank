@@ -26,6 +26,8 @@ export default function AppHeader({
             <TouchableOpacity
               style={styles.backButton}
               onPress={onBackPress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
             >
               <Ionicons name="arrow-forward" size={24} color="#FFD700" />
             </TouchableOpacity>
@@ -35,6 +37,8 @@ export default function AppHeader({
             <TouchableOpacity
               style={styles.leftButton}
               onPress={onLeftIconPress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
             >
               <Ionicons name={leftIcon} size={24} color="#FFD700" />
               {badge > 0 && (
@@ -47,7 +51,7 @@ export default function AppHeader({
         </View>
 
         {/* Center title - always centered */}
-        <View style={styles.titleContainer}>
+        <View style={styles.titleContainer} pointerEvents="none">
           <Text style={styles.title}>{title}</Text>
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
         </View>
@@ -58,6 +62,8 @@ export default function AppHeader({
             <TouchableOpacity
               style={styles.rightButton}
               onPress={onRightIconPress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
             >
               <Ionicons name={rightIcon} size={24} color="#FFD700" />
             </TouchableOpacity>
@@ -90,22 +96,36 @@ const styles = StyleSheet.create({
     left: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 10,
   },
   backButton: {
     padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   leftButton: {
     padding: 8,
     position: 'relative',
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   rightButtonsContainer: {
     position: 'absolute',
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 10,
   },
   rightButton: {
     padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   badge: {
     position: 'absolute',
@@ -129,6 +149,7 @@ const styles = StyleSheet.create({
   titleContainer: {
     flex: 1,
     alignItems: 'center',
+    zIndex: 1,
   },
   title: {
     fontSize: 24,
