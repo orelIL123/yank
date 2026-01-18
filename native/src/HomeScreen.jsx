@@ -698,7 +698,7 @@ export default function HomeScreen({ navigation, userRole }) {
           {/* Sefer HaMidot Card - Above Daily Quote */}
           <TouchableOpacity
             style={styles.seferHaMidotCard}
-            activeOpacity={0.85}
+            activeOpacity={0.7}
             onPress={() => {
               console.log('✅ Sefer HaMidot card pressed')
               navigation?.navigate('SeferHaMidot')
@@ -706,23 +706,13 @@ export default function HomeScreen({ navigation, userRole }) {
             accessibilityRole="button"
             accessibilityLabel="ספר המידות"
           >
-            <LinearGradient
-              colors={['#8B4513', '#A0522D', '#8B4513']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.seferHaMidotGradient}
-            >
-              <View style={styles.seferHaMidotContent}>
-                <View style={styles.seferHaMidotIcon}>
-                  <Ionicons name="book" size={32} color="#FFD700" />
-                </View>
-                <View style={styles.seferHaMidotText}>
-                  <Text style={styles.seferHaMidotTitle}>ספר המידות</Text>
-                  <Text style={styles.seferHaMidotSubtitle}>לרבי נחמן מברסלב</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#FFD700" />
+            <View style={styles.seferHaMidotContent}>
+              <View style={styles.seferHaMidotText}>
+                <Text style={styles.seferHaMidotTitle}>ספר המידות</Text>
+                <Text style={styles.seferHaMidotSubtitle}>לרבי נחמן מברסלב</Text>
               </View>
-            </LinearGradient>
+              <Ionicons name="chevron-forward" size={20} color={DEEP_BLUE} />
+            </View>
           </TouchableOpacity>
 
           {/* Quote (scroll down) */}
