@@ -8,6 +8,7 @@
 // Sefaria API base URL - supports both v3 and regular API
 const SEFARIA_BASE_URL = 'https://www.sefaria.org/api/v3'
 const SEFARIA_LEGACY_URL = 'https://www.sefaria.org/api'
+const SEFARIA_V2_URL = 'https://www.sefaria.org/api/v2'
 
 /**
  * Base function to make API requests to Sefaria
@@ -102,6 +103,66 @@ export async function getIndex(tref) {
 export async function getTextsList() {
   const endpoint = '/texts'
   return sefariaRequest(endpoint)
+}
+
+/**
+ * Get Table of Contents - all books in Sefaria
+ * According to Sefaria API docs
+ */
+export async function getTableOfContents() {
+  try {
+    const response = await fetch('https://www.sefaria.org/api/index')
+    if (!response.ok) {
+      throw new Error(`Sefaria API error: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('Sefaria API request failed:', error)
+    throw error
+  }
+}
+
+/**
+ * Get Index (v2) - metadata about a specific book
+ * According to Sefaria API docs
+ */
+export async function getIndexV2(tref) {
+  try {
+    const response = await fetch(`https://www.sefaria.org/api/v2/index/${encodeURIComponent(tref)}`)
+    if (!response.ok) {
+      throw new Error(`Sefaria API error: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('Sefaria API request failed:', error)
+    throw error
+  }
+}
+
+/**
+ * Search for a book by name
+ */
+export async function searchBook(bookName) {
+  try {
+    const toc = await getTableOfContents()
+    // Search in the TOC structure
+    const searchRecursive = (node, name) => {
+      if (node.title && (node.title.includes(name) || node.heTitle?.includes(name))) {
+        return node
+      }
+      if (node.nodes) {
+        for (const child of node.nodes) {
+          const found = searchRecursive(child, name)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    return searchRecursive(toc, bookName)
+  } catch (error) {
+    console.error('Error searching for book:', error)
+    throw error
+  }
 }
 
 /**

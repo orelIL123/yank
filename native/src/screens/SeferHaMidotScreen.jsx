@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+import React, { useState, useEffect } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import AppHeader from '../components/AppHeader'
+import { getText, getIndexV2, searchBook, getTableOfContents, formatTextForDisplay } from '../services/sefaria'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -202,9 +203,104 @@ const MIDOT_CATEGORIES = [
 
 export default function SeferHaMidotScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [categoryContent, setCategoryContent] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [bookFound, setBookFound] = useState(null)
 
-  const handleCategoryPress = (category) => {
+  // Try to find Sefer HaMidot in Sefaria
+  useEffect(() => {
+    const findBook = async () => {
+      try {
+        console.log('🔍 Searching for Sefer HaMidot in Sefaria...')
+        const possibleNames = [
+          'Sefer HaMidot',
+          'ספר המידות',
+          'Sefer Hamidot',
+          'Sefer_HaMidot',
+          'Likutei Moharan'
+        ]
+        
+        for (const name of possibleNames) {
+          try {
+            const index = await getIndexV2(name)
+            console.log('✅ Found book:', name, index.title)
+            setBookFound({ name, index })
+            break
+          } catch (e) {
+            console.log('❌ Not found:', name)
+          }
+        }
+        
+        // If not found, try searching in TOC
+        if (!bookFound) {
+          try {
+            const toc = await getTableOfContents()
+            console.log('📚 TOC loaded, searching...')
+            // Search logic would go here
+          } catch (e) {
+            console.log('❌ Could not load TOC')
+          }
+        }
+      } catch (error) {
+        console.error('Error finding book:', error)
+      }
+    }
+    
+    findBook()
+  }, [])
+
+  const handleCategoryPress = async (category) => {
     setSelectedCategory(category)
+    setLoading(true)
+    setCategoryContent(null)
+
+    // First try Sefaria API if book was found
+    if (bookFound) {
+      try {
+        // Try different tref formats
+        const trefOptions = [
+          `${bookFound.name}.${category.title}`,
+          `${bookFound.name}, ${category.title}`,
+          `${bookFound.name} ${category.id}`,
+        ]
+        
+        for (const tref of trefOptions) {
+          try {
+            console.log(`Trying tref: ${tref}`)
+            const textData = await getText(tref, { lang: 'he' })
+            const formatted = formatTextForDisplay(textData)
+            if (formatted.hebrew || formatted.content) {
+              setCategoryContent({
+                title: category.title,
+                content: formatted.hebrew || formatted.content,
+                hebrew: formatted.hebrew || formatted.content,
+              })
+              setLoading(false)
+              return
+            }
+          } catch (e) {
+            console.log(`Failed: ${tref}`)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading from Sefaria:', error)
+      }
+    }
+
+    // Fallback to local content
+    const content = MIDOT_CONTENT[category.id]
+    if (content) {
+      setTimeout(() => {
+        setCategoryContent({
+          title: content.title,
+          content: content.content,
+          hebrew: content.content,
+        })
+        setLoading(false)
+      }, 300)
+    } else {
+      setLoading(false)
+    }
   }
 
   const handleBack = () => {
@@ -215,23 +311,38 @@ export default function SeferHaMidotScreen({ navigation }) {
     }
   }
 
-  if (selectedCategory) {
-    const content = MIDOT_CONTENT[selectedCategory.id]
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <AppHeader
-          title={content.title}
+          title={selectedCategory?.title || 'ספר המידות'}
+          showBackButton={true}
+          onBackPress={handleBack}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+          <Text style={styles.loadingText}>טוען תוכן...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (selectedCategory && categoryContent) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <AppHeader
+          title={categoryContent.title || selectedCategory.title}
           showBackButton={true}
           onBackPress={handleBack}
         />
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           <View style={styles.categoryHeader}>
-            <Text style={styles.categoryTitle}>{content.title}</Text>
+            <Text style={styles.categoryTitle}>{selectedCategory.title}</Text>
             <View style={styles.divider} />
           </View>
           
           <View style={styles.textContainer}>
-            <Text style={styles.textContent}>{content.content}</Text>
+            <Text style={styles.textContent}>{categoryContent.hebrew || categoryContent.content}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -283,6 +394,17 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingBottom: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Heebo_400Regular',
+    color: DEEP_BLUE,
   },
   introText: {
     fontSize: 16,
