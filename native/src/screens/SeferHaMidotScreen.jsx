@@ -207,38 +207,36 @@ export default function SeferHaMidotScreen({ navigation }) {
   const [loading, setLoading] = useState(false)
   const [bookFound, setBookFound] = useState(null)
 
-  // Try to find Sefer HaMidot in Sefaria
+  // Try to find Sefer HaMidot in Sefaria - using correct name: Sefer_HaMiddot
   useEffect(() => {
     const findBook = async () => {
       try {
-        console.log('🔍 Searching for Sefer HaMidot in Sefaria...')
-        const possibleNames = [
-          'Sefer HaMidot',
-          'ספר המידות',
-          'Sefer Hamidot',
-          'Sefer_HaMidot',
-          'Likutei Moharan'
-        ]
+        console.log('🔍 Searching for Sefer HaMiddot in Sefaria...')
+        // The correct name according to Sefaria URL is Sefer_HaMiddot (with double d)
+        const correctName = 'Sefer_HaMiddot'
         
-        for (const name of possibleNames) {
-          try {
-            const index = await getIndexV2(name)
-            console.log('✅ Found book:', name, index.title)
-            setBookFound({ name, index })
-            break
-          } catch (e) {
-            console.log('❌ Not found:', name)
-          }
-        }
-        
-        // If not found, try searching in TOC
-        if (!bookFound) {
-          try {
-            const toc = await getTableOfContents()
-            console.log('📚 TOC loaded, searching...')
-            // Search logic would go here
-          } catch (e) {
-            console.log('❌ Could not load TOC')
+        try {
+          const index = await getIndexV2(correctName)
+          console.log('✅ Found book:', correctName, index.title || index.heTitle)
+          setBookFound({ name: correctName, index })
+        } catch (e) {
+          console.log('❌ Not found:', correctName, e.message)
+          // Fallback: try other variations
+          const possibleNames = [
+            'Sefer HaMiddot',
+            'Sefer_HaMidot',
+            'Sefer HaMidot'
+          ]
+          
+          for (const name of possibleNames) {
+            try {
+              const index = await getIndexV2(name)
+              console.log('✅ Found book:', name)
+              setBookFound({ name, index })
+              break
+            } catch (err) {
+              console.log('❌ Not found:', name)
+            }
           }
         }
       } catch (error) {
@@ -257,19 +255,36 @@ export default function SeferHaMidotScreen({ navigation }) {
     // First try Sefaria API if book was found
     if (bookFound) {
       try {
-        // Try different tref formats
+        // According to Sefaria structure, categories are like "Love", "Faith", etc.
+        // Map Hebrew titles to English category names
+        const categoryMap = {
+          'אהבה': 'Love',
+          'יראה': 'Fear of God',
+          'תפילה': 'Prayer',
+          'צדקה': 'Charity',
+          'תורה': 'Torah Study',
+          'עבודה': 'Torah Study', // Work/Service might be under Torah Study
+          'בטחון': 'Trust in God',
+          'שמחה': 'Joy and Happiness'
+        }
+        
+        const englishCategory = categoryMap[category.title] || category.title
+        
+        // Try different tref formats based on Sefaria structure
         const trefOptions = [
-          `${bookFound.name}.${category.title}`,
-          `${bookFound.name}, ${category.title}`,
-          `${bookFound.name} ${category.id}`,
+          `${bookFound.name}, ${englishCategory}`,
+          `${bookFound.name}.${englishCategory}`,
+          `${bookFound.name}, ${englishCategory}, Part I`,
+          `${bookFound.name}, ${englishCategory}, Part II`,
         ]
         
         for (const tref of trefOptions) {
           try {
-            console.log(`Trying tref: ${tref}`)
+            console.log(`🔍 Trying tref: ${tref}`)
             const textData = await getText(tref, { lang: 'he' })
             const formatted = formatTextForDisplay(textData)
             if (formatted.hebrew || formatted.content) {
+              console.log(`✅ Success! Loaded content from Sefaria`)
               setCategoryContent({
                 title: category.title,
                 content: formatted.hebrew || formatted.content,
@@ -279,7 +294,45 @@ export default function SeferHaMidotScreen({ navigation }) {
               return
             }
           } catch (e) {
-            console.log(`Failed: ${tref}`)
+            console.log(`❌ Failed: ${tref} - ${e.message}`)
+          }
+        }
+        
+        // If specific category not found, try to get the index structure
+        if (bookFound.index && bookFound.index.nodes) {
+          // Search in the index structure for matching category
+          const findCategoryInIndex = (nodes, searchTitle) => {
+            for (const node of nodes) {
+              if (node.title === searchTitle || node.heTitle === searchTitle || 
+                  node.title?.includes(englishCategory) || node.heTitle?.includes(category.title)) {
+                return node
+              }
+              if (node.nodes) {
+                const found = findCategoryInIndex(node.nodes, searchTitle)
+                if (found) return found
+              }
+            }
+            return null
+          }
+          
+          const categoryNode = findCategoryInIndex(bookFound.index.nodes, category.title)
+          if (categoryNode && categoryNode.ref) {
+            try {
+              const textData = await getText(categoryNode.ref, { lang: 'he' })
+              const formatted = formatTextForDisplay(textData)
+              if (formatted.hebrew || formatted.content) {
+                console.log(`✅ Success! Loaded via index structure`)
+                setCategoryContent({
+                  title: category.title,
+                  content: formatted.hebrew || formatted.content,
+                  hebrew: formatted.hebrew || formatted.content,
+                })
+                setLoading(false)
+                return
+              }
+            } catch (e) {
+              console.log(`❌ Failed to load via index: ${e.message}`)
+            }
           }
         }
       } catch (error) {
