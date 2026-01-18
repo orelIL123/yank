@@ -15,7 +15,7 @@ const MENU_ITEMS = [
     { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline', screen: 'Newsletters' },
     { id: 'prayers', label: 'תפילות', icon: 'heart-outline', screen: 'Prayers' },
     { id: 'books', label: 'ספרים', icon: 'book-outline', screen: 'Books' },
-    { id: 'insights', label: 'חידושים', icon: 'bulb-outline', screen: 'DailyLearning' },
+    { id: 'parshiot', label: 'פרשת הנשיאים', icon: 'scroll-outline', screen: 'ParshiotHaNasiim' },
     { id: 'news', label: 'חדשות', icon: 'newspaper-outline', screen: 'News' },
     { id: 'about', label: 'אודות', icon: 'information-circle-outline', screen: 'About' },
     { id: 'contact', label: 'צור קשר', icon: 'mail-outline', screen: 'ContactRabbi' },
@@ -32,7 +32,7 @@ export default function MenuDrawer({ visible, onClose, navigation }) {
     return (
         <Modal
             visible={visible}
-            animationType="slide"
+            animationType="fade"
             transparent={true}
             onRequestClose={onClose}
         >
@@ -53,11 +53,11 @@ export default function MenuDrawer({ visible, onClose, navigation }) {
 
                         {/* Header */}
                         <View style={styles.drawerHeader}>
+                            <View style={{ width: 28 }} />
+                            <Text style={styles.drawerTitle}>תפריט ראשי</Text>
                             <Pressable onPress={onClose} style={styles.closeButton}>
                                 <Ionicons name="close" size={28} color={PRIMARY_BLUE} />
                             </Pressable>
-                            <Text style={styles.drawerTitle}>תפריט ראשי</Text>
-                            <View style={{ width: 28 }} />
                         </View>
 
                         {/* Menu Items */}
@@ -75,14 +75,14 @@ export default function MenuDrawer({ visible, onClose, navigation }) {
                                     ]}
                                     onPress={() => handleNavigate(item.screen)}
                                 >
+                                    <View style={styles.menuItemArrow}>
+                                        <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+                                    </View>
                                     <View style={styles.menuItemContent}>
                                         <Text style={styles.menuItemLabel}>{item.label}</Text>
                                         <View style={styles.menuItemIcon}>
                                             <Ionicons name={item.icon} size={24} color={PRIMARY_BLUE} />
                                         </View>
-                                    </View>
-                                    <View style={styles.menuItemArrow}>
-                                        <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                                     </View>
                                 </Pressable>
                             ))}
@@ -108,21 +108,23 @@ const styles = StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
+        flexDirection: 'row',
         justifyContent: 'flex-end',
     },
     drawerContainer: {
-        flex: 1,
-        justifyContent: 'flex-end',
+        height: '100%',
+        width: '80%',
+        maxWidth: 360,
     },
     drawer: {
-        height: '85%',
+        flex: 1,
         backgroundColor: BG,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+        borderTopLeftRadius: 0,
+        borderBottomLeftRadius: 0,
         overflow: 'hidden',
     },
     drawerHeader: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
@@ -152,7 +154,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     menuItem: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: '#fff',
@@ -172,9 +174,10 @@ const styles = StyleSheet.create({
         transform: [{ scale: 0.98 }],
     },
     menuItemContent: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         gap: 16,
+        flex: 1,
     },
     menuItemIcon: {
         width: 48,
@@ -188,6 +191,7 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontFamily: 'Heebo_600SemiBold',
         color: DEEP_BLUE,
+        textAlign: 'right',
     },
     menuItemArrow: {
         opacity: 0.5,
