@@ -391,46 +391,11 @@ export default function HomeScreen({ navigation, userRole }) {
     loadPidyonList()
   }, [])
 
-  // Auto-scroll pidyon names - OPTIMIZED VERSION
+  // Auto-scroll pidyon names - DISABLED TO FIX TOUCH BLOCKING
   useEffect(() => {
-    if (pidyonList.length === 0 || pidyonLoading || !pidyonScrollRef.current) return
-
-    // Clear any existing interval
-    if (pidyonScrollInterval.current) {
-      clearInterval(pidyonScrollInterval.current)
-    }
-
-    // Calculate card width (card + gap)
-    const cardWidth = 140 + 12 // minWidth + gap
-
-    const startAutoScroll = () => {
-      pidyonScrollInterval.current = setInterval(() => {
-        if (pidyonScrollRef.current) {
-          pidyonScrollPosition.current += 1
-          const maxScroll = pidyonList.length * cardWidth
-          
-          // Reset to 0 when reaching the end (seamless loop)
-          if (pidyonScrollPosition.current >= maxScroll) {
-            pidyonScrollPosition.current = 0
-          }
-          
-          pidyonScrollRef.current.scrollTo({
-            x: pidyonScrollPosition.current,
-            animated: false, // Changed to false for better performance
-          })
-        }
-      }, 30) // Optimized to 30ms (smoother than 50ms, less CPU than before)
-    }
-
-    // Wait a bit before starting scroll
-    const timeout = setTimeout(startAutoScroll, 1500)
-    
-    return () => {
-      clearTimeout(timeout)
-      if (pidyonScrollInterval.current) {
-        clearInterval(pidyonScrollInterval.current)
-      }
-    }
+    console.log('⚠️ Pidyon auto-scroll PERMANENTLY DISABLED until touch issue is resolved')
+    // Auto-scroll will be re-enabled after touch issues are fixed
+    return () => {}
   }, [pidyonList, pidyonLoading])
 
   // Load notifications and count unread
@@ -468,10 +433,21 @@ export default function HomeScreen({ navigation, userRole }) {
   }, [])
 
   const handleCardPress = React.useCallback((key) => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     console.log('🔵 handleCardPress called with key:', key)
     console.log('🔵 Navigation object exists:', !!navigation)
     console.log('🔵 Navigation.navigate exists:', !!navigation?.navigate)
-    console.log('🔵 Available routes:', navigation?.getState?.()?.routeNames)
+    
+    // Get available routes
+    try {
+      const state = navigation?.getState?.()
+      console.log('🔵 Navigation state:', JSON.stringify(state, null, 2))
+      console.log('🔵 Available routes (routeNames):', state?.routeNames || 'N/A')
+      console.log('🔵 Current route:', state?.routes?.[state.index]?.name || 'N/A')
+    } catch (e) {
+      console.log('⚠️ Could not get navigation state:', e.message)
+    }
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     
     if (key === 'music') {
       console.log('🔵 Navigating to Music...')
@@ -559,7 +535,10 @@ export default function HomeScreen({ navigation, userRole }) {
             style={styles.heroCard}
             activeOpacity={0.85}
             onPress={() => {
-              console.log('🟢 Hero Card (Main Topic) pressed')
+              console.log('✅ Hero Card TouchableOpacity onPress FIRED')
+            }}
+            onPressIn={() => {
+              console.log('👆 Hero Card TouchableOpacity onPressIn FIRED')
             }}
             accessibilityRole="button"
             accessibilityLabel="הנושא המרכזי"
@@ -621,7 +600,7 @@ export default function HomeScreen({ navigation, userRole }) {
                   onScroll={(e) => {
                     pidyonScrollPosition.current = e.nativeEvent.contentOffset.x
                   }}
-                  scrollEnabled={false}
+                  scrollEnabled={true}
                 >
                   {[...pidyonList, ...pidyonList, ...pidyonList].map((pidyon, idx) => (
                     <View key={`${pidyon.id}-${idx}`} style={styles.pidyonCardInline}>
@@ -659,8 +638,11 @@ export default function HomeScreen({ navigation, userRole }) {
                   key={item.key}
                   style={[styles.flatCard, styles.flatCardSmall]}
                   onPress={() => {
-                    console.log('TouchableOpacity pressed for:', item.key, item.title)
+                    console.log('✅ TouchableOpacity onPress FIRED for:', item.key, item.title)
                     handleCardPress(item.key)
+                  }}
+                  onPressIn={() => {
+                    console.log('👆 TouchableOpacity onPressIn FIRED for:', item.key)
                   }}
                   activeOpacity={0.7}
                   accessibilityRole="button"
