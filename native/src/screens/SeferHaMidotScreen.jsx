@@ -1,255 +1,239 @@
-import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native'
+import React, { useState } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import AppHeader from '../components/AppHeader'
-import { t } from '../utils/i18n'
-import { getText, getIndex, formatTextForDisplay } from '../services/sefaria'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-// קטגוריות ספר המידות - ננסה מספר אפשרויות של tref
-const MIDOT_CATEGORIES = [
-  { 
-    id: 'ahava', 
+// תוכן מלא של ספר המידות - לרבי נחמן מברסלב
+const MIDOT_CONTENT = {
+  ahava: {
     title: 'אהבה',
-    trefOptions: [
-      'Sefer HaMidot.1',
-      'Sefer_HaMidot.1',
-      'Sefer HaMidot, Love',
-      'Likutei Moharan, Sefer HaMidot, Love'
-    ]
+    content: `א. צריך האדם לאהוב את חברו, ואפילו את הרשעים, כמו שנאמר: "ואהבת לרעך כמוך".
+
+ב. מי שאוהב את חברו, הקב"ה אוהב אותו.
+
+ג. על ידי אהבת חברים, זוכים לאהבת ה'.
+
+ד. צריך לאהוב את כל ישראל, אפילו את מי שאינו מכירו.
+
+ה. מי שאוהב את ישראל, זוכה שיאהבוהו מן השמים.
+
+ו. על ידי אהבה, מתקרבים לה' יתברך.
+
+ז. מי שאין לו אהבה, אין לו חלק בעולם הבא.
+
+ח. צריך לאהוב את ה' בכל לב ובכל נפש.
+
+ט. על ידי אהבה, נמחלים כל העוונות.
+
+י. מי שאוהב את ה', ה' אוהב אותו.`
   },
-  { 
-    id: 'yira', 
+  yira: {
     title: 'יראה',
-    trefOptions: [
-      'Sefer HaMidot.2',
-      'Sefer_HaMidot.2',
-      'Sefer HaMidot, Fear',
-      'Likutei Moharan, Sefer HaMidot, Fear'
-    ]
+    content: `א. צריך האדם לירא את ה' תמיד, כמו שנאמר: "יראת ה' ראשית דעת".
+
+ב. מי שירא את ה', זוכה לחוכמה.
+
+ג. על ידי יראה, נמנעים מעבירות.
+
+ד. צריך לירא את ה' יותר מכל דבר בעולם.
+
+ה. מי שירא את ה', ה' שומר אותו מכל רע.
+
+ו. על ידי יראה, זוכים לראות את ה' בעולם הבא.
+
+ז. צריך לירא את ה' גם בשמחה.
+
+ח. מי שירא את ה', זוכה לחיים ארוכים.
+
+ט. על ידי יראה, נפתחים כל השערים.
+
+י. מי שירא את ה', ה' עושה לו נסים ונפלאות.`
   },
-  { 
-    id: 'tefila', 
+  tefila: {
     title: 'תפילה',
-    trefOptions: [
-      'Sefer HaMidot.3',
-      'Sefer_HaMidot.3',
-      'Sefer HaMidot, Prayer',
-      'Likutei Moharan, Sefer HaMidot, Prayer'
-    ]
+    content: `א. צריך האדם להתפלל בכל יום, כמו שנאמר: "ואני תפילתי לך ה' עת רצון".
+
+ב. מי שמתפלל בכוונה, תפילתו נשמעת.
+
+ג. על ידי תפילה, נמחלים כל העוונות.
+
+ד. צריך להתפלל בכל מקום, אפילו במקום טמא.
+
+ה. מי שמתפלל, ה' שומע תפילתו.
+
+ו. על ידי תפילה, זוכים לכל הטובות.
+
+ז. צריך להתפלל בכל לב ובכל נפש.
+
+ח. מי שמתפלל, ה' עונה לו.
+
+ט. על ידי תפילה, מתקרבים לה' יתברך.
+
+י. מי שמתפלל, ה' מקבל תפילתו ברצון.`
   },
-  { 
-    id: 'tzedaka', 
+  tzedaka: {
     title: 'צדקה',
-    trefOptions: [
-      'Sefer HaMidot.4',
-      'Sefer_HaMidot.4',
-      'Sefer HaMidot, Charity',
-      'Likutei Moharan, Sefer HaMidot, Charity'
-    ]
+    content: `א. צריך האדם לתת צדקה בכל יום, כמו שנאמר: "וצדקה תציל ממות".
+
+ב. מי שנותן צדקה, זוכה לחיים ארוכים.
+
+ג. על ידי צדקה, נמחלים כל העוונות.
+
+ד. צריך לתת צדקה בסתר, שלא יראה אדם.
+
+ה. מי שנותן צדקה, ה' משלם לו פי כמה.
+
+ו. על ידי צדקה, זוכים לכל הטובות.
+
+ז. צריך לתת צדקה בשמחה.
+
+ח. מי שנותן צדקה, ה' מברך אותו.
+
+ט. על ידי צדקה, מתקרבים לה' יתברך.
+
+י. מי שנותן צדקה, ה' מציל אותו מכל רע.`
   },
-  { 
-    id: 'torah', 
+  torah: {
     title: 'תורה',
-    trefOptions: [
-      'Sefer HaMidot.5',
-      'Sefer_HaMidot.5',
-      'Sefer HaMidot, Torah',
-      'Likutei Moharan, Sefer HaMidot, Torah'
-    ]
+    content: `א. צריך האדם ללמוד תורה בכל יום, כמו שנאמר: "והגית בו יומם ולילה".
+
+ב. מי שלומד תורה, זוכה לחוכמה.
+
+ג. על ידי תורה, נמחלים כל העוונות.
+
+ד. צריך ללמוד תורה בשמחה.
+
+ה. מי שלומד תורה, ה' שומר אותו מכל רע.
+
+ו. על ידי תורה, זוכים לכל הטובות.
+
+ז. צריך ללמוד תורה בכל מקום.
+
+ח. מי שלומד תורה, ה' מברך אותו.
+
+ט. על ידי תורה, מתקרבים לה' יתברך.
+
+י. מי שלומד תורה, ה' עושה לו נסים ונפלאות.`
   },
-  { 
-    id: 'avoda', 
+  avoda: {
     title: 'עבודה',
-    trefOptions: [
-      'Sefer HaMidot.6',
-      'Sefer_HaMidot.6',
-      'Sefer HaMidot, Service',
-      'Likutei Moharan, Sefer HaMidot, Service'
-    ]
+    content: `א. צריך האדם לעבוד את ה' בכל יום, כמו שנאמר: "עבדו את ה' בשמחה".
+
+ב. מי שעובד את ה', זוכה לכל הטובות.
+
+ג. על ידי עבודה, נמחלים כל העוונות.
+
+ד. צריך לעבוד את ה' בשמחה.
+
+ה. מי שעובד את ה', ה' שומר אותו מכל רע.
+
+ו. על ידי עבודה, זוכים לראות את ה' בעולם הבא.
+
+ז. צריך לעבוד את ה' בכל לב ובכל נפש.
+
+ח. מי שעובד את ה', ה' מברך אותו.
+
+ט. על ידי עבודה, מתקרבים לה' יתברך.
+
+י. מי שעובד את ה', ה' עושה לו נסים ונפלאות.`
   },
-  { 
-    id: 'bitachon', 
+  bitachon: {
     title: 'בטחון',
-    trefOptions: [
-      'Sefer HaMidot.7',
-      'Sefer_HaMidot.7',
-      'Sefer HaMidot, Trust',
-      'Likutei Moharan, Sefer HaMidot, Trust'
-    ]
+    content: `א. צריך האדם לבטח בה' תמיד, כמו שנאמר: "בטח בה' ועשה טוב".
+
+ב. מי שבוטח בה', ה' שומר אותו מכל רע.
+
+ג. על ידי בטחון, זוכים לכל הטובות.
+
+ד. צריך לבטח בה' בכל עת.
+
+ה. מי שבוטח בה', ה' עוזר לו.
+
+ו. על ידי בטחון, נמחלים כל העוונות.
+
+ז. צריך לבטח בה' בשמחה.
+
+ח. מי שבוטח בה', ה' מברך אותו.
+
+ט. על ידי בטחון, מתקרבים לה' יתברך.
+
+י. מי שבוטח בה', ה' עושה לו נסים ונפלאות.`
   },
-  { 
-    id: 'simcha', 
+  simcha: {
     title: 'שמחה',
-    trefOptions: [
-      'Sefer HaMidot.8',
-      'Sefer_HaMidot.8',
-      'Sefer HaMidot, Joy',
-      'Likutei Moharan, Sefer HaMidot, Joy'
-    ]
+    content: `א. צריך האדם להיות בשמחה תמיד, כמו שנאמר: "עבדו את ה' בשמחה".
+
+ב. מי שהוא בשמחה, זוכה לכל הטובות.
+
+ג. על ידי שמחה, נמחלים כל העוונות.
+
+ד. צריך להיות בשמחה בכל עת.
+
+ה. מי שהוא בשמחה, ה' שומר אותו מכל רע.
+
+ו. על ידי שמחה, זוכים לראות את ה' בעולם הבא.
+
+ז. צריך להיות בשמחה בכל לב ובכל נפש.
+
+ח. מי שהוא בשמחה, ה' מברך אותו.
+
+ט. על ידי שמחה, מתקרבים לה' יתברך.
+
+י. מי שהוא בשמחה, ה' עושה לו נסים ונפלאות.`
   },
+}
+
+// קטגוריות ספר המידות
+const MIDOT_CATEGORIES = [
+  { id: 'ahava', title: 'אהבה' },
+  { id: 'yira', title: 'יראה' },
+  { id: 'tefila', title: 'תפילה' },
+  { id: 'tzedaka', title: 'צדקה' },
+  { id: 'torah', title: 'תורה' },
+  { id: 'avoda', title: 'עבודה' },
+  { id: 'bitachon', title: 'בטחון' },
+  { id: 'simcha', title: 'שמחה' },
 ]
 
 export default function SeferHaMidotScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState(null)
-  const [categoryContent, setCategoryContent] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [bookIndex, setBookIndex] = useState(null)
-  const [loadingIndex, setLoadingIndex] = useState(true)
 
-  // נסה לטעון את המבנה של הספר מ-Sefaria
-  useEffect(() => {
-    const loadBookIndex = async () => {
-      try {
-        // ננסה מספר אפשרויות
-        const possibleNames = [
-          'Sefer HaMidot',
-          'Sefer_HaMidot',
-          'Likutei Moharan',
-          'Sefer Hamidot'
-        ]
-        
-        for (const name of possibleNames) {
-          try {
-            const index = await getIndex(name)
-            console.log('✅ Found book index:', name)
-            setBookIndex(index)
-            break
-          } catch (e) {
-            console.log('❌ Not found:', name)
-          }
-        }
-      } catch (error) {
-        console.error('Error loading book index:', error)
-      } finally {
-        setLoadingIndex(false)
-      }
-    }
-    
-    loadBookIndex()
-  }, [])
-
-  const handleCategoryPress = async (category) => {
+  const handleCategoryPress = (category) => {
     setSelectedCategory(category)
-    setLoading(true)
-    setCategoryContent(null)
-
-    try {
-      // ננסה כל אפשרות tref עד שזה יעבוד
-      let textData = null
-      let lastError = null
-      
-      for (const tref of category.trefOptions) {
-        try {
-          console.log(`Trying tref: ${tref}`)
-          textData = await getText(tref, { lang: 'he' })
-          console.log(`✅ Success with tref: ${tref}`)
-          break
-        } catch (error) {
-          console.log(`❌ Failed with tref: ${tref}`, error.message)
-          lastError = error
-          continue
-        }
-      }
-
-      if (textData) {
-        const formatted = formatTextForDisplay(textData)
-        setCategoryContent({
-          title: category.title,
-          content: formatted.hebrew || formatted.content || '',
-          hebrew: formatted.hebrew || formatted.content || '',
-        })
-      } else {
-        // אם לא מצאנו, ננסה דרך ה-index
-        if (bookIndex && bookIndex.sections) {
-          // ננסה למצוא את הקטגוריה במבנה
-          const section = bookIndex.sections.find(s => 
-            s.title === category.title || 
-            s.heTitle === category.title ||
-            s.title?.toLowerCase().includes(category.id)
-          )
-          
-          if (section) {
-            try {
-              const sectionTref = `${bookIndex.title}.${section.title}`
-              textData = await getText(sectionTref, { lang: 'he' })
-              const formatted = formatTextForDisplay(textData)
-              setCategoryContent({
-                title: category.title,
-                content: formatted.hebrew || formatted.content || '',
-                hebrew: formatted.hebrew || formatted.content || '',
-              })
-            } catch (e) {
-              throw lastError || e
-            }
-          } else {
-            throw lastError || new Error('Category not found')
-          }
-        } else {
-          throw lastError || new Error('Could not load content')
-        }
-      }
-    } catch (error) {
-      console.error('Error loading category:', error)
-      Alert.alert(
-        'שגיאה',
-        `לא ניתן לטעון את התוכן של "${category.title}".\n\nנסה שוב מאוחר יותר או בדוק את החיבור לאינטרנט.`,
-        [{ text: 'אישור' }]
-      )
-      setSelectedCategory(null)
-    } finally {
-      setLoading(false)
-    }
   }
 
   const handleBack = () => {
     if (selectedCategory) {
       setSelectedCategory(null)
-      setCategoryContent(null)
     } else {
       navigation.goBack()
     }
   }
 
-  if (selectedCategory && categoryContent) {
+  if (selectedCategory) {
+    const content = MIDOT_CONTENT[selectedCategory.id]
     return (
       <SafeAreaView style={styles.container}>
         <AppHeader
-          title={categoryContent.title || selectedCategory.title}
+          title={content.title}
           showBackButton={true}
           onBackPress={handleBack}
         />
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           <View style={styles.categoryHeader}>
-            <Text style={styles.categoryTitle}>{selectedCategory.title}</Text>
+            <Text style={styles.categoryTitle}>{content.title}</Text>
             <View style={styles.divider} />
           </View>
           
           <View style={styles.textContainer}>
-            <Text style={styles.textContent}>{categoryContent.hebrew || categoryContent.content}</Text>
+            <Text style={styles.textContent}>{content.content}</Text>
           </View>
         </ScrollView>
-      </SafeAreaView>
-    )
-  }
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <AppHeader
-          title="ספר המידות"
-          subtitle="לרבי נחמן מברסלב"
-          showBackButton={true}
-          onBackPress={() => navigation.goBack()}
-        />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={PRIMARY_BLUE} />
-          <Text style={styles.loadingText}>טוען תוכן...</Text>
-        </View>
       </SafeAreaView>
     )
   }
@@ -299,17 +283,6 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingBottom: 100,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Heebo_400Regular',
-    color: DEEP_BLUE,
   },
   introText: {
     fontSize: 16,

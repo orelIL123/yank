@@ -43,6 +43,13 @@ class SimpleCache {
   }
 
   /**
+   * Delete a specific key (alias for clear)
+   */
+  delete(key) {
+    this.cache.delete(key)
+  }
+
+  /**
    * Clear all cache
    */
   clearAll() {
