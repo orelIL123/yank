@@ -82,10 +82,15 @@ const translations = {
   },
 }
 
-// Get current locale
+// Get current locale - FORCED TO HEBREW
 export const getLocale = () => {
-  const locale = Localization.getLocales()[0]?.languageCode || 'he'
-  return locale === 'he' || locale === 'fr' || locale === 'en' ? locale : 'he'
+  // Always return Hebrew for now
+  // TODO: Add user preference for language selection
+  return 'he'
+  
+  // Original code (commented out):
+  // const locale = Localization.getLocales()[0]?.languageCode || 'he'
+  // return locale === 'he' || locale === 'fr' || locale === 'en' ? locale : 'he'
 }
 
 // Translate function
@@ -102,6 +107,7 @@ export const getAllTranslations = (key) => {
     en: translations.en[key] || key,
   }
 }
+
 
 
 
