@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Linking, Alert } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import AppHeader from '../components/AppHeader'
 import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -118,20 +118,15 @@ export default function BooksScreen({ navigation }) {
     }
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: '#FF0000' }]}>
+        <View style={styles.container}>
             <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
 
-            <View style={styles.header}>
-                <Pressable
-                    style={styles.backBtn}
-                    onPress={() => navigation.goBack()}
-                    accessibilityRole="button"
-                >
-                    <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-                </Pressable>
-                <Text style={styles.headerTitle}>חנות</Text>
-                <View style={{ width: 36 }} />
-            </View>
+            <AppHeader
+                title="חנות קודש"
+                subtitle="ספרים ומוצרים"
+                showBackButton={true}
+                onBackPress={() => navigation.goBack()}
+            />
 
             {loading ? (
                 <View style={styles.loadingContainer}>
@@ -151,7 +146,7 @@ export default function BooksScreen({ navigation }) {
                     }
                 />
             )}
-        </SafeAreaView>
+        </View>
     )
 }
 
@@ -159,30 +154,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: BG,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingTop: 12,
-        paddingBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(11,27,58,0.05)',
-        backgroundColor: BG,
-    },
-    backBtn: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(30,58,138,0.05)',
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontFamily: 'Poppins_600SemiBold',
-        color: PRIMARY_BLUE,
     },
     loadingContainer: {
         flex: 1,

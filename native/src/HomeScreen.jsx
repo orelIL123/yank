@@ -695,6 +695,36 @@ export default function HomeScreen({ navigation, userRole }) {
               ))}
           </View>
 
+          {/* Sefer HaMidot Card - Above Daily Quote */}
+          <TouchableOpacity
+            style={styles.seferHaMidotCard}
+            activeOpacity={0.85}
+            onPress={() => {
+              console.log('✅ Sefer HaMidot card pressed')
+              navigation?.navigate('SeferHaMidot')
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="ספר המידות"
+          >
+            <LinearGradient
+              colors={['#8B4513', '#A0522D', '#8B4513']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.seferHaMidotGradient}
+            >
+              <View style={styles.seferHaMidotContent}>
+                <View style={styles.seferHaMidotIcon}>
+                  <Ionicons name="book" size={32} color="#FFD700" />
+                </View>
+                <View style={styles.seferHaMidotText}>
+                  <Text style={styles.seferHaMidotTitle}>ספר המידות</Text>
+                  <Text style={styles.seferHaMidotSubtitle}>לרבי נחמן מברסלב</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#FFD700" />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
           {/* Quote (scroll down) */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -1349,6 +1379,55 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
+  },
+  seferHaMidotCard: {
+    marginTop: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  seferHaMidotGradient: {
+    padding: 20,
+    minHeight: 100,
+  },
+  seferHaMidotContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  seferHaMidotIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,215,0,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,215,0,0.3)',
+  },
+  seferHaMidotText: {
+    flex: 1,
+    marginHorizontal: 16,
+    alignItems: 'flex-end',
+  },
+  seferHaMidotTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontFamily: 'Heebo_700Bold',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  seferHaMidotSubtitle: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    fontFamily: 'Heebo_400Regular',
+    textAlign: 'right',
   },
   podcastRow: {
     gap: 10,

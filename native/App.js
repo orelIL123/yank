@@ -44,6 +44,7 @@ import ParshiotHaNasiimScreen from './src/screens/ParshiotHaNasiimScreen'
 import ManagePermissionsScreen from './src/screens/ManagePermissionsScreen'
 import PersonalDetailsScreen from './src/screens/PersonalDetailsScreen'
 import HelpSupportScreen from './src/screens/HelpSupportScreen'
+import SeferHaMidotScreen from './src/screens/SeferHaMidotScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
@@ -381,6 +382,7 @@ export default function App() {
             {(props) => <MiBeitRabeinuScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="ParshiotHaNasiim" component={ParshiotHaNasiimScreen} />
+          <Stack.Screen name="SeferHaMidot" component={SeferHaMidotScreen} />
           <Stack.Screen name="ManagePermissions" component={ManagePermissionsScreen} />
 
           {/* Admin screen - only for admins */}

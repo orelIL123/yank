@@ -214,6 +214,20 @@ export default function MusicScreen({ navigation }) {
     }
   }, []);
 
+  const handleRandomSong = useCallback(() => {
+    if (songs.length === 0) {
+      Alert.alert('אין ניגונים', 'אין ניגונים זמינים כרגע');
+      return;
+    }
+
+    // Choose a random song
+    const randomIndex = Math.floor(Math.random() * songs.length);
+    const randomSong = songs[randomIndex];
+    
+    console.log('Playing random song:', randomSong.title);
+    handlePlaySong(randomSong);
+  }, [songs, handlePlaySong]);
+
   return (
     <View style={styles.container}>
       <AppHeader
@@ -221,6 +235,8 @@ export default function MusicScreen({ navigation }) {
         subtitle="ניגוני הגאון הינוקא"
         onBackPress={() => navigation.goBack()}
         showBackButton={false}
+        leftIcon="shuffle"
+        onLeftIconPress={handleRandomSong}
         rightIcon={isAdmin ? 'add' : undefined}
         onRightIconPress={isAdmin ? () => navigation?.navigate('Admin') : undefined}
       />
@@ -290,6 +306,25 @@ export default function MusicScreen({ navigation }) {
                     <Ionicons name="stop" size={20} color="#fff" />
                   </TouchableOpacity>
                 </View>
+              )}
+
+              {/* Random Song Button */}
+              {songs.length > 0 && (
+                <TouchableOpacity
+                  style={styles.randomButton}
+                  onPress={handleRandomSong}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={['#8b5cf6', '#6366f1']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.randomButtonGradient}
+                  >
+                    <Ionicons name="shuffle" size={20} color="#fff" />
+                    <Text style={styles.randomButtonText}>ניגון אקראי</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               )}
 
               {songs.map((song, index) => (
@@ -668,6 +703,30 @@ const styles = StyleSheet.create({
     top: 10,
     right: 10,
     zIndex: 10,
+  },
+  randomButton: {
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  randomButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  randomButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+    letterSpacing: 0.5,
   },
 });
 

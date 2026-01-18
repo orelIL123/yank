@@ -481,16 +481,16 @@ class DatabaseService {
   }
 
   /**
-   * Update app config
+   * Update app config (using UPSERT to handle missing row)
    */
   async updateAppConfig(updates) {
     const { data, error } = await supabase
       .from('app_config')
-      .update({
+      .upsert({
+        id: 'config',
         ...updates,
         updated_at: new Date().toISOString()
       })
-      .eq('id', 'config')
       .select()
       .single()
 
