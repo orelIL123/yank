@@ -1,8 +1,7 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, FlatList, Pressable, Animated, Platform, Dimensions, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator, Modal, TextInput } from 'react-native'
+import React, { useState, useEffect } from 'react'
+import { View, Text, StyleSheet, Pressable, Animated, Platform, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator, Modal, TextInput } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { Grayscale } from 'react-native-color-matrix-image-filters'
 import { Audio } from 'expo-av'
 import MenuDrawer from './components/MenuDrawer'
 import AppHeader from './components/AppHeader'
@@ -15,16 +14,18 @@ const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 const BLACK = '#000000'
 
-// Default cards fallback
+// Default cards fallback (HomeScreen)
+// Keep this list aligned with the HomeScreen grid + key navigation.
 const DEFAULT_CARDS = [
-  { key: 'books', title: 'ספרים', desc: 'ספרי תורה וחידושים', icon: 'book-outline', image: require('../assets/photos/cards/books.jpg'), gradient: ['#667eea', '#764ba2'], size: 'large' },
-  { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/prayer.png'), gradient: ['#f093fb', '#f5576c'], size: 'large' },
-  { key: 'newsletters', title: 'עלונים', desc: 'עלונים להורדה וצפייה', icon: 'document-text-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
-  { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
+  { key: 'music', title: 'ניגונים', desc: 'ניגונים ושירים', icon: 'musical-notes-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
+  { key: 'learningLibrary', title: 'שיעורים', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#667eea', '#764ba2'], size: 'small' },
+  { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/prayer.png'), gradient: ['#f093fb', '#f5576c'], size: 'small' },
+  { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/books.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
   { key: 'yeshiva', title: 'מהנעשה בבית המדרש', desc: 'עדכונים וחדשות', icon: 'school-outline', image: require('../assets/photos/cards/yeshiva.png'), gradient: ['#30cfd0', '#330867'], size: 'small' },
-  { key: 'tzadikim', title: 'ספר תולדות אדם', desc: 'אלפי תמונות ומידע', icon: 'people-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#a8edea', '#fed6e3'], size: 'large' },
-  { key: 'learningLibrary', title: 'ספריית לימוד', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#667eea', '#764ba2'], size: 'large' },
+  { key: 'kodeshStore', title: 'חנות קודש', desc: 'ספרים ומוצרים', icon: 'cart-outline', image: require('../assets/photos/cards/books.jpg'), gradient: ['#f59e0b', '#ef4444'], size: 'small' },
 ]
+
+const HOME_GRID_KEYS = ['music', 'learningLibrary', 'prayers', 'dailyLearning', 'yeshiva', 'kodeshStore']
 
 // Carousel image order
 const IMAGES = [
@@ -34,112 +35,9 @@ const IMAGES = [
   require('../assets/photos/cards/yeshiva.png'),
 ]
 
-function useFadeIn(delay = 0) {
-  const anim = useMemo(() => new Animated.Value(0), [])
-  React.useEffect(() => {
-    Animated.timing(anim, { toValue: 1, duration: 600, delay, useNativeDriver: true }).start()
-  }, [anim, delay])
-  return anim
-}
-
-
-function Card({ item, index, scrollX, SNAP, CARD_WIDTH, CARD_HEIGHT, OVERLAP, onPress }) {
-  const fade = useFadeIn(index * 80)
-  const pressAnim = React.useRef(new Animated.Value(0)).current
-
-  const onPressIn = () => Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 10 }).start()
-  const onPressOut = () => Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 10 }).start()
-
-  const inputRange = [(index - 1) * SNAP, index * SNAP, (index + 1) * SNAP]
-  const animatedStyle = {
-    opacity: fade,
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    transform: [
-      { translateY: scrollX.interpolate({ inputRange, outputRange: [12, -8, 12], extrapolate: 'clamp' }) },
-      { scale: scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: 'clamp' }) },
-      { perspective: 900 },
-      { rotateY: scrollX.interpolate({ inputRange, outputRange: ['12deg', '0deg', '-12deg'], extrapolate: 'clamp' }) },
-      { rotateZ: scrollX.interpolate({ inputRange, outputRange: ['2deg', '0deg', '-2deg'], extrapolate: 'clamp' }) },
-      { scale: pressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.985] }) },
-    ],
-  }
-
-  const imageStyle = [StyleSheet.absoluteFill, item?.imageScale ? { transform: [{ scale: item.imageScale }] } : null]
-
-  return (
-    <View style={[styles.cardItemContainer, { width: CARD_WIDTH, marginRight: -OVERLAP }]}>
-      <View style={styles.cardLabelContainer}>
-        <Text style={[styles.cardLabelTitle, { textAlign: 'right' }]}>{item.title}</Text>
-        <Text style={[styles.cardLabelDesc, { textAlign: 'right' }]} numberOfLines={2}>{item.desc}</Text>
-      </View>
-      <Pressable
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        onPress={() => {
-          if (item.locked) {
-            Alert.alert('תוכן נעול', 'התוכן מיועד למשתמשים רשומים בלבד')
-            return
-          }
-          onPress?.(item)
-        }}
-        style={styles.cardPressable}
-        accessibilityRole="button"
-        accessibilityLabel={`${item.title} - ${item.desc}`}
-      >
-        <Animated.View style={[styles.card, animatedStyle]} pointerEvents="box-none">
-          {(() => {
-            // Determine image source: priority: imageUrl > image (require/built-in) > fallback
-            let imageSource = null;
-            if (item.imageUrl) {
-              // Use Firestore imageUrl if available
-              imageSource = { uri: item.imageUrl };
-            } else if (item.image) {
-              // Use built-in require() image
-              imageSource = item.image;
-            } else if (item.builtInImage) {
-              // Fallback to built-in image from defaultCard
-              imageSource = item.builtInImage;
-            } else {
-              // Last resort: use IMAGES array
-              imageSource = IMAGES[index % IMAGES.length];
-            }
-            
-            return imageSource ? (
-              <ImageBackground
-                source={imageSource}
-                resizeMode="cover"
-                style={StyleSheet.absoluteFill}
-                imageStyle={imageStyle}
-                pointerEvents="none"
-              />
-            ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: item.gradient?.[0] || PRIMARY_BLUE }]} pointerEvents="none" />
-            );
-          })()}
-          <LinearGradient
-            colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.0)']}
-            locations={[0, 0.45]}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        </Animated.View>
-      </Pressable>
-    </View>
-  )
-}
-
 export default function HomeScreen({ navigation, userRole }) {
   const isAdmin = userRole === 'admin'
-  const { width } = Dimensions.get('window')
-  const SPACING = 12
-  const CARD_WIDTH = Math.min(width * 0.68, 340)
-  const CARD_HEIGHT = Math.round(CARD_WIDTH * (16 / 9))
-  const OVERLAP = 64
-  const SNAP = CARD_WIDTH - OVERLAP
-  const sideInset = (width - CARD_WIDTH) / 2
 
-  const scrollX = React.useRef(new Animated.Value(0)).current
   const [activeTab, setActiveTab] = React.useState('home')
   const pulse = React.useRef(new Animated.Value(0)).current
 
@@ -241,14 +139,64 @@ export default function HomeScreen({ navigation, userRole }) {
   useEffect(() => {
     const loadHomeData = async () => {
       try {
+        const normalizeCards = (inputCards) => {
+          if (!Array.isArray(inputCards)) return []
+          const normalized = inputCards
+            .map((data) => {
+              const key = data?.key
+              const defaultCard = DEFAULT_CARDS.find((c) => c.key === key)
+              if (!key) return null
+
+              const title = (typeof data?.title === 'string' && data.title.trim())
+                ? data.title.trim()
+                : (defaultCard?.title || '')
+
+              const desc = (typeof data?.desc === 'string' && data.desc.trim())
+                ? data.desc.trim()
+                : (defaultCard?.desc || '')
+
+              const icon = (typeof data?.icon === 'string' && data.icon.trim())
+                ? data.icon.trim()
+                : (defaultCard?.icon || 'apps-outline')
+
+              const gradient = Array.isArray(data?.gradient) && data.gradient.length >= 2
+                ? data.gradient
+                : (defaultCard?.gradient || ['#667eea', '#764ba2'])
+
+              const size = (data?.size === 'large' || data?.size === 'small')
+                ? data.size
+                : (defaultCard?.size || 'small')
+
+              const image = data?.imageUrl
+                ? { uri: data.imageUrl }
+                : (data?.image || defaultCard?.image || null)
+
+              return {
+                ...defaultCard,
+                ...data,
+                key,
+                title,
+                desc,
+                icon,
+                gradient,
+                size,
+                image,
+                builtInImage: defaultCard?.image || null,
+              }
+            })
+            .filter(Boolean)
+
+          return normalized.length ? normalized : DEFAULT_CARDS
+        }
+
         // Check cache first (30 min TTL)
         const cachedCards = cache.get('homeCards')
         const cachedSongs = cache.get('homeSongs')
 
         if (cachedCards && cachedSongs) {
           console.log('Using cached home data')
-          setCards(cachedCards)
-          setSongs(cachedSongs)
+          setCards(normalizeCards(cachedCards))
+          setSongs(Array.isArray(cachedSongs) ? cachedSongs : [])
           setCardsLoading(false)
           setSongsLoading(false)
           return
@@ -267,21 +215,15 @@ export default function HomeScreen({ navigation, userRole }) {
         ])
 
         // Process cards
+        // IMPORTANT: Firestore docs for `homeCards` might include only { key, isActive, order }
+        // If we don't backfill missing fields (title/desc/icon), HomeScreen can crash in production
+        // (e.g. Ionicons receiving an invalid/undefined icon name) and appear as a blank screen.
         let processedCards
         if (!cardsData || cardsData.length === 0) {
           console.log('No cards found in database, using defaults')
           processedCards = DEFAULT_CARDS
         } else {
-          processedCards = cardsData.map(data => {
-            const defaultCard = DEFAULT_CARDS.find(c => c.key === data.key)
-            return {
-              ...data,
-              gradient: defaultCard?.gradient || ['#667eea', '#764ba2'],
-              size: defaultCard?.size || 'small',
-              image: data.imageUrl ? { uri: data.imageUrl } : (defaultCard?.image || null),
-              builtInImage: defaultCard?.image || null
-            }
-          })
+          processedCards = normalizeCards(cardsData)
           console.log('Loaded cards from database:', processedCards.length)
         }
 
@@ -518,11 +460,15 @@ export default function HomeScreen({ navigation, userRole }) {
   }, [])
 
   const handleCardPress = React.useCallback((key) => {
+    if (key === 'music') {
+      navigation?.navigate('Music')
+      return
+    }
     if (key === 'dailyLearning') {
       navigation?.navigate('DailyLearning')
       return
     }
-    if (key === 'books') {
+    if (key === 'kodeshStore') {
       navigation?.navigate('Books')
       return
     }
@@ -530,16 +476,8 @@ export default function HomeScreen({ navigation, userRole }) {
       navigation?.navigate('Prayers')
       return
     }
-    if (key === 'newsletters') {
-      navigation?.navigate('Newsletters')
-      return
-    }
     if (key === 'yeshiva') {
       navigation?.navigate('MiBeitRabeinu')
-      return
-    }
-    if (key === 'tzadikim') {
-      navigation?.navigate('Tzadikim')
       return
     }
     if (key === 'shortLessons') {
@@ -587,35 +525,137 @@ export default function HomeScreen({ navigation, userRole }) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.FlatList
-            data={cardsLoading ? DEFAULT_CARDS : cards}
-            keyExtractor={(it) => it.key}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={SNAP}
-            decelerationRate="fast"
-            bounces={false}
-            contentContainerStyle={{ paddingHorizontal: sideInset, paddingVertical: 4 }}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-              { useNativeDriver: true }
-            )}
-            scrollEventThrottle={16}
-            renderItem={({ item, index }) => (
-              <Card
-                item={item}
-                index={index}
-                scrollX={scrollX}
-                SNAP={SNAP}
-                CARD_WIDTH={CARD_WIDTH}
-                CARD_HEIGHT={CARD_HEIGHT}
-                OVERLAP={OVERLAP}
-                onPress={() => handleCardPress(item.key)}
-              />
-            )}
-          />
+          {/* Hero (Main Topic) */}
+          <Pressable
+            style={styles.heroCard}
+            onPress={() => { }}
+            accessibilityRole="button"
+            accessibilityLabel="הנושא המרכזי"
+          >
+            <View style={styles.heroCardInner}>
+              <Text style={styles.heroTitle}>הנושא המרכזי</Text>
+              <Text style={styles.heroSubtitle} numberOfLines={2}>
+                (לבחירה) בינתיים כותרת בלבד
+              </Text>
+            </View>
+          </Pressable>
 
-          {/* Quote */}
+          {/* Pidyon Nefesh (ticker under hero) */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Pressable
+                onPress={() => navigation?.navigate('PidyonNefesh')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.sectionLinkText}>עוד →</Text>
+              </Pressable>
+              <Text style={styles.sectionTitle}>שמות לברכה (פדיון נפש)</Text>
+            </View>
+
+            {pidyonLoading ? (
+              <View style={styles.pidyonLoadingContainer}>
+                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+              </View>
+            ) : pidyonList.length > 0 ? (
+              <View style={styles.pidyonContainer}>
+                <ScrollView
+                  ref={pidyonScrollRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  style={styles.pidyonScrollView}
+                  contentContainerStyle={styles.pidyonScrollContent}
+                  onScroll={(e) => {
+                    pidyonScrollPosition.current = e.nativeEvent.contentOffset.x
+                  }}
+                  scrollEnabled={false}
+                >
+                  {[...pidyonList, ...pidyonList, ...pidyonList].map((pidyon, idx) => (
+                    <View key={`${pidyon.id}-${idx}`} style={styles.pidyonCardInline}>
+                      <View style={styles.pidyonIconWrapper}>
+                        <Ionicons name="heart" size={20} color={PRIMARY_BLUE} />
+                      </View>
+                      <View style={styles.pidyonTextInline}>
+                        <Text style={styles.pidyonNameInline} numberOfLines={1}>
+                          {pidyon.user_name || pidyon.name}
+                        </Text>
+                        {pidyon.motherName && (
+                          <Text style={styles.pidyonMotherNameInline} numberOfLines={1}>
+                            בן/בת {pidyon.motherName}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : (
+              <View style={styles.pidyonEmptyContainer}>
+                <Text style={styles.pidyonEmptyText}>עדיין אין שמות להצגה</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Home Grid (ordered) */}
+          <View style={styles.cardGrid}>
+            {(cardsLoading ? DEFAULT_CARDS : (Array.isArray(cards) && cards.length ? cards : DEFAULT_CARDS))
+              .filter((c) => HOME_GRID_KEYS.includes(c.key))
+              .sort((a, b) => HOME_GRID_KEYS.indexOf(a.key) - HOME_GRID_KEYS.indexOf(b.key))
+              .map((item, index) => (
+                <Pressable
+                  key={item.key}
+                  style={[styles.flatCard, styles.flatCardSmall]}
+                  onPress={() => handleCardPress(item.key)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.title} - ${item.desc}`}
+                >
+                  {(() => {
+                    let imageSource = null
+                    if (item.imageUrl) {
+                      imageSource = { uri: item.imageUrl }
+                    } else if (item.image) {
+                      imageSource = item.image
+                    } else if (item.builtInImage) {
+                      imageSource = item.builtInImage
+                    } else {
+                      imageSource = IMAGES[index % IMAGES.length]
+                    }
+
+                    return imageSource ? (
+                      <ImageBackground
+                        pointerEvents="none"
+                        source={imageSource}
+                        resizeMode="cover"
+                        style={StyleSheet.absoluteFill}
+                        imageStyle={{ opacity: 0.15, borderRadius: 16 }}
+                      />
+                    ) : null
+                  })()}
+
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={item.gradient || ['#667eea', '#764ba2']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[StyleSheet.absoluteFill, { opacity: 0.1, borderRadius: 16 }]}
+                  />
+
+                  <View style={styles.flatCardContent}>
+                    <View style={styles.flatCardIcon}>
+                      <Ionicons
+                        name={typeof item.icon === 'string' && item.icon.trim() ? item.icon : 'apps-outline'}
+                        size={28}
+                        color={item.gradient?.[0] || PRIMARY_BLUE}
+                      />
+                    </View>
+                    <Text style={styles.flatCardTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.flatCardDesc} numberOfLines={2}>{item.desc}</Text>
+                  </View>
+                </Pressable>
+              ))}
+          </View>
+
+          {/* Quote (scroll down) */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               {isAdmin && (
@@ -623,7 +663,7 @@ export default function HomeScreen({ navigation, userRole }) {
                   <Ionicons name="create-outline" size={18} color={PRIMARY_BLUE} />
                 </Pressable>
               )}
-              <Text style={styles.sectionTitle}>בלייר עליון</Text>
+              <Text style={styles.sectionTitle}>ציטוט יומי</Text>
             </View>
             {quoteLoading ? (
               <View style={styles.quoteCard}>
@@ -645,167 +685,7 @@ export default function HomeScreen({ navigation, userRole }) {
             )}
           </View>
 
-          {/* Niggunim / Music */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Pressable
-                onPress={() => navigation?.navigate('Music')}
-                accessibilityRole="button"
-              >
-                <Text style={styles.sectionLinkText}>עוד →</Text>
-              </Pressable>
-              <Text style={styles.sectionTitle}>ניגונים</Text>
-            </View>
-            {songsLoading ? (
-              <View style={styles.songsLoadingContainer}>
-                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
-              </View>
-            ) : songs.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.podcastRow}>
-                {songs.map((song) => (
-                  <View
-                    key={song.id}
-                    style={[
-                      styles.podcastCard,
-                      playingSongId === song.id && styles.podcastCardPlaying
-                    ]}
-                  >
-                    <Pressable
-                      style={styles.podcastCardContent}
-                      onPress={() => navigation?.navigate('Music')}
-                      accessibilityRole="button"
-                    >
-                      {song.imageUrl ? (
-                        <View style={styles.songImageWrapper}>
-                          <Image
-                            source={{ uri: song.imageUrl }}
-                            style={styles.songPreviewImage}
-                            resizeMode="cover"
-                          />
-                          {playingSongId === song.id && isPlaying && (
-                            <View style={styles.playingOverlay}>
-                              <Ionicons name="musical-notes" size={16} color="#fff" />
-                            </View>
-                          )}
-                        </View>
-                      ) : (
-                        <View style={styles.songIconWrapper}>
-                          <Ionicons 
-                            name={playingSongId === song.id && isPlaying ? "musical-notes" : "musical-notes-outline"} 
-                            size={34} 
-                            color={playingSongId === song.id ? PRIMARY_BLUE : PRIMARY_BLUE} 
-                          />
-                        </View>
-                      )}
-                      <Text style={[
-                        styles.podcastTitle,
-                        playingSongId === song.id && styles.podcastTitlePlaying
-                      ]} numberOfLines={1}>{song.title}</Text>
-                      <Text style={styles.podcastDesc} numberOfLines={1}>{song.description || 'ניגון'}</Text>
-                    </Pressable>
-                    {song.audioUrl && song.audioUrl.trim() ? (
-                      <Pressable
-                        style={[
-                          styles.playButton,
-                          playingSongId === song.id && isPlaying && styles.playButtonActive
-                        ]}
-                        onPress={() => handlePlaySong(song)}
-                        accessibilityRole="button"
-                        accessibilityLabel={playingSongId === song.id && isPlaying ? "עצור" : "נגן"}
-                      >
-                        <Ionicons 
-                          name={playingSongId === song.id && isPlaying ? "pause" : "play"} 
-                          size={20} 
-                          color="#fff" 
-                        />
-                      </Pressable>
-                    ) : song.youtubeId ? (
-                      <Pressable
-                        style={[styles.playButton, styles.playButtonYoutube]}
-                        onPress={() => navigation?.navigate('Music')}
-                        accessibilityRole="button"
-                        accessibilityLabel="פתח במסך ניגונים"
-                      >
-                        <Ionicons name="logo-youtube" size={20} color="#fff" />
-                      </Pressable>
-                    ) : (
-                      <Pressable
-                        style={[styles.playButton, styles.playButtonDisabled]}
-                        onPress={() => navigation?.navigate('Music')}
-                        accessibilityRole="button"
-                        accessibilityLabel="פתח במסך ניגונים"
-                      >
-                        <Ionicons name="arrow-forward" size={18} color="#fff" />
-                      </Pressable>
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={styles.songsEmptyContainer}>
-                <Ionicons name="musical-notes-outline" size={32} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-                <Text style={styles.songsEmptyText}>אין ניגונים זמינים כרגע</Text>
-              </View>
-            )}
-          </View>
-
-
-          {/* Pidyon Nefesh Section with Auto-scrolling */}
-          {pidyonList.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Pressable
-                  onPress={() => navigation?.navigate('PidyonNefesh')}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.sectionLinkText}>עוד →</Text>
-                </Pressable>
-                <Text style={styles.sectionTitle}>פדיון נפש</Text>
-              </View>
-              {pidyonLoading ? (
-                <View style={styles.pidyonLoadingContainer}>
-                  <ActivityIndicator size="small" color={PRIMARY_BLUE} />
-                </View>
-              ) : (
-                <View style={styles.pidyonContainer}>
-                  <ScrollView
-                    ref={pidyonScrollRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    scrollEventThrottle={16}
-                    style={styles.pidyonScrollView}
-                    contentContainerStyle={styles.pidyonScrollContent}
-                    onScroll={(e) => {
-                      // Update position for seamless loop
-                      pidyonScrollPosition.current = e.nativeEvent.contentOffset.x
-                    }}
-                    scrollEnabled={false} // Disable manual scrolling, only auto-scroll
-                  >
-                    {/* Render list multiple times for seamless infinite loop */}
-                    {[...pidyonList, ...pidyonList, ...pidyonList].map((pidyon, idx) => (
-                      <View key={`${pidyon.id}-${idx}`} style={styles.pidyonCardInline}>
-                        <View style={styles.pidyonIconWrapper}>
-                          <Ionicons name="heart" size={20} color={PRIMARY_BLUE} />
-                        </View>
-                        <View style={styles.pidyonTextInline}>
-                          <Text style={styles.pidyonNameInline} numberOfLines={1}>
-                            {pidyon.user_name || pidyon.name}
-                          </Text>
-                          {pidyon.motherName && (
-                            <Text style={styles.pidyonMotherNameInline} numberOfLines={1}>
-                              בן/בת {pidyon.motherName}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Social Media Links */}
+          {/* Social Media Links (under quote) */}
           <View style={styles.socialSection}>
             <Text style={styles.socialSectionTitle}>עקבו אחרינו</Text>
             <View style={styles.socialRow}>
@@ -851,7 +731,7 @@ export default function HomeScreen({ navigation, userRole }) {
             </View>
           </View>
 
-          {/* קח חלק Button */}
+          {/* Take Part (donation CTA) */}
           <View style={styles.takePartContainer}>
             <Pressable
               style={styles.takePartButton}
@@ -870,6 +750,46 @@ export default function HomeScreen({ navigation, userRole }) {
               </LinearGradient>
             </Pressable>
           </View>
+
+          {/* Last topic + manage pidyon (bottom) */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Pressable onPress={() => navigation?.navigate('News')} accessibilityRole="button">
+                <Text style={styles.sectionLinkText}>עוד →</Text>
+              </Pressable>
+              <Text style={styles.sectionTitle}>נושא אחרון באתר</Text>
+            </View>
+            <Pressable
+              style={styles.lastTopicCard}
+              onPress={() => navigation?.navigate('News')}
+              accessibilityRole="button"
+              accessibilityLabel="נושא אחרון באתר"
+            >
+              <Text style={styles.lastTopicTitle}>נושא אחרון באתר</Text>
+              <Text style={styles.lastTopicSubtitle}>בינתיים טקסט זמני — נחליף לתמונה/כותרת אחר כך</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Pressable onPress={() => navigation?.navigate('PidyonNefesh')} accessibilityRole="button">
+                <Text style={styles.sectionLinkText}>פתח →</Text>
+              </Pressable>
+              <Text style={styles.sectionTitle}>פדיון נפש (ניהול שמות)</Text>
+            </View>
+            <Pressable
+              style={styles.managePidyonCard}
+              onPress={() => navigation?.navigate('PidyonNefesh')}
+              accessibilityRole="button"
+              accessibilityLabel="פתח פדיון נפש"
+            >
+              <Ionicons name="heart" size={20} color={PRIMARY_BLUE} />
+              <Text style={styles.managePidyonText}>הוסף / ערוך שמות לפדיון נפש</Text>
+            </Pressable>
+          </View>
+
+          {/* Social Media Links */}
+          {/* (moved above) */}
 
         </ScrollView>
       </View>
@@ -954,13 +874,13 @@ export default function HomeScreen({ navigation, userRole }) {
 
         <Pressable
           accessibilityRole="button"
-          onPress={() => { setActiveTab('piano'); navigation?.navigate('Piano') }}
+          onPress={() => { setActiveTab('lessons'); navigation?.navigate('LearningLibrary') }}
           style={styles.navItemPressable}
         >
           <View style={styles.iconBox}>
-            <Ionicons name="musical-notes" size={22} color={activeTab === 'piano' ? PRIMARY_BLUE : '#B3B3B3'} />
+            <Ionicons name="library-outline" size={22} color={activeTab === 'lessons' ? PRIMARY_BLUE : '#B3B3B3'} />
           </View>
-          <Text style={[styles.navLabel, { color: activeTab === 'piano' ? PRIMARY_BLUE : '#B3B3B3' }]}>פסנתר</Text>
+          <Text style={[styles.navLabel, { color: activeTab === 'lessons' ? PRIMARY_BLUE : '#B3B3B3' }]}>שיעורים</Text>
         </Pressable>
 
         {/* CENTER - Music (Featured Button) */}
@@ -1012,6 +932,41 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: BG,
+  },
+  heroCard: {
+    marginTop: 10,
+    marginHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.10)',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    overflow: 'hidden',
+    minHeight: 150,
+  },
+  heroCardInner: {
+    padding: 20,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minHeight: 150,
+  },
+  heroTitle: {
+    color: DEEP_BLUE,
+    fontSize: 24,
+    fontFamily: 'Heebo_700Bold',
+    textAlign: 'right',
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    textAlign: 'right',
+    lineHeight: 20,
   },
   header: {
     paddingTop: Platform.select({ ios: 48, android: 34, default: 42 }),
@@ -1080,7 +1035,127 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 92,
-    gap: 20,
+  },
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    justifyContent: 'space-between',
+  },
+  flatCard: {
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 12,
+  },
+  flatCardSmall: {
+    // 3 cards per row
+    width: '31.5%',
+    minHeight: 110,
+  },
+  flatCardLarge: {
+    width: '100%',
+    minHeight: 160,
+  },
+  flatCardContent: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Percentage heights can fail unless the parent has an explicit height.
+    // This caused card content (icon/title/desc) to disappear on some builds,
+    // leaving only the faint ImageBackground visible.
+    flex: 1,
+    width: '100%',
+    position: 'relative',
+    zIndex: 2,
+  },
+  flatCardIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  flatCardTitle: {
+    color: DEEP_BLUE,
+    fontSize: 16,
+    fontFamily: 'Heebo_700Bold',
+    marginBottom: 6,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  flatCardDesc: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  lastTopicCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  lastTopicTitle: {
+    color: DEEP_BLUE,
+    fontSize: 16,
+    fontFamily: 'Heebo_700Bold',
+    textAlign: 'right',
+    marginBottom: 6,
+  },
+  lastTopicSubtitle: {
+    color: '#6b7280',
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+  managePidyonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    justifyContent: 'flex-end',
+  },
+  managePidyonText: {
+    color: DEEP_BLUE,
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    textAlign: 'right',
+    flex: 1,
   },
   grid: {
   },
