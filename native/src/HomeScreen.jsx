@@ -391,12 +391,8 @@ export default function HomeScreen({ navigation, userRole }) {
     loadPidyonList()
   }, [])
 
-  // Auto-scroll pidyon names - TEMPORARILY DISABLED FOR DEBUG
+  // Auto-scroll pidyon names - OPTIMIZED VERSION
   useEffect(() => {
-    console.log('⚠️ Pidyon auto-scroll DISABLED for debugging touch issues')
-    return () => {}
-    
-    /* ORIGINAL CODE - DISABLED
     if (pidyonList.length === 0 || pidyonLoading || !pidyonScrollRef.current) return
 
     // Clear any existing interval
@@ -420,14 +416,14 @@ export default function HomeScreen({ navigation, userRole }) {
           
           pidyonScrollRef.current.scrollTo({
             x: pidyonScrollPosition.current,
-            animated: true,
+            animated: false, // Changed to false for better performance
           })
         }
-      }, 50) // Update every 50ms for smooth scrolling
+      }, 30) // Optimized to 30ms (smoother than 50ms, less CPU than before)
     }
 
     // Wait a bit before starting scroll
-    const timeout = setTimeout(startAutoScroll, 1000)
+    const timeout = setTimeout(startAutoScroll, 1500)
     
     return () => {
       clearTimeout(timeout)
@@ -435,7 +431,6 @@ export default function HomeScreen({ navigation, userRole }) {
         clearInterval(pidyonScrollInterval.current)
       }
     }
-    */
   }, [pidyonList, pidyonLoading])
 
   // Load notifications and count unread
@@ -560,19 +555,43 @@ export default function HomeScreen({ navigation, userRole }) {
           scrollEnabled={true}
         >
           {/* Hero (Main Topic) */}
-          <Pressable
+          <TouchableOpacity
             style={styles.heroCard}
-            onPress={() => { }}
+            activeOpacity={0.85}
+            onPress={() => {
+              console.log('🟢 Hero Card (Main Topic) pressed')
+            }}
             accessibilityRole="button"
             accessibilityLabel="הנושא המרכזי"
           >
-            <View style={styles.heroCardInner}>
-              <Text style={styles.heroTitle}>הנושא המרכזי</Text>
-              <Text style={styles.heroSubtitle} numberOfLines={2}>
-                (לבחירה) בינתיים כותרת בלבד
-              </Text>
-            </View>
-          </Pressable>
+            <ImageBackground
+              source={require('../assets/hero-bg.jpg')}
+              resizeMode="cover"
+              style={styles.heroImageBg}
+              imageStyle={{ borderRadius: 18 }}
+            >
+              <LinearGradient
+                colors={['rgba(30,58,138,0.88)', 'rgba(11,27,58,0.95)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroGradientOverlay}
+              >
+                <View style={styles.heroCardInner}>
+                  <View style={styles.heroIconLarge}>
+                    <Ionicons name="book-outline" size={48} color="#FFD700" />
+                  </View>
+                  <Text style={styles.heroTitle}>הנושא המרכזי</Text>
+                  <Text style={styles.heroSubtitle} numberOfLines={2}>
+                    תורת הינוקא שליט״א - חידושים ופנינים
+                  </Text>
+                  <View style={styles.heroButton}>
+                    <Text style={styles.heroButtonText}>לקריאה</Text>
+                    <Ionicons name="arrow-back" size={18} color="#fff" />
+                  </View>
+                </View>
+              </LinearGradient>
+            </ImageBackground>
+          </TouchableOpacity>
 
           {/* Pidyon Nefesh (ticker under hero) */}
           <View style={styles.section}>
@@ -977,36 +996,69 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginHorizontal: 16,
     borderRadius: 18,
-    backgroundColor: '#ffffff',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(11,27,58,0.10)',
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.15,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-    overflow: 'hidden',
-    minHeight: 150,
+    elevation: 8,
+  },
+  heroImageBg: {
+    width: '100%',
+    minHeight: 220,
+  },
+  heroGradientOverlay: {
+    width: '100%',
+    minHeight: 220,
+    borderRadius: 18,
   },
   heroCardInner: {
-    padding: 20,
-    alignItems: 'flex-end',
+    padding: 24,
+    alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 150,
+    minHeight: 220,
+  },
+  heroIconLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,215,0,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(255,215,0,0.3)',
   },
   heroTitle: {
-    color: DEEP_BLUE,
-    fontSize: 24,
+    color: '#fff',
+    fontSize: 26,
     fontFamily: 'Heebo_700Bold',
-    textAlign: 'right',
+    textAlign: 'center',
     marginBottom: 8,
   },
   heroSubtitle: {
-    color: '#6b7280',
-    fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    textAlign: 'right',
-    lineHeight: 20,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
+    fontFamily: 'Heebo_400Regular',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  heroButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,215,0,0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.4)',
+  },
+  heroButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
   },
   header: {
     paddingTop: Platform.select({ ios: 48, android: 34, default: 42 }),
@@ -1129,19 +1181,19 @@ const styles = StyleSheet.create({
   },
   flatCardTitle: {
     color: DEEP_BLUE,
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Heebo_700Bold',
     marginBottom: 4,
     textAlign: 'center',
-    letterSpacing: 0.2,
-    lineHeight: 20,
+    letterSpacing: 0.1,
+    lineHeight: 18,
   },
   flatCardDesc: {
     color: '#6b7280',
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Poppins_400Regular',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   lastTopicCard: {
     backgroundColor: '#ffffff',
@@ -1639,8 +1691,9 @@ const styles = StyleSheet.create({
   navItemPressable: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minWidth: 60,
   },
   navItem: {
     alignItems: 'center',
@@ -1670,8 +1723,8 @@ const styles = StyleSheet.create({
   navLabel: {
     fontSize: 11,
     color: '#6b7280',
-    fontFamily: 'Poppins_500Medium',
-    marginTop: 2,
+    fontFamily: 'Heebo_600SemiBold',
+    marginTop: 4,
   },
   socialSection: {
     marginTop: 20,
