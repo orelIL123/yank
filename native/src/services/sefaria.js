@@ -308,3 +308,169 @@ export async function getTextCached(tref, options = {}) {
   setCachedText(cacheKey, data)
   return data
 }
+
+/**
+ * Recursively flatten nested arrays from Sefaria API responses
+ * Handles deeply nested structures like [[["text", "text"], ["text"]], ["text"]]
+ * @param {any} data - The data to flatten (could be string, array, or nested arrays)
+ * @param {object} options - Formatting options
+ * @returns {string[]} - Array of text strings
+ */
+export function flattenSefariaText(data, options = {}) {
+  const { 
+    preserveChapters = false,
+    chapterSeparator = '\n\n═══════════════\n\n',
+    verseSeparator = ' ',
+    paragraphSeparator = '\n\n'
+  } = options
+
+  // Base case: if it's a string, return it
+  if (typeof data === 'string') {
+    return data.trim() ? [data.trim()] : []
+  }
+
+  // If it's not an array, try to convert it
+  if (!Array.isArray(data)) {
+    return []
+  }
+
+  // Recursive case: flatten arrays
+  const result = []
+  
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i]
+    
+    if (typeof item === 'string') {
+      if (item.trim()) {
+        result.push(item.trim())
+      }
+    } else if (Array.isArray(item)) {
+      // Recursively flatten nested arrays
+      const flattened = flattenSefariaText(item, { ...options, preserveChapters: false })
+      
+      if (flattened.length > 0) {
+        // If we're preserving chapter structure and this is a chapter-level array
+        if (preserveChapters && data.length > 1) {
+          result.push(...flattened)
+          // Add chapter separator between chapters (but not after the last one)
+          if (i < data.length - 1) {
+            result.push(chapterSeparator)
+          }
+        } else {
+          result.push(...flattened)
+        }
+      }
+    }
+  }
+
+  return result
+}
+
+/**
+ * Format Sefaria content for optimal display
+ * @param {object} textData - Response from getText
+ * @param {object} options - Formatting options
+ * @returns {object} - Formatted content with title, content, and metadata
+ */
+export function formatSefariaContent(textData, options = {}) {
+  const {
+    addChapterNumbers = false,
+    addVerseNumbers = false,
+    preserveStructure = true,
+    maxLength = null,
+    language = 'he' // 'he' or 'en'
+  } = options
+
+  if (!textData) {
+    return {
+      title: '',
+      content: '',
+      hebrew: '',
+      english: '',
+      chapters: [],
+      structure: null
+    }
+  }
+
+  const title = textData.ref || textData.title || ''
+  
+  // Get the text data based on language preference
+  let rawText = null
+  if (language === 'he') {
+    rawText = textData.he || textData.text
+  } else {
+    rawText = textData.en || textData.text
+  }
+
+  if (!rawText) {
+    return {
+      title,
+      content: '',
+      hebrew: '',
+      english: '',
+      chapters: [],
+      structure: null
+    }
+  }
+
+  // Flatten the text
+  const flattened = flattenSefariaText(rawText, {
+    preserveChapters: preserveStructure,
+    chapterSeparator: '\n\n═══════════════\n\n',
+    paragraphSeparator: '\n\n'
+  })
+
+  // Build the content string
+  let content = ''
+  let chapterCounter = 1
+  let verseCounter = 1
+
+  for (let i = 0; i < flattened.length; i++) {
+    const text = flattened[i]
+    
+    // Check if this is a chapter separator
+    if (text.includes('═══════════════')) {
+      content += text
+      chapterCounter++
+      verseCounter = 1
+      continue
+    }
+
+    // Add chapter/verse numbers if requested
+    if (addChapterNumbers && verseCounter === 1) {
+      content += `\n\n[פרק ${chapterCounter}]\n\n`
+    }
+    
+    if (addVerseNumbers) {
+      content += `${verseCounter}. `
+      verseCounter++
+    }
+
+    content += text
+
+    // Add paragraph separator between verses (but not after chapter separator)
+    if (i < flattened.length - 1 && !flattened[i + 1].includes('═══════════════')) {
+      content += '\n\n'
+    }
+  }
+
+  // Truncate if maxLength is specified
+  if (maxLength && content.length > maxLength) {
+    content = content.substring(0, maxLength) + '...'
+  }
+
+  // Clean up extra whitespace
+  content = content.replace(/\n{3,}/g, '\n\n').trim()
+
+  return {
+    title,
+    content,
+    hebrew: language === 'he' ? content : '',
+    english: language === 'en' ? content : '',
+    chapters: flattened.filter(t => !t.includes('═══════════════')),
+    structure: {
+      totalVerses: flattened.filter(t => !t.includes('═══════════════')).length,
+      hasChapters: Array.isArray(rawText) && rawText.length > 1
+    }
+  }
+}

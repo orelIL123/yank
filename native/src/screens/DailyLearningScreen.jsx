@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../components/AppHeader';
-import { getText, formatTextForDisplay } from '../services/sefaria';
+import { getText, formatTextForDisplay, formatSefariaContent } from '../services/sefaria';
 
 const { width } = Dimensions.get('window');
 
@@ -60,31 +60,42 @@ function getDailyOrchotTzadikimGate() {
 const LEARNING_CATEGORIES = [
   {
     id: 'tehillim',
-    title: 'תהילים יומי',
-    description: '',
+    title: 'תהילים',
+    description: 'כל 150 פרקי תהילים',
     icon: 'book-outline',
     color: '#10B981',
-    sefariaRef: () => `Psalms.${getDailyTehillimChapter()}`,
+    sefariaRef: () => 'Psalms', // Load the entire book
+    dailyChapter: getDailyTehillimChapter, // Keep track of daily chapter for future features
   },
   {
     id: 'chofetz-chaim',
-    title: 'חפץ חיים יומי',
-    description: '',
+    title: 'חפץ חיים',
+    description: 'הלכות לשון הרע',
     icon: 'shield-checkmark-outline',
     color: '#3B82F6',
     sefariaRef: () => {
+      // Try simpler reference format for better content
       const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-      const section = (dayOfYear % 31) + 1; // 31 sections in Chofetz Chaim
+      const section = (dayOfYear % 31) + 1; // 31 sections in Chofetz Chaim Part One
+      // Using the full path that works with Sefaria API
       return `Chofetz_Chaim,_Part_One,_The_Prohibition_Against_Lashon_Hara.${section}`;
     },
+    formatOptions: {
+      preserveStructure: true,
+      addChapterNumbers: false,
+    }
   },
   {
     id: 'orchos-tzadikim',
-    title: 'מוסר יומי באורחות צדיקים',
-    description: '',
+    title: 'אורחות צדיקים',
+    description: `השער היומי - שער ${getDailyOrchotTzadikimGate()}`,
     icon: 'star-outline',
     color: '#8B5CF6',
     sefariaRef: () => `Orchot_Tzadikim.${getDailyOrchotTzadikimGate()}`,
+    formatOptions: {
+      preserveStructure: true,
+      addChapterNumbers: false,
+    }
   },
   {
     id: 'sefer-hamidos',
@@ -117,27 +128,38 @@ export default function DailyLearningScreen({ navigation, userRole }) {
       
       const textData = await getText(tref, { lang: 'he' });
       
-      // Handle both array and string responses
-      let content = '';
-      if (textData && textData.he) {
-        if (Array.isArray(textData.he)) {
-          content = textData.he.filter(p => p && p.trim()).join('\n\n');
-        } else {
-          content = textData.he;
-        }
-      } else if (textData && textData.text) {
-        if (Array.isArray(textData.text)) {
-          content = textData.text.filter(p => p && p.trim()).join('\n\n');
-        } else {
-          content = textData.text;
-        }
-      }
-      
-      const formatted = {
-        title: textData.ref || category.title,
-        content: content,
-        hebrew: content,
+      // Use the new formatSefariaContent function for better formatting
+      // Use category-specific format options if available
+      const formatOptions = {
+        preserveStructure: true,
+        addChapterNumbers: category.id === 'tehillim', // Add chapter numbers for Psalms
+        language: 'he',
+        ...(category.formatOptions || {})
       };
+      
+      const formatted = formatSefariaContent(textData, formatOptions);
+      
+      // Fallback to old logic if new function returns empty content
+      if (!formatted.content && textData) {
+        let fallbackContent = '';
+        if (textData.he) {
+          if (Array.isArray(textData.he)) {
+            fallbackContent = textData.he.filter(p => p && p.trim()).join('\n\n');
+          } else {
+            fallbackContent = textData.he;
+          }
+        } else if (textData.text) {
+          if (Array.isArray(textData.text)) {
+            fallbackContent = textData.text.filter(p => p && p.trim()).join('\n\n');
+          } else {
+            fallbackContent = textData.text;
+          }
+        }
+        
+        formatted.content = fallbackContent;
+        formatted.hebrew = fallbackContent;
+        formatted.title = textData.ref || category.title;
+      }
       
       setContent(prev => ({ ...prev, [category.id]: formatted }));
       showCategoryContent(category, formatted);
@@ -198,11 +220,11 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           <View style={styles.contentHeader}>
             <Text style={styles.contentTitle}>{displayContent.title || selectedCategory.title}</Text>
             <View style={styles.divider} />
-          </View>
-          
+        </View>
+
           <View style={styles.textContainer}>
             <Text style={styles.textContent}>{displayContent.hebrew || displayContent.content}</Text>
-          </View>
+            </View>
         </ScrollView>
       </SafeAreaView>
     );
@@ -218,7 +240,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         onBackPress={handleBack}
       />
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -238,7 +260,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         {/* Learning Categories List */}
         <View style={styles.categoriesContainer}>
           {LEARNING_CATEGORIES.map((category, index) => (
-            <TouchableOpacity
+              <TouchableOpacity
               key={category.id}
               style={styles.categoryCard}
               onPress={() => handleCategoryPress(category)}
@@ -262,10 +284,10 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                     <Ionicons name={category.icon} size={24} color={category.color} />
                   )}
                 </View>
-              </View>
-            </TouchableOpacity>
+            </View>
+              </TouchableOpacity>
           ))}
-        </View>
+            </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -415,11 +437,13 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   textContent: {
-    fontSize: 17,
+    fontSize: 18,
     fontFamily: FONTS.regular,
     color: COLORS.text,
     textAlign: 'right',
-    lineHeight: 32,
+    lineHeight: 34,
     writingDirection: 'rtl',
+    letterSpacing: 0.3,
+    paddingHorizontal: 4,
   },
 });

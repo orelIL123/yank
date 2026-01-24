@@ -16,6 +16,7 @@ const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
 const TABS = [
+  { id: 'featured', label: 'נושא מרכזי', icon: 'star-outline' },
   { id: 'cards', label: 'כרטיסיות', icon: 'grid-outline' },
   { id: 'books', label: 'ספרים', icon: 'book-outline' },
   { id: 'prayers', label: 'תפילות', icon: 'heart-outline' },
@@ -81,6 +82,7 @@ export default function AdminScreen({ navigation, route }) {
 
       {/* Content */}
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {activeTab === 'featured' && <FeaturedTopicForm />}
         {activeTab === 'cards' && <CardsForm />}
         {activeTab === 'books' && <BooksForm />}
         {activeTab === 'prayers' && <PrayersForm />}
@@ -93,6 +95,370 @@ export default function AdminScreen({ navigation, route }) {
         {activeTab === 'notifications' && <NotificationsForm />}
       </ScrollView>
     </SafeAreaView>
+  )
+}
+
+// ========== FEATURED TOPIC FORM ==========
+function FeaturedTopicForm() {
+  const [config, setConfig] = useState({
+    featured_topic_enabled: false,
+    featured_topic_title: '',
+    featured_topic_description: '',
+    featured_topic_type: 'image',
+    featured_topic_image_url: '',
+    featured_topic_youtube_id: '',
+    featured_topic_video_url: '',
+    featured_topic_link_url: '',
+    featured_topic_button_text: 'למידע נוסף',
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [imageUri, setImageUri] = useState(null)
+  const [uploading, setUploading] = useState(false)
+
+  useEffect(() => {
+    loadConfig()
+  }, [])
+
+  const loadConfig = async () => {
+    try {
+      const appConfig = await db.getAppConfig()
+      if (appConfig) {
+        setConfig({
+          featured_topic_enabled: appConfig.featured_topic_enabled || false,
+          featured_topic_title: appConfig.featured_topic_title || '',
+          featured_topic_description: appConfig.featured_topic_description || '',
+          featured_topic_type: appConfig.featured_topic_type || 'image',
+          featured_topic_image_url: appConfig.featured_topic_image_url || '',
+          featured_topic_youtube_id: appConfig.featured_topic_youtube_id || '',
+          featured_topic_video_url: appConfig.featured_topic_video_url || '',
+          featured_topic_link_url: appConfig.featured_topic_link_url || '',
+          featured_topic_button_text: appConfig.featured_topic_button_text || 'למידע נוסף',
+        })
+      }
+    } catch (error) {
+      console.error('Error loading config:', error)
+      Alert.alert('שגיאה', 'לא ניתן לטעון את ההגדרות')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePickImage = async () => {
+    const image = await pickImage({ aspect: [16, 9] })
+    if (image) {
+      setImageUri(image.uri)
+    }
+  }
+
+  const handleUploadImage = async () => {
+    if (!imageUri) {
+      Alert.alert('שגיאה', 'אנא בחר תמונה תחילה')
+      return
+    }
+
+    setUploading(true)
+    try {
+      const path = `featured/featured-topic-${Date.now()}.jpg`
+      const url = await uploadImageToStorage(imageUri, path, (progress) => {
+        console.log(`Upload progress: ${progress}%`)
+      })
+      setConfig({ ...config, featured_topic_image_url: url })
+      setImageUri(null)
+      Alert.alert('הצלחה!', 'התמונה הועלתה בהצלחה')
+    } catch (error) {
+      Alert.alert('שגיאה', 'לא ניתן להעלות את התמונה')
+      console.error(error)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (config.featured_topic_enabled) {
+      if (!config.featured_topic_title?.trim()) {
+        Alert.alert('שגיאה', 'יש להזין כותרת')
+        return
+      }
+
+      if (config.featured_topic_type === 'image' && !config.featured_topic_image_url?.trim()) {
+        Alert.alert('שגיאה', 'יש להעלות תמונה או להזין קישור לתמונה')
+        return
+      }
+
+      if (config.featured_topic_type === 'youtube' && !config.featured_topic_youtube_id?.trim()) {
+        Alert.alert('שגיאה', 'יש להזין מזהה יוטיוב')
+        return
+      }
+
+      if (config.featured_topic_type === 'live_video' && !config.featured_topic_video_url?.trim()) {
+        Alert.alert('שגיאה', 'יש להזין קישור לסרטון')
+        return
+      }
+    }
+
+    setSaving(true)
+    try {
+      await db.updateAppConfig({
+        featured_topic_enabled: config.featured_topic_enabled,
+        featured_topic_title: config.featured_topic_title.trim(),
+        featured_topic_description: config.featured_topic_description.trim(),
+        featured_topic_type: config.featured_topic_type,
+        featured_topic_image_url: config.featured_topic_image_url.trim(),
+        featured_topic_youtube_id: config.featured_topic_youtube_id.trim(),
+        featured_topic_video_url: config.featured_topic_video_url.trim(),
+        featured_topic_link_url: config.featured_topic_link_url.trim(),
+        featured_topic_button_text: config.featured_topic_button_text.trim(),
+      })
+      Alert.alert('הצלחה!', 'הנושא המרכזי עודכן בהצלחה')
+    } catch (error) {
+      console.error('Error saving config:', error)
+      Alert.alert('שגיאה', 'לא ניתן לשמור את ההגדרות')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+        <Text style={styles.loadingText}>טוען...</Text>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>ניהול נושא מרכזי (חזון)</Text>
+      <Text style={styles.formSubtitle}>
+        הנושא המרכזי יופיע בראש מסך הבית ויכול להכיל תמונה, סרטון יוטיוב או סרטון לייב
+      </Text>
+
+      {/* Enable/Disable Toggle */}
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>הצג נושא מרכזי במסך הבית</Text>
+        <Pressable
+          style={[styles.toggleButton, config.featured_topic_enabled && styles.toggleButtonActive]}
+          onPress={() => setConfig({ ...config, featured_topic_enabled: !config.featured_topic_enabled })}
+        >
+          <Text style={[styles.toggleButtonText, config.featured_topic_enabled && styles.toggleButtonTextActive]}>
+            {config.featured_topic_enabled ? 'מופעל ✓' : 'כבוי'}
+          </Text>
+        </Pressable>
+      </View>
+
+      {config.featured_topic_enabled && (
+        <>
+          {/* Content Type */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>סוג תוכן *</Text>
+            <View style={styles.typeButtons}>
+              <Pressable
+                style={[styles.typeButton, config.featured_topic_type === 'image' && styles.typeButtonActive]}
+                onPress={() => setConfig({ ...config, featured_topic_type: 'image' })}
+              >
+                <Ionicons
+                  name="image"
+                  size={20}
+                  color={config.featured_topic_type === 'image' ? PRIMARY_BLUE : '#6b7280'}
+                />
+                <Text style={[styles.typeButtonText, config.featured_topic_type === 'image' && styles.typeButtonTextActive]}>
+                  תמונה
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.typeButton, config.featured_topic_type === 'youtube' && styles.typeButtonActive]}
+                onPress={() => setConfig({ ...config, featured_topic_type: 'youtube' })}
+              >
+                <Ionicons
+                  name="logo-youtube"
+                  size={20}
+                  color={config.featured_topic_type === 'youtube' ? PRIMARY_BLUE : '#6b7280'}
+                />
+                <Text style={[styles.typeButtonText, config.featured_topic_type === 'youtube' && styles.typeButtonTextActive]}>
+                  יוטיוב
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.typeButton, config.featured_topic_type === 'live_video' && styles.typeButtonActive]}
+                onPress={() => setConfig({ ...config, featured_topic_type: 'live_video' })}
+              >
+                <Ionicons
+                  name="videocam"
+                  size={20}
+                  color={config.featured_topic_type === 'live_video' ? PRIMARY_BLUE : '#6b7280'}
+                />
+                <Text style={[styles.typeButtonText, config.featured_topic_type === 'live_video' && styles.typeButtonTextActive]}>
+                  סרטון לייב
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Title */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>כותרת *</Text>
+            <TextInput
+              style={styles.input}
+              value={config.featured_topic_title}
+              onChangeText={(text) => setConfig({ ...config, featured_topic_title: text })}
+              placeholder="הזן כותרת..."
+              textAlign="right"
+            />
+          </View>
+
+          {/* Description */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>תיאור</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={config.featured_topic_description}
+              onChangeText={(text) => setConfig({ ...config, featured_topic_description: text })}
+              placeholder="הזן תיאור..."
+              multiline
+              numberOfLines={3}
+              textAlign="right"
+            />
+          </View>
+
+          {/* Image Upload (for image type) */}
+          {config.featured_topic_type === 'image' && (
+            <>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>תמונה *</Text>
+                <View style={styles.imageUploadContainer}>
+                  <Pressable style={styles.pickImageBtn} onPress={handlePickImage}>
+                    <Ionicons name="image-outline" size={20} color={PRIMARY_BLUE} />
+                    <Text style={styles.pickImageText}>בחר תמונה</Text>
+                  </Pressable>
+
+                  {imageUri && (
+                    <Pressable
+                      style={[styles.uploadBtn, uploading && styles.uploadBtnDisabled]}
+                      onPress={handleUploadImage}
+                      disabled={uploading}
+                    >
+                      {uploading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+                          <Text style={styles.uploadBtnText}>העלה</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  )}
+                </View>
+
+                {imageUri && (
+                  <Image source={{ uri: imageUri }} style={styles.previewImage} />
+                )}
+
+                {config.featured_topic_image_url && !imageUri && (
+                  <Image source={{ uri: config.featured_topic_image_url }} style={styles.previewImage} />
+                )}
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>או הזן קישור לתמונה</Text>
+                <TextInput
+                  style={styles.input}
+                  value={config.featured_topic_image_url}
+                  onChangeText={(text) => setConfig({ ...config, featured_topic_image_url: text })}
+                  placeholder="https://..."
+                  textAlign="right"
+                  keyboardType="url"
+                />
+              </View>
+            </>
+          )}
+
+          {/* YouTube ID (for youtube type) */}
+          {config.featured_topic_type === 'youtube' && (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>מזהה יוטיוב (YouTube ID) *</Text>
+              <TextInput
+                style={styles.input}
+                value={config.featured_topic_youtube_id}
+                onChangeText={(text) => setConfig({ ...config, featured_topic_youtube_id: text })}
+                placeholder="לדוגמה: dQw4w9WgXcQ"
+                textAlign="right"
+              />
+              <Text style={styles.helperText}>
+                המזהה הוא החלק שאחרי "v=" בקישור היוטיוב
+              </Text>
+            </View>
+          )}
+
+          {/* Video URL (for live_video type) */}
+          {config.featured_topic_type === 'live_video' && (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>קישור לסרטון *</Text>
+              <TextInput
+                style={styles.input}
+                value={config.featured_topic_video_url}
+                onChangeText={(text) => setConfig({ ...config, featured_topic_video_url: text })}
+                placeholder="https://..."
+                textAlign="right"
+                keyboardType="url"
+              />
+              <Text style={styles.helperText}>
+                קישור ישיר לקובץ וידאו (mp4, m3u8 וכו')
+              </Text>
+            </View>
+          )}
+
+          {/* Link URL */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>קישור (אופציונלי)</Text>
+            <TextInput
+              style={styles.input}
+              value={config.featured_topic_link_url}
+              onChangeText={(text) => setConfig({ ...config, featured_topic_link_url: text })}
+              placeholder="https://..."
+              textAlign="right"
+              keyboardType="url"
+            />
+            <Text style={styles.helperText}>
+              קישור שייפתח בלחיצה על הכרטיס (רלוונטי לתמונה)
+            </Text>
+          </View>
+
+          {/* Button Text */}
+          {config.featured_topic_type === 'image' && config.featured_topic_link_url && (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>טקסט כפתור</Text>
+              <TextInput
+                style={styles.input}
+                value={config.featured_topic_button_text}
+                onChangeText={(text) => setConfig({ ...config, featured_topic_button_text: text })}
+                placeholder="למידע נוסף"
+                textAlign="right"
+              />
+            </View>
+          )}
+        </>
+      )}
+
+      {/* Save Button */}
+      <Pressable
+        style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+        onPress={handleSave}
+        disabled={saving}
+      >
+        {saving ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+            <Text style={styles.saveBtnText}>שמור שינויים</Text>
+          </>
+        )}
+      </Pressable>
+    </View>
   )
 }
 

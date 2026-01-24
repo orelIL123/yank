@@ -1,0 +1,17 @@
+# Terminal Environment Changes
+
+## Extension: Anthropic.claude-code
+
+- `CLAUDE_CODE_SSE_PORT=37676`
+- `ENABLE_IDE_INTEGRATION=true`
+
+## Extension: vscode.git
+
+Enables the following features: git auth provider
+
+- `GIT_ASKPASS=/Applications/Cursor.app/Contents/Resources/app/extensions/git/dist/askpass.sh`
+- `VSCODE_GIT_ASKPASS_NODE=/Applications/Cursor.app/Contents/Frameworks/Cursor Helper (Plugin).app/Contents/MacOS/Cursor Helper (Plugin)`
+- `VSCODE_GIT_ASKPASS_EXTRA_ARGS=`
+- `VSCODE_GIT_ASKPASS_MAIN=/Applications/Cursor.app/Contents/Resources/app/extensions/git/dist/askpass-main.js`
+- `VSCODE_GIT_IPC_HANDLE=/var/folders/8c/f5f4zh0s0x5g8pc37vld3z280000gn/T/vscode-git-1d613a0170.sock`
+- `VSCODE_GIT_IPC_AUTH_TOKEN=6a7618c000c75cd40834f06ebf051db603fb2015d0a01d07520b3ff72ddae9d7`

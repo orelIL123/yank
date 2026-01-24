@@ -56,11 +56,15 @@ export default function MenuDrawer({ visible, onClose, navigation }) {
 
                         {/* Header */}
                         <View style={styles.drawerHeader}>
-                            <View style={{ width: 28 }} />
-                            <Text style={styles.drawerTitle}>תפריט ראשי</Text>
-                            <Pressable onPress={onClose} style={styles.closeButton}>
-                                <Ionicons name="close" size={28} color={PRIMARY_BLUE} />
+                            <Pressable 
+                                onPress={onClose} 
+                                style={styles.closeButton}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                                <Ionicons name="close" size={24} color={PRIMARY_BLUE} />
                             </Pressable>
+                            <Text style={styles.drawerTitle}>תפריט ראשי</Text>
+                            <View style={{ width: 36 }} />
                         </View>
 
                         {/* Menu Items */}
@@ -116,8 +120,8 @@ const styles = StyleSheet.create({
     },
     drawerContainer: {
         height: '100%',
-        width: '80%',
-        maxWidth: 360,
+        width: '75%',
+        maxWidth: 320,
     },
     drawer: {
         flex: 1,
@@ -130,40 +134,42 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 16,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 14,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(11,27,58,0.08)',
     },
     closeButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(30,58,138,0.08)',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(30,58,138,0.1)',
         alignItems: 'center',
         justifyContent: 'center',
     },
     drawerTitle: {
-        fontSize: 22,
+        fontSize: 20,
         fontFamily: 'Heebo_700Bold',
         color: DEEP_BLUE,
+        textAlign: 'center',
+        flex: 1,
     },
     menuScroll: {
         flex: 1,
     },
     menuContent: {
-        padding: 16,
-        gap: 8,
+        padding: 14,
+        gap: 6,
     },
     menuItem: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 18,
-        marginBottom: 8,
+        borderRadius: 14,
+        padding: 16,
+        marginBottom: 6,
         shadowColor: '#000',
         shadowOpacity: 0.05,
         shadowRadius: 8,
@@ -183,15 +189,15 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     menuItemIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
+        width: 44,
+        height: 44,
+        borderRadius: 11,
         backgroundColor: 'rgba(30,58,138,0.08)',
         alignItems: 'center',
         justifyContent: 'center',
     },
     menuItemLabel: {
-        fontSize: 17,
+        fontSize: 16,
         fontFamily: 'Heebo_600SemiBold',
         color: DEEP_BLUE,
         textAlign: 'right',
@@ -200,19 +206,19 @@ const styles = StyleSheet.create({
         opacity: 0.5,
     },
     drawerFooter: {
-        padding: 20,
+        padding: 16,
         borderTopWidth: 1,
         borderTopColor: 'rgba(11,27,58,0.08)',
         alignItems: 'center',
     },
     footerText: {
-        fontSize: 16,
+        fontSize: 15,
         fontFamily: 'Heebo_700Bold',
         color: PRIMARY_BLUE,
         marginBottom: 4,
     },
     footerSubtext: {
-        fontSize: 14,
+        fontSize: 13,
         fontFamily: 'Poppins_400Regular',
         color: '#6b7280',
         fontStyle: 'italic',

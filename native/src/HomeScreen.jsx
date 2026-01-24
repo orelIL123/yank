@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Audio } from 'expo-av'
 import MenuDrawer from './components/MenuDrawer'
 import AppHeader from './components/AppHeader'
+import FeaturedTopic from './components/FeaturedTopic'
 import { auth } from './config/firebase'
 import db from './services/database'
 import cache from './utils/cache'
@@ -86,28 +87,31 @@ export default function HomeScreen({ navigation, userRole }) {
   const pidyonScrollRef = React.useRef(null)
   const pidyonScrollInterval = React.useRef(null)
   const pidyonScrollPosition = React.useRef(0)
+  const [featuredConfig, setFeaturedConfig] = useState(null)
+  const [showFeaturedEditModal, setShowFeaturedEditModal] = useState(false)
 
   const onShareQuote = React.useCallback(() => {
     Share.share({ message: `"${quote}" - ${quoteAuthor}` }).catch(() => { })
   }, [quote, quoteAuthor])
 
-  // Load daily quote
+  // Load daily quote and featured topic
   useEffect(() => {
-    const loadQuote = async () => {
+    const loadConfig = async () => {
       try {
         const config = await db.getAppConfig()
         if (config) {
           setQuote(config.daily_quote || 'ציטוט יומי - הרב הינוקא')
           setQuoteAuthor(config.quote_author || 'הרב הינוקא')
+          setFeaturedConfig(config)
         }
       } catch (error) {
-        console.error('Error loading quote:', error)
+        console.error('Error loading config:', error)
         // Keep default quote on error
       } finally {
         setQuoteLoading(false)
       }
     }
-    loadQuote()
+    loadConfig()
   }, [])
 
   const handleEditQuote = () => {
@@ -524,6 +528,16 @@ export default function HomeScreen({ navigation, userRole }) {
           showsVerticalScrollIndicator={false}
           scrollEnabled={true}
         >
+          {/* Featured Topic */}
+          <FeaturedTopic
+            config={featuredConfig}
+            isAdmin={isAdmin}
+            onEdit={() => {
+              // Navigate to admin panel for featured topic
+              navigation?.navigate('AdminPanel', { tab: 'featured' })
+            }}
+          />
+
           {/* Pidyon Nefesh (ticker under hero) */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
