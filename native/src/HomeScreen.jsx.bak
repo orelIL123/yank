@@ -552,7 +552,7 @@ export default function HomeScreen({ navigation, userRole }) {
                   onScroll={(e) => {
                     pidyonScrollPosition.current = e.nativeEvent.contentOffset.x
                   }}
-                  scrollEnabled={true}
+                  scrollEnabled={false}
                 >
                   {[...pidyonList, ...pidyonList, ...pidyonList].map((pidyon, idx) => (
                     <View key={`${pidyon.id}-${idx}`} style={styles.pidyonCardInline}>
@@ -644,59 +644,36 @@ export default function HomeScreen({ navigation, userRole }) {
               ))}
           </View>
 
-          {/* Featured Buttons Row - Sefer HaMidot & Shulchan Shlomo */}
+          {/* Sefer HaMidot - Featured Button */}
           <View style={styles.section}>
-            <View style={styles.featuredButtonsRow}>
-              {/* Sefer HaMidot - Small Button */}
-              <Pressable
-                style={styles.featuredButton}
-                onPress={() => navigation?.navigate('SeferHaMidot')}
-                accessibilityRole="button"
-                accessibilityLabel="ספר המידות - לרבי נחמן מברסלב"
+            <Pressable
+              style={styles.seferHaMidotButton}
+              onPress={() => navigation?.navigate('SeferHaMidot')}
+              accessibilityRole="button"
+              accessibilityLabel="ספר המידות - לרבי נחמן מברסלב"
+            >
+              <LinearGradient
+                colors={['#0f172a', '#1e293b', '#334155']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.seferHaMidotGradient}
               >
-                <LinearGradient
-                  colors={['#0f172a', '#1e293b', '#334155']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.featuredGradient}
-                >
-                  <View style={styles.featuredContent}>
-                    <View style={styles.featuredIconWrapper}>
-                      <Ionicons name="book" size={36} color="#fff" />
-                    </View>
-                    <View style={styles.featuredText}>
-                      <Text style={styles.featuredTitle}>ספר המידות</Text>
-                      <Text style={styles.featuredSubtitle}>לרבי נחמן מברסלב</Text>
-                    </View>
+                <View style={styles.seferHaMidotContent}>
+                  <View style={styles.seferHaMidotIconWrapper}>
+                    <Image 
+                      source={require('../assets/photos/cards/flame.png')} 
+                      style={styles.seferHaMidotIcon}
+                      resizeMode="contain"
+                    />
                   </View>
-                </LinearGradient>
-              </Pressable>
-
-              {/* Shulchan Shlomo - Weekly Newsletter */}
-              <Pressable
-                style={styles.featuredButton}
-                onPress={() => navigation?.navigate('Newsletters')}
-                accessibilityRole="button"
-                accessibilityLabel="משולחן שלמה - העלון השבועי"
-              >
-                <LinearGradient
-                  colors={['#0ea5e9', '#06b6d4', '#0891b2']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.featuredGradient}
-                >
-                  <View style={styles.featuredContent}>
-                    <View style={styles.featuredIconWrapper}>
-                      <Ionicons name="newspaper" size={36} color="#fff" />
-                    </View>
-                    <View style={styles.featuredText}>
-                      <Text style={styles.featuredTitle}>משולחן שלמה</Text>
-                      <Text style={styles.featuredSubtitle}>העלון השבועי</Text>
-                    </View>
+                  <View style={styles.seferHaMidotText}>
+                    <Text style={styles.seferHaMidotTitle}>ספר המידות</Text>
+                    <Text style={styles.seferHaMidotSubtitle}>לרבי נחמן מברסלב</Text>
                   </View>
-                </LinearGradient>
-              </Pressable>
-            </View>
+                  <Ionicons name="chevron-back" size={24} color="rgba(255,255,255,0.7)" />
+                </View>
+              </LinearGradient>
+            </Pressable>
           </View>
 
           {/* Quote (scroll down) */}
@@ -2083,65 +2060,57 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     color: '#fff',
   },
-  // Featured Buttons Row
-  featuredButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  // Featured Buttons (Sefer HaMidot & Shulchan Shlomo)
-  featuredButton: {
-    flex: 1,
-    borderRadius: 16,
+  // Sefer HaMidot Button
+  seferHaMidotButton: {
+    borderRadius: 18,
     overflow: 'hidden',
     shadowColor: '#5b21b6',
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+    marginBottom: 8,
   },
-  featuredGradient: {
-    borderRadius: 16,
+  seferHaMidotGradient: {
+    borderRadius: 18,
     overflow: 'hidden',
   },
-  featuredContent: {
-    flexDirection: 'column',
+  seferHaMidotContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  seferHaMidotIconWrapper: {
+    width: 120,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 12,
-    gap: 8,
   },
-  featuredIconWrapper: {
-    width: 56,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 28,
-    marginBottom: 4,
+  seferHaMidotIcon: {
+    width: 112,
+    height: 112,
   },
-  featuredText: {
-    alignItems: 'center',
-    width: '100%',
+  seferHaMidotText: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
-  featuredTitle: {
-    fontSize: 17,
+  seferHaMidotTitle: {
+    fontSize: 22,
     fontFamily: 'Heebo_700Bold',
     color: '#fff',
-    marginBottom: 3,
-    textAlign: 'center',
-    letterSpacing: 0.2,
-    textShadowColor: 'rgba(0,0,0,0.4)',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
-  featuredSubtitle: {
-    fontSize: 13,
+  seferHaMidotSubtitle: {
+    fontSize: 14,
     fontFamily: 'Heebo_400Regular',
-    color: 'rgba(255,255,255,0.95)',
-    textAlign: 'center',
-    letterSpacing: 0.1,
-    lineHeight: 16,
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 0.3,
   },
 })
 

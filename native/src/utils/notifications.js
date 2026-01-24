@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications'
 import * as Device from 'expo-device'
 import { Platform } from 'react-native'
+import Constants from 'expo-constants'
 
 // Set notification handler
 Notifications.setNotificationHandler({
@@ -40,7 +41,12 @@ export async function registerForPushNotificationsAsync() {
       return null
     }
 
-    token = (await Notifications.getExpoPushTokenAsync()).data
+    // Get Expo project ID from app config
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId || 'a3cc4905-828c-479a-93f0-9b255f822bc8'
+    
+    token = (await Notifications.getExpoPushTokenAsync({
+      projectId: projectId
+    })).data
   } else {
     alert('יש להשתמש במכשיר פיזי כדי לקבל התראות Push')
   }
@@ -126,4 +132,79 @@ export async function setBadgeCount(count) {
  */
 export async function clearAllNotifications() {
   await Notifications.dismissAllNotificationsAsync()
+}
+
+/**
+ * Send push notification to multiple Expo push tokens
+ * @param {Array<string>} tokens - Array of Expo push tokens
+ * @param {string} title - Notification title
+ * @param {string} body - Notification body
+ * @param {object} data - Additional data to send with notification
+ * @returns {Promise<object>} Response from Expo Push API
+ */
+export async function sendPushNotifications(tokens, title, body, data = {}) {
+  if (!tokens || tokens.length === 0) {
+    console.warn('No push tokens provided')
+    return { success: false, sent: 0 }
+  }
+
+  // Expo Push API accepts up to 100 tokens per request
+  const CHUNK_SIZE = 100
+  const chunks = []
+  
+  for (let i = 0; i < tokens.length; i += CHUNK_SIZE) {
+    chunks.push(tokens.slice(i, i + CHUNK_SIZE))
+  }
+
+  let totalSent = 0
+  let totalFailed = 0
+
+  for (const chunk of chunks) {
+    const messages = chunk.map(token => ({
+      to: token,
+      sound: 'default',
+      title,
+      body,
+      data,
+      badge: 1,
+      priority: 'high',
+      channelId: 'default'
+    }))
+
+    try {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip, deflate'
+        },
+        body: JSON.stringify(messages)
+      })
+
+      const result = await response.json()
+      
+      // Expo returns an array of results, one per message
+      if (Array.isArray(result.data)) {
+        result.data.forEach((item, index) => {
+          if (item.status === 'ok') {
+            totalSent++
+          } else {
+            totalFailed++
+            console.error(`Failed to send to token ${chunk[index]}:`, item)
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error sending push notifications:', error)
+      totalFailed += chunk.length
+    }
+  }
+
+  return {
+    success: totalSent > 0,
+    sent: totalSent,
+    failed: totalFailed,
+    total: tokens.length
+  }
 }

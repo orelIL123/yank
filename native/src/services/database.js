@@ -18,6 +18,7 @@ const COLLECTION_MAP = {
   dailyInsights: 'daily_insights',
   shortLessons: 'short_lessons',
   longLessons: 'long_lessons',
+  hoduLaHashem: 'hodu_la_hashem',
   tzadikim: 'tzadikim',
   notifications: 'notifications',
   pidyonNefesh: 'pidyon_nefesh',

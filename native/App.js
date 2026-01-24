@@ -6,7 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
 import * as Updates from 'expo-updates'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore'
 import { auth, db } from './src/config/firebase'
 import { getRememberMe } from './src/utils/preferences'
 import HomeScreen from './src/HomeScreen'
@@ -37,6 +37,7 @@ import PianoScreen from './src/screens/PianoScreen'
 import ShortLessonsScreen from './src/screens/ShortLessonsScreen'
 import LongLessonsScreen from './src/screens/LongLessonsScreen'
 import LearningLibraryScreen from './src/screens/LearningLibraryScreen'
+import HoduLaHashemScreen from './src/screens/HoduLaHashemScreen'
 import NotificationsScreen from './src/screens/NotificationsScreen'
 import PidyonNefeshScreen from './src/screens/PidyonNefeshScreen'
 import MiBeitRabeinuScreen from './src/screens/MiBeitRabeinuScreen'
@@ -48,7 +49,7 @@ import SeferHaMidotScreen from './src/screens/SeferHaMidotScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
-// import { registerForPushNotificationsAsync } from './src/utils/notifications'
+import { registerForPushNotificationsAsync } from './src/utils/notifications'
 
 const Stack = createNativeStackNavigator()
 
@@ -246,15 +247,85 @@ export default function App() {
     checkForUpdates()
   }, [])
 
-  // Push notifications disabled - will be added later
-  // useEffect(() => {
-  //   registerForPushNotificationsAsync().then(token => {
-  //     if (token) {
-  //       console.log('Push Token:', token)
-  //     }
-  //   })
-  //   ...
-  // }, [])
+  // Push notifications setup
+  useEffect(() => {
+    // Register for push notifications when user is logged in
+    if (user) {
+      registerForPushNotificationsAsync().then(async (token) => {
+        if (token) {
+          console.log('📱 Push Token received:', token)
+          try {
+            // Save token to Firestore users collection
+            const userRef = doc(db, 'users', user.uid)
+            const userDoc = await getDoc(userRef)
+            
+            if (userDoc.exists()) {
+              // Update existing user document
+              const userData = userDoc.data()
+              const existingTokens = userData.expoPushTokens || []
+              
+              // Add token if not already in array
+              if (!existingTokens.includes(token)) {
+                await updateDoc(userRef, {
+                  expoPushTokens: [...existingTokens, token],
+                  notificationsEnabled: true,
+                  lastPushTokenUpdate: new Date().toISOString()
+                })
+                console.log('✅ Push token saved to Firestore')
+              } else {
+                console.log('ℹ️ Push token already exists in Firestore')
+              }
+            } else {
+              // Create user document if it doesn't exist
+              await setDoc(userRef, {
+                uid: user.uid,
+                email: user.email || '',
+                displayName: user.displayName || '',
+                expoPushTokens: [token],
+                notificationsEnabled: true,
+                lastPushTokenUpdate: new Date().toISOString(),
+                createdAt: new Date().toISOString()
+              })
+              console.log('✅ User document created with push token')
+            }
+          } catch (error) {
+            console.error('❌ Error saving push token:', error)
+          }
+        }
+      }).catch(error => {
+        console.error('❌ Error registering for push notifications:', error)
+      })
+    }
+  }, [user])
+
+  // Set up notification listeners
+  useEffect(() => {
+    // Handle notification received while app is in foreground
+    const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
+      console.log('📬 Notification received (foreground):', notification)
+      // You can show a custom in-app notification here if needed
+    })
+
+    // Handle notification tapped/opened
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('👆 Notification tapped:', response)
+      const data = response.notification.request.content.data
+      
+      // Navigate based on notification data
+      if (data?.screen && navigationRef.current) {
+        try {
+          navigationRef.current.navigate(data.screen, data)
+        } catch (error) {
+          console.error('Error navigating from notification:', error)
+        }
+      }
+    })
+
+    return () => {
+      foregroundSubscription.remove()
+      responseSubscription.remove()
+    }
+  }, [])
 
   // Navigate based on auth state after loading completes - DISABLED TO FIX NAVIGATION LOOP
   // This was causing the app to reset navigation back to Home after every screen change
@@ -370,6 +441,9 @@ export default function App() {
           </Stack.Screen>
           <Stack.Screen name="LongLessons">
             {(props) => <LongLessonsScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
+          <Stack.Screen name="HoduLaHashem">
+            {(props) => <HoduLaHashemScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />

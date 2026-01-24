@@ -149,6 +149,20 @@ CREATE INDEX IF NOT EXISTS idx_long_lessons_created_at ON long_lessons(created_a
 CREATE INDEX IF NOT EXISTS idx_long_lessons_data ON long_lessons USING GIN (data);
 
 -- ============================================
+-- 11.5. HODU LAHASHEM (סיפורי ניסים)
+-- ============================================
+CREATE TABLE IF NOT EXISTS hodu_la_hashem (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hodu_la_hashem_created_at ON hodu_la_hashem(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_hodu_la_hashem_data ON hodu_la_hashem USING GIN (data);
+CREATE INDEX IF NOT EXISTS idx_hodu_la_hashem_is_active ON hodu_la_hashem((data->>'isActive'));
+
+-- ============================================
 -- 12. TZADIKIM
 -- ============================================
 CREATE TABLE IF NOT EXISTS tzadikim (
@@ -273,6 +287,7 @@ ALTER TABLE daily_videos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_insights ENABLE ROW LEVEL SECURITY;
 ALTER TABLE short_lessons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE long_lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hodu_la_hashem ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tzadikim ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pidyon_nefesh ENABLE ROW LEVEL SECURITY;
@@ -294,6 +309,7 @@ CREATE POLICY "Enable read access for all users" ON daily_videos FOR SELECT USIN
 CREATE POLICY "Enable read access for all users" ON daily_insights FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON short_lessons FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON long_lessons FOR SELECT USING (true);
+CREATE POLICY "Enable read access for all users" ON hodu_la_hashem FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON tzadikim FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON notifications FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON pidyon_nefesh FOR SELECT USING (true);

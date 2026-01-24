@@ -41,23 +41,45 @@ async function sefariaRequest(endpoint, options = {}) {
 
 /**
  * Get text content by reference (tref)
- * @param {string} tref - Text reference (e.g., "Genesis.1.1", "Rashi on Genesis.1.1")
+ * @param {string} tref - Text reference (e.g., "Genesis.1.1", "Rashi on Genesis.1.1", "Sefer HaMiddot, Love, Part I")
  * @param {object} options - Additional options
  * @param {string} options.lang - Language ('he' or 'en')
  * @param {string} options.version - Version title
  * @param {boolean} options.commentary - Include commentary
  */
 export async function getText(tref, options = {}) {
-  const params = new URLSearchParams()
-  
-  if (options.lang) params.append('lang', options.lang)
-  if (options.version) params.append('version', options.version)
-  if (options.commentary !== undefined) params.append('commentary', options.commentary)
-  
-  const queryString = params.toString()
-  const endpoint = `/texts/${encodeURIComponent(tref)}${queryString ? `?${queryString}` : ''}`
-  
-  return sefariaRequest(endpoint)
+  try {
+    // Use the legacy API endpoint which works better for complex texts
+    const url = `${SEFARIA_LEGACY_URL}/texts/${encodeURIComponent(tref)}`
+    const params = new URLSearchParams()
+
+    if (options.lang) params.append('lang', options.lang)
+    if (options.version) params.append('version', options.version)
+    if (options.commentary !== undefined) params.append('commentary', options.commentary)
+
+    const queryString = params.toString()
+    const fullUrl = `${url}${queryString ? `?${queryString}` : ''}`
+
+    console.log(`📖 Fetching: ${fullUrl}`)
+
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Sefaria API error: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Sefaria API request failed:', error)
+    throw error
+  }
 }
 
 /**

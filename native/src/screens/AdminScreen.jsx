@@ -5,9 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 // DocumentPicker will be imported dynamically when needed
 
-import { auth } from '../config/firebase'
+import { auth, db as firestoreDb } from '../config/firebase'
+import { collection, getDocs } from 'firebase/firestore'
 import db from '../services/database'
 import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath, pickPDF, uploadPDFToStorage, generatePrayerPDFPath } from '../utils/storage'
+import { sendPushNotifications } from '../utils/notifications'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -19,9 +21,9 @@ const TABS = [
   { id: 'prayers', label: 'תפילות', icon: 'heart-outline' },
   { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline' },
   { id: 'dailyLearning', label: 'לימוד יומי', icon: 'school-outline' },
-  { id: 'chidushim', label: 'חידושים', icon: 'bulb-outline' },
-  { id: 'yeshiva', label: 'בית המדרש', icon: 'business-outline' },
-  { id: 'tzadikim', label: 'צדיקים', icon: 'people-outline' },
+  { id: 'shortLessons', label: 'שיעורים קצרים', icon: 'videocam-outline' },
+  { id: 'longLessons', label: 'שיעורים ארוכים', icon: 'film-outline' },
+  { id: 'hoduLaHashem', label: 'הודו לה\'', icon: 'sparkles-outline' },
   { id: 'music', label: 'ניגונים', icon: 'musical-notes-outline' },
   { id: 'notifications', label: 'התראות', icon: 'notifications-outline' },
 ]
@@ -84,9 +86,9 @@ export default function AdminScreen({ navigation, route }) {
         {activeTab === 'prayers' && <PrayersForm />}
         {activeTab === 'newsletters' && <NewslettersForm />}
         {activeTab === 'dailyLearning' && <DailyLearningForm />}
-        {activeTab === 'chidushim' && <ChidushimForm />}
-        {activeTab === 'yeshiva' && <YeshivaForm />}
-        {activeTab === 'tzadikim' && <TzadikimForm />}
+        {activeTab === 'shortLessons' && <ShortLessonsForm />}
+        {activeTab === 'longLessons' && <LongLessonsForm />}
+        {activeTab === 'hoduLaHashem' && <HoduLaHashemForm />}
         {activeTab === 'music' && <MusicForm />}
         {activeTab === 'notifications' && <NotificationsForm />}
       </ScrollView>
@@ -787,48 +789,107 @@ function MusicForm() {
   const [form, setForm] = useState({
     title: '',
     description: '',
-    youtubeId: '',
+    youtubeUrl: '',
     category: 'ניגונים',
+    order: 0,
   })
+  const [songs, setSongs] = useState([])
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [editingSong, setEditingSong] = useState(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+
+  useEffect(() => {
+    loadSongs()
+  }, [])
+
+  const loadSongs = async () => {
+    try {
+      setLoading(true)
+      const songsData = await db.getCollection('music', {
+        orderBy: { field: 'order', direction: 'asc' }
+      })
+      setSongs(songsData || [])
+    } catch (error) {
+      console.error('Error loading songs:', error)
+      Alert.alert('שגיאה', 'לא ניתן לטעון את הניגונים')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Helper function to extract YouTube ID from URL
+  const extractYouTubeId = (url) => {
+    if (!url) return null
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+      /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+      /youtube\.com\/shorts\/([^&\n?#/]+)/,
+    ]
+    for (const pattern of patterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        return match[1]
+      }
+    }
+    return null
+  }
 
   const handleSubmit = async () => {
-    if (!form.title || !form.youtubeId) {
-      Alert.alert('שגיאה', 'אנא מלא את כל השדות הנדרשים')
+    if (!form.title.trim() || !form.youtubeUrl.trim()) {
+      Alert.alert('שגיאה', 'אנא מלא כותרת וקישור YouTube')
+      return
+    }
+
+    const youtubeId = extractYouTubeId(form.youtubeUrl)
+    if (!youtubeId) {
+      Alert.alert('שגיאה', 'קישור YouTube לא תקין. אנא השתמש בקישור מלא מ-YouTube')
       return
     }
 
     try {
       setSaving(true)
 
-      // Save to Firestore
-      await addDoc(collection(db, 'music'), {
-        title: form.title,
-        description: form.description,
-        youtubeId: form.youtubeId,
-        category: form.category,
-        imageUrl: `https://i.ytimg.com/vi/${form.youtubeId}/hqdefault.jpg`,
-        createdAt: new Date().toISOString(),
-      })
+      if (editingSong) {
+        // Update existing song
+        await db.updateDocument('music', editingSong.id, {
+          title: form.title.trim(),
+          description: form.description.trim() || '',
+          youtubeId: youtubeId,
+          youtubeUrl: form.youtubeUrl.trim(),
+          category: form.category.trim() || 'ניגונים',
+          order: parseInt(form.order) || 0,
+          imageUrl: `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+        })
 
-      Alert.alert(
-        'הצלחה! 🎵',
-        'הניגון נוסף בהצלחה ויופיע באפליקציה',
-        [
-          {
-            text: 'אישור',
-            onPress: () => {
-              // Reset form
-              setForm({
-                title: '',
-                description: '',
-                youtubeId: '',
-                category: 'ניגונים',
-              })
-            }
-          }
-        ]
-      )
+        Alert.alert('הצלחה! 🎵', 'הניגון עודכן בהצלחה')
+      } else {
+        // Add new song
+        await db.addDocument('music', {
+          title: form.title.trim(),
+          description: form.description.trim() || '',
+          youtubeId: youtubeId,
+          youtubeUrl: form.youtubeUrl.trim(),
+          category: form.category.trim() || 'ניגונים',
+          order: parseInt(form.order) || songs.length,
+          imageUrl: `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+          createdAt: new Date().toISOString(),
+        })
+
+        Alert.alert('הצלחה! 🎵', 'הניגון נוסף בהצלחה ויופיע באפליקציה')
+      }
+
+      // Reset form
+      setForm({
+        title: '',
+        description: '',
+        youtubeUrl: '',
+        category: 'ניגונים',
+        order: songs.length,
+      })
+      setEditingSong(null)
+      setShowEditModal(false)
+      loadSongs()
     } catch (error) {
       console.error('Error saving music:', error)
       Alert.alert('שגיאה', 'לא ניתן לשמור את הניגון. אנא נסה שנית.')
@@ -837,64 +898,263 @@ function MusicForm() {
     }
   }
 
+  const handleEdit = (song) => {
+    setEditingSong(song)
+    setForm({
+      title: song.title || '',
+      description: song.description || '',
+      youtubeUrl: song.youtubeUrl || (song.youtubeId ? `https://www.youtube.com/watch?v=${song.youtubeId}` : ''),
+      category: song.category || 'ניגונים',
+      order: song.order || 0,
+    })
+    setShowEditModal(true)
+  }
+
+  const handleDelete = (song) => {
+    Alert.alert(
+      'מחיקת ניגון',
+      `האם אתה בטוח שברצונך למחוק את הניגון "${song.title}"?`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await db.deleteDocument('music', song.id)
+              Alert.alert('הצלחה', 'הניגון נמחק בהצלחה')
+              loadSongs()
+            } catch (error) {
+              console.error('Error deleting song:', error)
+              Alert.alert('שגיאה', 'לא ניתן למחוק את הניגון')
+            }
+          }
+        }
+      ]
+    )
+  }
+
+  const handleMoveUp = async (song, index) => {
+    if (index === 0) return
+    try {
+      const prevSong = songs[index - 1]
+      const currentOrder = song.order || index
+      const prevOrder = prevSong.order || (index - 1)
+
+      await Promise.all([
+        db.updateDocument('music', song.id, { order: prevOrder }),
+        db.updateDocument('music', prevSong.id, { order: currentOrder }),
+      ])
+
+      loadSongs()
+    } catch (error) {
+      console.error('Error moving song:', error)
+      Alert.alert('שגיאה', 'לא ניתן לשנות את הסדר')
+    }
+  }
+
+  const handleMoveDown = async (song, index) => {
+    if (index === songs.length - 1) return
+    try {
+      const nextSong = songs[index + 1]
+      const currentOrder = song.order || index
+      const nextOrder = nextSong.order || (index + 1)
+
+      await Promise.all([
+        db.updateDocument('music', song.id, { order: nextOrder }),
+        db.updateDocument('music', nextSong.id, { order: currentOrder }),
+      ])
+
+      loadSongs()
+    } catch (error) {
+      console.error('Error moving song:', error)
+      Alert.alert('שגיאה', 'לא ניתן לשנות את הסדר')
+    }
+  }
+
   return (
     <View style={styles.formContainer}>
-      <Text style={styles.formTitle}>🎵 הוספת ניגון חדש</Text>
+      <Text style={styles.formTitle}>🎵 ניהול ניגונים</Text>
 
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>כותרת הניגון</Text>
-        <TextInput
-          style={styles.input}
-          value={form.title}
-          onChangeText={text => setForm({ ...form, title: text })}
-          placeholder='לדוגמה: "שרו של ים"'
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תיאור (אופציונלי)</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={form.description}
-          onChangeText={text => setForm({ ...form, description: text })}
-          placeholder="תיאור קצר של הניגון..."
-          multiline
-          numberOfLines={3}
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>YouTube Video ID</Text>
-        <TextInput
-          style={styles.input}
-          value={form.youtubeId}
-          onChangeText={text => setForm({ ...form, youtubeId: text })}
-          placeholder="cB4tvSWyeMg"
-          autoCapitalize="none"
-        />
-        <Text style={styles.note}>
-          💡 העתק את ה-ID מהקישור של YouTube. לדוגמה: מהקישור https://www.youtube.com/watch?v=cB4tvSWyeMg העתק רק את cB4tvSWyeMg
+      {/* Add/Edit Form */}
+      <View style={styles.formSection}>
+        <Text style={styles.sectionSubtitle}>
+          {editingSong ? 'עריכת ניגון' : 'הוספת ניגון חדש'}
         </Text>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>כותרת הניגון *</Text>
+          <TextInput
+            style={styles.input}
+            value={form.title}
+            onChangeText={text => setForm({ ...form, title: text })}
+            placeholder='לדוגמה: "שרו של ים"'
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>תיאור (אופציונלי)</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={form.description}
+            onChangeText={text => setForm({ ...form, description: text })}
+            placeholder="תיאור קצר של הניגון..."
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>קישור YouTube *</Text>
+          <TextInput
+            style={styles.input}
+            value={form.youtubeUrl}
+            onChangeText={text => setForm({ ...form, youtubeUrl: text })}
+            placeholder="https://www.youtube.com/watch?v=..."
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <Text style={styles.helpText}>
+            העתק את הקישור המלא מ-YouTube (לדוגמה: https://www.youtube.com/watch?v=VIDEO_ID)
+          </Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>קטגוריה</Text>
+          <TextInput
+            style={styles.input}
+            value={form.category}
+            onChangeText={text => setForm({ ...form, category: text })}
+            placeholder="ניגונים"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>סדר הצגה</Text>
+          <TextInput
+            style={styles.input}
+            value={form.order?.toString() || '0'}
+            onChangeText={text => setForm({ ...form, order: parseInt(text) || 0 })}
+            placeholder="0"
+            keyboardType="numeric"
+          />
+          <Text style={styles.helpText}>מספר קטן יותר = יופיע ראשון</Text>
+        </View>
+
+        <Pressable
+          style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={saving}
+        >
+          <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name={editingSong ? "checkmark-circle" : "add-circle"} size={20} color="#fff" />
+              <Text style={styles.submitButtonText}>
+                {editingSong ? 'עדכן ניגון' : 'הוסף ניגון'}
+              </Text>
+            </>
+          )}
+        </Pressable>
+
+        {editingSong && (
+          <Pressable
+            style={[styles.cancelButton, { marginTop: 12 }]}
+            onPress={() => {
+              setEditingSong(null)
+              setForm({
+                title: '',
+                description: '',
+                youtubeUrl: '',
+                category: 'ניגונים',
+                order: songs.length,
+              })
+              setShowEditModal(false)
+            }}
+          >
+            <Text style={styles.cancelButtonText}>ביטול עריכה</Text>
+          </Pressable>
+        )}
       </View>
 
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קטגוריה</Text>
-        <TextInput
-          style={styles.input}
-          value={form.category}
-          onChangeText={text => setForm({ ...form, category: text })}
-          placeholder="ניגונים"
-        />
-      </View>
+      <View style={styles.separator} />
 
-      <Pressable style={styles.submitButton} onPress={handleSubmit}>
-        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
-        <Ionicons name="musical-notes" size={20} color="#fff" />
-        <Text style={styles.submitButtonText}>הוסף ניגון</Text>
-      </Pressable>
+      {/* Songs List */}
+      <View style={styles.listSection}>
+        <Text style={styles.sectionSubtitle}>רשימת ניגונים ({songs.length})</Text>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+          </View>
+        ) : songs.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="musical-notes-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+            <Text style={styles.emptyText}>אין ניגונים עדיין</Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.songsList}>
+            {songs.map((song, index) => (
+              <View key={song.id} style={styles.songItem}>
+                <View style={styles.songInfo}>
+                  <Text style={styles.songTitle} numberOfLines={1}>
+                    {song.title || 'ללא כותרת'}
+                  </Text>
+                  {song.description && (
+                    <Text style={styles.songDescription} numberOfLines={1}>
+                      {song.description}
+                    </Text>
+                  )}
+                  <Text style={styles.songMeta}>
+                    סדר: {song.order || index} | קטגוריה: {song.category || 'ניגונים'}
+                  </Text>
+                </View>
+                <View style={styles.songActions}>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() => handleMoveUp(song, index)}
+                    disabled={index === 0}
+                  >
+                    <Ionicons
+                      name="chevron-up"
+                      size={20}
+                      color={index === 0 ? '#9ca3af' : PRIMARY_BLUE}
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() => handleMoveDown(song, index)}
+                    disabled={index === songs.length - 1}
+                  >
+                    <Ionicons
+                      name="chevron-down"
+                      size={20}
+                      color={index === songs.length - 1 ? '#9ca3af' : PRIMARY_BLUE}
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() => handleEdit(song)}
+                  >
+                    <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
+                  </Pressable>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() => handleDelete(song)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </View>
 
       <Text style={styles.note}>
-        💡 הניגון יישמר ב-Firestore ויהיה זמין לנגינה ישירות מ-YouTube באפליקציה.
+        💡 הניגונים יופיעו באפליקציה לפי הסדר שקבעת. ניתן לשנות את הסדר באמצעות החצים.
       </Text>
     </View>
   )
@@ -1558,855 +1818,12 @@ function PrayersForm() {
   )
 }
 
-// ========== CHIDUSHIM FORM ==========
-function ChidushimForm() {
-  const [form, setForm] = useState({
-    title: '',
-    content: '',
-    category: 'תורה',
-    imageUri: null,
-    imageUrl: '',
-  })
-  const [uploading, setUploading] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  const handlePickImage = async () => {
-    const image = await pickImage({ aspect: [16, 9] })
-    if (image) {
-      setForm({ ...form, imageUri: image.uri })
-    }
-  }
-
-  const handleUploadImage = async () => {
-    if (!form.imageUri) {
-      Alert.alert('שגיאה', 'אנא בחר תמונה תחילה')
-      return
-    }
-
-    setUploading(true)
-    try {
-      const timestamp = Date.now()
-      const path = `chidushim/${timestamp}/image.jpg`
-      const url = await uploadImageToStorage(form.imageUri, path, (progress) => {
-        console.log(`Upload progress: ${progress}%`)
-      })
-      setForm({ ...form, imageUrl: url })
-      Alert.alert('הצלחה!', 'התמונה הועלתה בהצלחה')
-    } catch (error) {
-      Alert.alert('שגיאה', 'לא ניתן להעלות את התמונה')
-      console.error(error)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!form.title || !form.content) {
-      Alert.alert('שגיאה', 'אנא מלא כותרת ותוכן')
-      return
-    }
-
-    if (form.imageUri && !form.imageUrl) {
-      Alert.alert('שים לב', 'אנא העלה את התמונה לפני השמירה')
-      return
-    }
-
-    try {
-      setSaving(true)
-      await db.addDocument('chidushim', {
-        title: form.title,
-        content: form.content,
-        category: form.category,
-        imageUrl: form.imageUrl || '',
-        createdAt: new Date().toISOString(),
-      })
-
-      Alert.alert(
-        'הצלחה! 💡',
-        'החידוש נוסף בהצלחה ויופיע באפליקציה',
-        [
-          {
-            text: 'אישור',
-            onPress: () => {
-              setForm({
-                title: '',
-                content: '',
-                category: 'תורה',
-                imageUri: null,
-                imageUrl: '',
-              })
-            }
-          }
-        ]
-      )
-    } catch (error) {
-      console.error('Error saving chidush:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את החידוש. אנא נסה שנית.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <View style={styles.formContainer}>
-      <Text style={styles.formTitle}>💡 הוספת חידוש</Text>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>כותרת החידוש *</Text>
-        <TextInput
-          style={styles.input}
-          value={form.title}
-          onChangeText={text => setForm({ ...form, title: text })}
-          placeholder="לדוגמה: חידוש על פרשת השבוע"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תוכן החידוש *</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={form.content}
-          onChangeText={text => setForm({ ...form, content: text })}
-          placeholder="כתוב את תוכן החידוש כאן..."
-          multiline
-          numberOfLines={10}
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קטגוריה</Text>
-        <View style={styles.radioGroup}>
-          {['תורה', 'הלכה', 'אגדה', 'מוסר', 'כללי'].map(cat => (
-            <Pressable
-              key={cat}
-              style={[styles.radioButton, form.category === cat && styles.radioButtonActive]}
-              onPress={() => setForm({ ...form, category: cat })}
-            >
-              <Text style={[styles.radioText, form.category === cat && styles.radioTextActive]}>
-                {cat}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תמונה (אופציונלי)</Text>
-        {form.imageUri && (
-          <View style={styles.imagePreview}>
-            <Image source={{ uri: form.imageUri }} style={styles.previewImage} />
-            {form.imageUrl && (
-              <View style={styles.uploadedBadge}>
-                <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
-                <Text style={styles.uploadedText}>הועלה</Text>
-              </View>
-            )}
-          </View>
-        )}
-        <View style={styles.uploadSection}>
-          <Pressable
-            style={styles.uploadButton}
-            onPress={handlePickImage}
-            disabled={uploading}
-          >
-            <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
-            <Text style={styles.uploadButtonText}>
-              {form.imageUri ? 'בחר תמונה אחרת' : 'בחר תמונה'}
-            </Text>
-          </Pressable>
-          {form.imageUri && !form.imageUrl && (
-            <Pressable
-              style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-              onPress={handleUploadImage}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator color={PRIMARY_BLUE} />
-              ) : (
-                <Ionicons name="cloud-upload-outline" size={24} color={PRIMARY_BLUE} />
-              )}
-              <Text style={styles.uploadButtonText}>
-                {uploading ? 'מעלה...' : 'העלה תמונה'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      <Pressable
-        style={[styles.submitButton, (saving || uploading) && styles.submitButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={saving || uploading}
-      >
-        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Ionicons name="bulb" size={20} color="#fff" />
-        )}
-        <Text style={styles.submitButtonText}>
-          {saving ? 'שומר...' : 'הוסף חידוש'}
-        </Text>
-      </Pressable>
-
-      <Text style={styles.note}>
-        💡 החידוש יישמר ב-Firestore ויופיע באפליקציה.
-      </Text>
-    </View>
-  )
-}
-
-// ========== YESHIVA FORM (בית המדרש - חדשות) ==========
-function YeshivaForm() {
-  const [form, setForm] = useState({
-    title: '',
-    content: '',
-    category: 'כללי',
-    imageUri: null,
-    imageUrl: '',
-  })
-  const [uploading, setUploading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  
-  // Short lesson form state
-  const [shortLessonForm, setShortLessonForm] = useState({
-    title: '',
-    description: '',
-    youtubeUrl: '',
-    category: '',
-  })
-  const [savingShortLesson, setSavingShortLesson] = useState(false)
-
-  const handlePickImage = async () => {
-    const image = await pickImage({ aspect: [16, 9] })
-    if (image) {
-      setForm({ ...form, imageUri: image.uri })
-    }
-  }
-
-  const handleUploadImage = async () => {
-    if (!form.imageUri) {
-      Alert.alert('שגיאה', 'אנא בחר תמונה תחילה')
-      return
-    }
-
-    setUploading(true)
-    try {
-      const timestamp = Date.now()
-      const path = `news/${timestamp}/image.jpg`
-      const url = await uploadImageToStorage(form.imageUri, path, (progress) => {
-        console.log(`Upload progress: ${progress}%`)
-      })
-      setForm({ ...form, imageUrl: url })
-      Alert.alert('הצלחה!', 'התמונה הועלתה בהצלחה')
-    } catch (error) {
-      Alert.alert('שגיאה', 'לא ניתן להעלות את התמונה')
-      console.error(error)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!form.title || !form.content) {
-      Alert.alert('שגיאה', 'אנא מלא כותרת ותוכן')
-      return
-    }
-
-    if (form.imageUri && !form.imageUrl) {
-      Alert.alert('שים לב', 'אנא העלה את התמונה לפני השמירה')
-      return
-    }
-
-    try {
-      setSaving(true)
-      await db.addDocument('news', {
-        title: form.title,
-        content: form.content,
-        category: form.category,
-        imageUrl: form.imageUrl || '',
-        isPublished: true,
-        date: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-      })
-
-      Alert.alert(
-        'הצלחה! 📢',
-        'החדשה מבית המדרש נוספה בהצלחה ויופיע באפליקציה',
-        [
-          {
-            text: 'אישור',
-            onPress: () => {
-              setForm({
-                title: '',
-                content: '',
-                category: 'כללי',
-                imageUri: null,
-                imageUrl: '',
-              })
-            }
-          }
-        ]
-      )
-    } catch (error) {
-      console.error('Error saving news:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את החדשה. אנא נסה שנית.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <View style={styles.formContainer}>
-      {/* Short Lessons Section - First! */}
-      <Text style={styles.formTitle}>🎬 הוספת שיעור קצר</Text>
-      
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>כותרת השיעור הקצר *</Text>
-        <TextInput
-          style={styles.input}
-          value={shortLessonForm.title}
-          onChangeText={text => setShortLessonForm({ ...shortLessonForm, title: text })}
-          placeholder="הכנס כותרת השיעור"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תיאור</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={shortLessonForm.description}
-          onChangeText={text => setShortLessonForm({ ...shortLessonForm, description: text })}
-          placeholder="הכנס תיאור (אופציונלי)"
-          multiline
-          numberOfLines={3}
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קישור YouTube *</Text>
-        <TextInput
-          style={styles.input}
-          value={shortLessonForm.youtubeUrl}
-          onChangeText={text => setShortLessonForm({ ...shortLessonForm, youtubeUrl: text })}
-          placeholder="https://www.youtube.com/watch?v=..."
-          autoCapitalize="none"
-          keyboardType="url"
-        />
-        <Text style={styles.helpText}>
-          העתק את הקישור המלא מ-YouTube (לדוגמה: https://www.youtube.com/watch?v=VIDEO_ID)
-        </Text>
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קטגוריה</Text>
-        <TextInput
-          style={styles.input}
-          value={shortLessonForm.category}
-          onChangeText={text => setShortLessonForm({ ...shortLessonForm, category: text })}
-          placeholder="הכנס קטגוריה (אופציונלי)"
-        />
-      </View>
-
-      <Pressable
-        style={[styles.submitButton, savingShortLesson && styles.submitButtonDisabled]}
-        onPress={async () => {
-          if (!shortLessonForm.title.trim() || !shortLessonForm.youtubeUrl.trim()) {
-            Alert.alert('שגיאה', 'יש למלא כותרת וקישור YouTube')
-            return
-          }
-
-          // Extract YouTube ID
-          const youtubeIdPattern = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/
-          const match = shortLessonForm.youtubeUrl.match(youtubeIdPattern)
-          if (!match || !match[1]) {
-            Alert.alert('שגיאה', 'קישור YouTube לא תקין. אנא השתמש בקישור מלא מ-YouTube')
-            return
-          }
-
-          setSavingShortLesson(true)
-          try {
-            await db.addDocument('shortLessons', {
-              title: shortLessonForm.title.trim(),
-              description: shortLessonForm.description.trim() || '',
-              youtubeUrl: shortLessonForm.youtubeUrl.trim(),
-              category: shortLessonForm.category.trim() || '',
-              isActive: true,
-              createdAt: new Date().toISOString(),
-              order: 0
-            })
-
-            Alert.alert(
-              'הצלחה! 🎬',
-              'השיעור הקצר נוסף בהצלחה ויופיע באפליקציה',
-              [
-                {
-                  text: 'אישור',
-                  onPress: () => {
-                    setShortLessonForm({ title: '', description: '', youtubeUrl: '', category: '' })
-                  }
-                }
-              ]
-            )
-          } catch (error) {
-            console.error('Error saving short lesson:', error)
-            const errorMessage = error.code === 'permission-denied' 
-              ? 'אין הרשאה להוסיף שיעור. ודא שאתה מחובר כמנהל.'
-              : error.message || 'לא ניתן להוסיף את השיעור. אנא נסה שנית.'
-            Alert.alert('שגיאה', errorMessage)
-          } finally {
-            setSavingShortLesson(false)
-          }
-        }}
-        disabled={savingShortLesson}
-      >
-        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
-        {savingShortLesson ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <>
-            <Ionicons name="add-circle" size={20} color="#fff" />
-            <Text style={styles.submitButtonText}>הוסף שיעור קצר</Text>
-          </>
-        )}
-      </Pressable>
-
-      <Text style={styles.note}>
-        💡 השיעור הקצר יישמר ב-Firestore ויופיע באפליקציה במסך "שיעורים קצרים".
-      </Text>
-
-      <View style={styles.separator} />
-
-      {/* News Section */}
-      <Text style={styles.formTitle}>📢 הוספת חדשה מבית המדרש</Text>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>כותרת החדשה *</Text>
-        <TextInput
-          style={styles.input}
-          value={form.title}
-          onChangeText={text => setForm({ ...form, title: text })}
-          placeholder="לדוגמה: שיעור חדש בבית המדרש"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תוכן החדשה *</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={form.content}
-          onChangeText={text => setForm({ ...form, content: text })}
-          placeholder="כתוב את תוכן החדשה כאן..."
-          multiline
-          numberOfLines={8}
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קטגוריה</Text>
-        <View style={styles.radioGroup}>
-          {['כללי', 'שיעור', 'אירוע', 'לימוד', 'הודעות'].map(cat => (
-            <Pressable
-              key={cat}
-              style={[styles.radioButton, form.category === cat && styles.radioButtonActive]}
-              onPress={() => setForm({ ...form, category: cat })}
-            >
-              <Text style={[styles.radioText, form.category === cat && styles.radioTextActive]}>
-                {cat}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תמונה (אופציונלי)</Text>
-        {form.imageUri && (
-          <View style={styles.imagePreview}>
-            <Image source={{ uri: form.imageUri }} style={styles.previewImage} />
-            {form.imageUrl && (
-              <View style={styles.uploadedBadge}>
-                <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
-                <Text style={styles.uploadedText}>הועלה</Text>
-              </View>
-            )}
-          </View>
-        )}
-        <View style={styles.uploadSection}>
-          <Pressable
-            style={styles.uploadButton}
-            onPress={handlePickImage}
-            disabled={uploading}
-          >
-            <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
-            <Text style={styles.uploadButtonText}>
-              {form.imageUri ? 'בחר תמונה אחרת' : 'בחר תמונה'}
-            </Text>
-          </Pressable>
-          {form.imageUri && !form.imageUrl && (
-            <Pressable
-              style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-              onPress={handleUploadImage}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator color={PRIMARY_BLUE} />
-              ) : (
-                <Ionicons name="cloud-upload-outline" size={24} color={PRIMARY_BLUE} />
-              )}
-              <Text style={styles.uploadButtonText}>
-                {uploading ? 'מעלה...' : 'העלה תמונה'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      <Pressable
-        style={[styles.submitButton, (saving || uploading) && styles.submitButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={saving || uploading}
-      >
-        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Ionicons name="business" size={20} color="#fff" />
-        )}
-        <Text style={styles.submitButtonText}>
-          {saving ? 'שומר...' : 'הוסף חדשה'}
-        </Text>
-      </Pressable>
-
-      <Text style={styles.note}>
-        💡 החדשה תישמר ב-Firestore ב-collection 'news' ויופיע באפליקציה במסך "מהנעשה בבית המדרש".
-      </Text>
-
-    </View>
-  )
-}
-
-// ========== TZADIKIM FORM ==========
-function TzadikimForm() {
-  const [form, setForm] = useState({
-    name: '',
-    title: '',
-    biography: '',
-    location: '',
-    birthDate: '',
-    deathDate: '',
-    period: '',
-    imageUri: null,
-    imageUrl: '',
-    books: '',
-    sourceUrl: '',
-    wikiUrl: '',
-  })
-  const [uploading, setUploading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const user = auth.currentUser;
-    setCurrentUser(user);
-  }, []);
-
-  const handlePickImage = async () => {
-    const image = await pickImage({ aspect: [3, 4] })
-    if (image) {
-      setForm({ ...form, imageUri: image.uri })
-    }
-  }
-
-  const handleUploadImage = async () => {
-    if (!form.imageUri) {
-      Alert.alert('שגיאה', 'אנא בחר תמונה תחילה')
-      return
-    }
-
-    setUploading(true)
-    try {
-      const timestamp = Date.now()
-      const path = `tzadikim/${timestamp}/image.jpg`
-      console.log('Starting image upload:', { uri: form.imageUri, path })
-      
-      const url = await uploadImageToStorage(form.imageUri, path, (progress) => {
-        console.log(`Upload progress: ${progress}%`)
-      })
-      
-      console.log('Upload successful! URL:', url)
-      setForm({ ...form, imageUrl: url })
-      Alert.alert('הצלחה!', `התמונה הועלתה בהצלחה\n${url.substring(0, 50)}...`)
-    } catch (error) {
-      console.error('Upload error:', error)
-      Alert.alert('שגיאה', `לא ניתן להעלות את התמונה\n${error.message || error}`)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!form.name) {
-      Alert.alert('שגיאה', 'אנא הזן שם של הצדיק')
-      return
-    }
-
-    if (form.imageUri && !form.imageUrl) {
-      Alert.alert('שים לב', 'אנא העלה את התמונה לפני השמירה')
-      return
-    }
-
-    try {
-      setSaving(true)
-      
-      const booksArray = form.books ? form.books.split(',').map(b => b.trim()).filter(b => b) : []
-      
-      const tzadikData = {
-        name: form.name,
-        title: form.title || '',
-        biography: form.biography || '',
-        location: form.location || '',
-        birthDate: form.birthDate ? new Date(form.birthDate.toISOString()) : null,
-        deathDate: form.deathDate ? new Date(form.deathDate.toISOString()) : null,
-        period: form.period || '',
-        imageUrl: form.imageUrl || '',
-        books: booksArray,
-        sourceUrl: form.sourceUrl || '',
-        wikiUrl: form.wikiUrl || '',
-        viewCount: 0,
-        createdAt: new Date().toISOString(),
-      }
-      
-      console.log('Saving tzadik with data:', { ...tzadikData, imageUrl: form.imageUrl })
-      
-      const docRef = await addDoc(collection(db, 'tzadikim'), tzadikData)
-      console.log('Tzadik saved with ID:', docRef.id, 'imageUrl:', form.imageUrl)
-
-      Alert.alert(
-        'הצלחה! 👥',
-        'הצדיק נוסף בהצלחה ויופיע באפליקציה',
-        [
-          {
-            text: 'אישור',
-            onPress: () => {
-              setForm({
-                name: '',
-                title: '',
-                biography: '',
-                location: '',
-                birthDate: '',
-                deathDate: '',
-                period: '',
-                imageUri: null,
-                imageUrl: '',
-                books: '',
-                sourceUrl: '',
-                wikiUrl: '',
-              })
-            }
-          }
-        ]
-      )
-    } catch (error) {
-      console.error('Error saving tzadik:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את הצדיק. אנא נסה שנית.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <View style={styles.formContainer}>
-      <View style={{ padding: 10, backgroundColor: '#f0f9ff', marginBottom: 15, borderRadius: 8, borderWidth: 1, borderColor: '#dbeafe' }}>
-        <Text style={{ fontWeight: 'bold', marginBottom: 5, fontSize: 16, color: '#1e3a8a', textAlign: 'right' }}>ℹ️ מידע משתמש</Text>
-        <Text style={{textAlign: 'right'}}>
-          <Text style={{ fontWeight: 'bold' }}>אימייל מחובר:</Text> {currentUser ? currentUser.email : '⚠️ לא מחובר'}
-        </Text>
-        <Text style={{textAlign: 'right'}}>
-          <Text style={{ fontWeight: 'bold' }}>UID:</Text> {currentUser ? currentUser.uid : 'N/A'}
-        </Text>
-      </View>
-      <Text style={styles.formTitle}>👥 הוספת צדיק</Text>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>שם הצדיק *</Text>
-        <TextInput
-          style={styles.input}
-          value={form.name}
-          onChangeText={text => setForm({ ...form, name: text })}
-          placeholder="לדוגמה: רבי נחמן מברסלב"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תואר (אופציונלי)</Text>
-        <TextInput
-          style={styles.input}
-          value={form.title}
-          onChangeText={text => setForm({ ...form, title: text })}
-          placeholder="לדוגמה: האדמו״ר, הרב, הגאון"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תולדות חיים</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={form.biography}
-          onChangeText={text => setForm({ ...form, biography: text })}
-          placeholder="כתוב את תולדות חייו של הצדיק..."
-          multiline
-          numberOfLines={8}
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>מיקום</Text>
-        <TextInput
-          style={styles.input}
-          value={form.location}
-          onChangeText={text => setForm({ ...form, location: text })}
-          placeholder="לדוגמה: ברסלב, אוקראינה"
-        />
-      </View>
-
-      <View style={styles.formRow}>
-        <View style={[styles.formGroup, { flex: 1 }]}>
-          <Text style={styles.label}>תאריך לידה (אופציונלי)</Text>
-          <TextInput
-            style={styles.input}
-            value={form.birthDate}
-            onChangeText={text => setForm({ ...form, birthDate: text })}
-            placeholder="YYYY-MM-DD"
-          />
-        </View>
-        <View style={[styles.formGroup, { flex: 1 }]}>
-          <Text style={styles.label}>תאריך פטירה (אופציונלי)</Text>
-          <TextInput
-            style={styles.input}
-            value={form.deathDate}
-            onChangeText={text => setForm({ ...form, deathDate: text })}
-            placeholder="YYYY-MM-DD"
-          />
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תקופה (אופציונלי)</Text>
-        <TextInput
-          style={styles.input}
-          value={form.period}
-          onChangeText={text => setForm({ ...form, period: text })}
-          placeholder="לדוגמה: המאה ה-18"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>ספרים (מופרדים בפסיק)</Text>
-        <TextInput
-          style={styles.input}
-          value={form.books}
-          onChangeText={text => setForm({ ...form, books: text })}
-          placeholder="לדוגמה: ליקוטי מוהר״ן, סיפורי מעשיות"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קישור למקור (אופציונלי)</Text>
-        <TextInput
-          style={styles.input}
-          value={form.sourceUrl}
-          onChangeText={text => setForm({ ...form, sourceUrl: text })}
-          placeholder="https://..."
-          autoCapitalize="none"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קישור לויקיפדיה (אופציונלי)</Text>
-        <TextInput
-          style={styles.input}
-          value={form.wikiUrl}
-          onChangeText={text => setForm({ ...form, wikiUrl: text })}
-          placeholder="https://he.wikipedia.org/..."
-          autoCapitalize="none"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>תמונה של הצדיק *</Text>
-        {form.imageUri && (
-          <View style={styles.imagePreview}>
-            <Image source={{ uri: form.imageUri }} style={styles.previewImage} />
-            {form.imageUrl && (
-              <View style={styles.uploadedBadge}>
-                <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
-                <Text style={styles.uploadedText}>הועלה</Text>
-              </View>
-            )}
-          </View>
-        )}
-        <View style={styles.uploadSection}>
-          <Pressable
-            style={styles.uploadButton}
-            onPress={handlePickImage}
-            disabled={uploading}
-          >
-            <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
-            <Text style={styles.uploadButtonText}>
-              {form.imageUri ? 'בחר תמונה אחרת' : 'בחר תמונה'}
-            </Text>
-          </Pressable>
-          {form.imageUri && !form.imageUrl && (
-            <Pressable
-              style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-              onPress={handleUploadImage}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator color={PRIMARY_BLUE} />
-              ) : (
-                <Ionicons name="cloud-upload-outline" size={24} color={PRIMARY_BLUE} />
-              )}
-              <Text style={styles.uploadButtonText}>
-                {uploading ? 'מעלה...' : 'העלה תמונה'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      <Pressable
-        style={[styles.submitButton, (saving || uploading) && styles.submitButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={saving || uploading}
-      >
-        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Ionicons name="people" size={20} color="#fff" />
-        )}
-        <Text style={styles.submitButtonText}>
-          {saving ? 'שומר...' : 'הוסף צדיק'}
-        </Text>
-      </Pressable>
-
-      <Text style={styles.note}>
-        💡 הצדיק יישמר ב-Firestore ויופיע באפליקציה במסך "ספר תולדות אדם". התמונה היא חובה.
-      </Text>
-    </View>
-  )
-}
-
 // ========== NOTIFICATIONS FORM ==========
 function NotificationsForm() {
   const [form, setForm] = useState({
     title: '',
     message: '',
     icon: 'notifications',
-    priority: 'medium',
-    link: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -2419,13 +1836,6 @@ function NotificationsForm() {
     { value: 'musical-notes', label: 'ניגון', icon: 'musical-notes' },
     { value: 'book', label: 'תורה', icon: 'book' },
     { value: 'heart', label: 'תפילה', icon: 'heart' },
-    { value: 'videocam', label: 'לייב - שידור חי', icon: 'videocam' },
-  ]
-
-  const priorityOptions = [
-    { value: 'low', label: 'נמוכה' },
-    { value: 'medium', label: 'בינונית' },
-    { value: 'high', label: 'גבוהה' },
   ]
 
   const handleSubmit = async () => {
@@ -2442,39 +1852,88 @@ function NotificationsForm() {
     try {
       setSaving(true)
 
-      await db.addDocument('notifications', {
+      // First, save notification to database
+      const notificationData = {
         title: form.title,
         message: form.message,
         icon: form.icon,
-        priority: form.priority,
-        link: form.link || null,
         isActive: true,
         readBy: [],
         createdAt: new Date().toISOString(),
         createdBy: auth.currentUser?.uid || 'admin',
+      }
+
+      const savedNotification = await db.addDocument('notifications', notificationData)
+
+      // Get all users with push tokens from Firestore
+      console.log('📱 Collecting push tokens from all users...')
+      const usersSnapshot = await getDocs(collection(firestoreDb, 'users'))
+      const pushTokens = []
+
+      usersSnapshot.forEach((doc) => {
+        const userData = doc.data()
+        // Get all expo push tokens for this user
+        if (userData.expoPushTokens && Array.isArray(userData.expoPushTokens)) {
+          pushTokens.push(...userData.expoPushTokens.filter(token => token && token.length > 0))
+        }
       })
 
-      Alert.alert(
-        'הצלחה! 🔔',
-        'ההתראה נשלחה בהצלחה ותופיע לכל המשתמשים',
-        [
+      console.log(`📱 Found ${pushTokens.length} push tokens`)
+
+      // Send push notifications to all users
+      if (pushTokens.length > 0) {
+        console.log('📤 Sending push notifications...')
+        const pushResult = await sendPushNotifications(
+          pushTokens,
+          form.title,
+          form.message,
           {
-            text: 'אישור',
-            onPress: () => {
-              setForm({
-                title: '',
-                message: '',
-                icon: 'notifications',
-                priority: 'medium',
-                link: '',
-              })
-            }
+            notificationId: savedNotification.id,
+            screen: 'Notifications',
+            icon: form.icon
           }
-        ]
-      )
+        )
+
+        console.log(`✅ Push notifications sent: ${pushResult.sent} successful, ${pushResult.failed} failed`)
+
+        Alert.alert(
+          'הצלחה! 🔔',
+          `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}`,
+          [
+            {
+              text: 'אישור',
+              onPress: () => {
+                setForm({
+                  title: '',
+                  message: '',
+                  icon: 'notifications',
+                })
+              }
+            }
+          ]
+        )
+      } else {
+        // No push tokens found, but notification was saved
+        Alert.alert(
+          'התראה נשמרה ⚠️',
+          'ההתראה נשמרה בהצלחה, אבל לא נמצאו push tokens לשליחה.\nהמשתמשים יראו את ההתראה כשהם יפתחו את האפליקציה.',
+          [
+            {
+              text: 'אישור',
+              onPress: () => {
+                setForm({
+                  title: '',
+                  message: '',
+                  icon: 'notifications',
+                })
+              }
+            }
+          ]
+        )
+      }
     } catch (error) {
-      console.error('Error saving notification:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את ההתראה. אנא נסה שנית.')
+      console.error('Error saving/sending notification:', error)
+      Alert.alert('שגיאה', 'לא ניתן לשמור/לשלוח את ההתראה. אנא נסה שנית.')
     } finally {
       setSaving(false)
     }
@@ -2540,45 +1999,6 @@ function NotificationsForm() {
         </View>
       </View>
 
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>עדיפות</Text>
-        <View style={styles.radioGroup}>
-          {priorityOptions.map(option => (
-            <Pressable
-              key={option.value}
-              style={[
-                styles.radioButton,
-                form.priority === option.value && styles.radioButtonActive
-              ]}
-              onPress={() => setForm({ ...form, priority: option.value })}
-            >
-              <Text
-                style={[
-                  styles.radioText,
-                  form.priority === option.value && styles.radioTextActive
-                ]}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>קישור (אופציונלי)</Text>
-        <TextInput
-          style={styles.input}
-          value={form.link}
-          onChangeText={text => setForm({ ...form, link: text })}
-          placeholder="https://..."
-          autoCapitalize="none"
-          keyboardType="url"
-        />
-        <Text style={styles.note}>
-          💡 אם תרצה שההתראה תפתח מסך מסוים, תוכל להוסיף קישור כאן (אופציונלי)
-        </Text>
-      </View>
 
       <Pressable
         style={[styles.submitButton, saving && styles.submitButtonDisabled]}
@@ -2598,6 +2018,367 @@ function NotificationsForm() {
 
       <Text style={styles.note}>
         💡 ההתראה תישלח לכל המשתמשים ותופיע במסך ההתראות. משתמשים יוכלו לראות אותה כשלוחצים על אייקון הפעמון.
+      </Text>
+    </View>
+  )
+}
+
+// ========== SHORT LESSONS FORM ==========
+function ShortLessonsForm() {
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    youtubeUrl: '',
+    category: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!form.title.trim() || !form.youtubeUrl.trim()) {
+      Alert.alert('שגיאה', 'יש למלא כותרת וקישור YouTube')
+      return
+    }
+
+    // Extract YouTube ID
+    const youtubeIdPattern = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^&\n?#]+)/
+    const match = form.youtubeUrl.match(youtubeIdPattern)
+    if (!match || !match[1]) {
+      Alert.alert('שגיאה', 'קישור YouTube לא תקין. אנא השתמש בקישור מלא מ-YouTube')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await db.addDocument('shortLessons', {
+        title: form.title.trim(),
+        description: form.description.trim() || '',
+        youtubeUrl: form.youtubeUrl.trim(),
+        category: form.category.trim() || '',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        order: 0
+      })
+
+      Alert.alert(
+        'הצלחה! 🎬',
+        'השיעור הקצר נוסף בהצלחה ויופיע באפליקציה',
+        [
+          {
+            text: 'אישור',
+            onPress: () => {
+              setForm({ title: '', description: '', youtubeUrl: '', category: '' })
+            }
+          }
+        ]
+      )
+    } catch (error) {
+      console.error('Error saving short lesson:', error)
+      const errorMessage = error.code === 'permission-denied' 
+        ? 'אין הרשאה להוסיף שיעור. ודא שאתה מחובר כמנהל.'
+        : error.message || 'לא ניתן להוסיף את השיעור. אנא נסה שנית.'
+      Alert.alert('שגיאה', errorMessage)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>🎬 הוספת שיעור קצר</Text>
+      
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>כותרת השיעור הקצר *</Text>
+        <TextInput
+          style={styles.input}
+          value={form.title}
+          onChangeText={text => setForm({ ...form, title: text })}
+          placeholder="הכנס כותרת השיעור"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>תיאור</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={form.description}
+          onChangeText={text => setForm({ ...form, description: text })}
+          placeholder="הכנס תיאור (אופציונלי)"
+          multiline
+          numberOfLines={3}
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קישור YouTube *</Text>
+        <TextInput
+          style={styles.input}
+          value={form.youtubeUrl}
+          onChangeText={text => setForm({ ...form, youtubeUrl: text })}
+          placeholder="https://www.youtube.com/watch?v=..."
+          autoCapitalize="none"
+          keyboardType="url"
+        />
+        <Text style={styles.helpText}>
+          העתק את הקישור המלא מ-YouTube (לדוגמה: https://www.youtube.com/watch?v=VIDEO_ID)
+        </Text>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קטגוריה</Text>
+        <TextInput
+          style={styles.input}
+          value={form.category}
+          onChangeText={text => setForm({ ...form, category: text })}
+          placeholder="הכנס קטגוריה (אופציונלי)"
+        />
+      </View>
+
+      <Pressable
+        style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+        onPress={handleSubmit}
+        disabled={saving}
+      >
+        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="add-circle" size={20} color="#fff" />
+            <Text style={styles.submitButtonText}>הוסף שיעור קצר</Text>
+          </>
+        )}
+      </Pressable>
+
+      <Text style={styles.note}>
+        💡 השיעור הקצר יישמר ב-Firestore ויופיע באפליקציה במסך "שיעורים קצרים".
+      </Text>
+    </View>
+  )
+}
+
+// ========== LONG LESSONS FORM ==========
+function LongLessonsForm() {
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    youtubeUrl: '',
+    category: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!form.title.trim() || !form.youtubeUrl.trim()) {
+      Alert.alert('שגיאה', 'יש למלא כותרת וקישור YouTube')
+      return
+    }
+
+    // Extract YouTube ID
+    const youtubeIdPattern = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^&\n?#]+)/
+    const match = form.youtubeUrl.match(youtubeIdPattern)
+    if (!match || !match[1]) {
+      Alert.alert('שגיאה', 'קישור YouTube לא תקין. אנא השתמש בקישור מלא מ-YouTube')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await db.addDocument('longLessons', {
+        title: form.title.trim(),
+        description: form.description.trim() || '',
+        youtubeUrl: form.youtubeUrl.trim(),
+        category: form.category.trim() || '',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        order: 0
+      })
+
+      Alert.alert(
+        'הצלחה! 🎥',
+        'השיעור הארוך נוסף בהצלחה ויופיע באפליקציה',
+        [
+          {
+            text: 'אישור',
+            onPress: () => {
+              setForm({ title: '', description: '', youtubeUrl: '', category: '' })
+            }
+          }
+        ]
+      )
+    } catch (error) {
+      console.error('Error saving long lesson:', error)
+      const errorMessage = error.code === 'permission-denied' 
+        ? 'אין הרשאה להוסיף שיעור. ודא שאתה מחובר כמנהל.'
+        : error.message || 'לא ניתן להוסיף את השיעור. אנא נסה שנית.'
+      Alert.alert('שגיאה', errorMessage)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>🎥 הוספת שיעור ארוך</Text>
+      
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>כותרת השיעור הארוך *</Text>
+        <TextInput
+          style={styles.input}
+          value={form.title}
+          onChangeText={text => setForm({ ...form, title: text })}
+          placeholder="הכנס כותרת השיעור"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>תיאור</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={form.description}
+          onChangeText={text => setForm({ ...form, description: text })}
+          placeholder="הכנס תיאור (אופציונלי)"
+          multiline
+          numberOfLines={3}
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קישור YouTube *</Text>
+        <TextInput
+          style={styles.input}
+          value={form.youtubeUrl}
+          onChangeText={text => setForm({ ...form, youtubeUrl: text })}
+          placeholder="https://www.youtube.com/watch?v=..."
+          autoCapitalize="none"
+          keyboardType="url"
+        />
+        <Text style={styles.helpText}>
+          העתק את הקישור המלא מ-YouTube (לדוגמה: https://www.youtube.com/watch?v=VIDEO_ID)
+        </Text>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קטגוריה</Text>
+        <TextInput
+          style={styles.input}
+          value={form.category}
+          onChangeText={text => setForm({ ...form, category: text })}
+          placeholder="הכנס קטגוריה (אופציונלי)"
+        />
+      </View>
+
+      <Pressable
+        style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+        onPress={handleSubmit}
+        disabled={saving}
+      >
+        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="add-circle" size={20} color="#fff" />
+            <Text style={styles.submitButtonText}>הוסף שיעור ארוך</Text>
+          </>
+        )}
+      </Pressable>
+
+      <Text style={styles.note}>
+        💡 השיעור הארוך יישמר ב-Firestore ויופיע באפליקציה במסך "שיעורים" (שיעורים מלאים).
+      </Text>
+    </View>
+  )
+}
+
+// ========== HODU LAHASHEM FORM ==========
+function HoduLaHashemForm() {
+  const [form, setForm] = useState({
+    title: '',
+    content: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!form.title.trim() || !form.content.trim()) {
+      Alert.alert('שגיאה', 'יש למלא כותרת ותוכן')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await db.addDocument('hoduLaHashem', {
+        title: form.title.trim(),
+        content: form.content.trim(),
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      })
+
+      Alert.alert(
+        'הצלחה! ✨',
+        'סיפור הניסים נוסף בהצלחה ויופיע באפליקציה',
+        [
+          {
+            text: 'אישור',
+            onPress: () => {
+              setForm({ title: '', content: '' })
+            }
+          }
+        ]
+      )
+    } catch (error) {
+      console.error('Error saving story:', error)
+      const errorMessage = error.code === 'permission-denied' 
+        ? 'אין הרשאה להוסיף סיפור. ודא שאתה מחובר כמנהל.'
+        : error.message || 'לא ניתן להוסיף את הסיפור. אנא נסה שנית.'
+      Alert.alert('שגיאה', errorMessage)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>✨ הוספת סיפור ניסים (הודו לה')</Text>
+      
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>כותרת הסיפור *</Text>
+        <TextInput
+          style={styles.input}
+          value={form.title}
+          onChangeText={text => setForm({ ...form, title: text })}
+          placeholder="הכנס כותרת הסיפור"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>תוכן הסיפור *</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={form.content}
+          onChangeText={text => setForm({ ...form, content: text })}
+          placeholder="כתוב את סיפור הניסים כאן..."
+          multiline
+          numberOfLines={10}
+        />
+      </View>
+
+      <Pressable
+        style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+        onPress={handleSubmit}
+        disabled={saving}
+      >
+        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="add-circle" size={20} color="#fff" />
+            <Text style={styles.submitButtonText}>הוסף סיפור ניסים</Text>
+          </>
+        )}
+      </Pressable>
+
+      <Text style={styles.note}>
+        💡 סיפור הניסים יישמר ב-Firestore ויופיע באפליקציה במסך "הודו לה'".
       </Text>
     </View>
   )
@@ -2987,5 +2768,96 @@ const styles = StyleSheet.create({
     color: '#fff',
     paddingVertical: 14,
     textAlign: 'center',
+  },
+  formSection: {
+    marginBottom: 24,
+  },
+  listSection: {
+    marginTop: 8,
+  },
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.1)',
+  },
+  emptyText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  songsList: {
+    maxHeight: 400,
+  },
+  songItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  songInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  songTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    marginBottom: 4,
+    textAlign: 'right',
+  },
+  songDescription: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    marginBottom: 4,
+    textAlign: 'right',
+  },
+  songMeta: {
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    color: '#9ca3af',
+    textAlign: 'right',
+  },
+  songActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(11,27,58,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+    marginTop: 4,
+    lineHeight: 16,
   },
 })

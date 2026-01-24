@@ -10,15 +10,75 @@ const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
 // קטגוריות ספר המידות - תוכן אמיתי מ-Sefaria API בלבד
+// שמות מדויקים כפי שמופיעים ב-Sefaria לפי הסדר האלפביתי
 const MIDOT_CATEGORIES = [
-  { id: 'ahava', title: 'אהבה' },
-  { id: 'yira', title: 'יראה' },
-  { id: 'tefila', title: 'תפילה' },
-  { id: 'tzedaka', title: 'צדקה' },
-  { id: 'torah', title: 'תורה' },
-  { id: 'avoda', title: 'עבודה' },
-  { id: 'bitachon', title: 'בטחון' },
-  { id: 'simcha', title: 'שמחה' },
+  { id: 'truth', title: 'אמת', englishTitle: 'Truth' },
+  { id: 'hospitality', title: 'הכנסת אורחים', englishTitle: 'Hospitality' },
+  { id: 'love', title: 'אהבה', englishTitle: 'Love' },
+  { id: 'faith', title: 'אמונה', englishTitle: 'Faith' },
+  { id: 'eating', title: 'אכילה', englishTitle: 'Eating' },
+  { id: 'widower', title: 'אלמן', englishTitle: 'A Widower' },
+  { id: 'land-of-israel', title: 'ארץ ישראל', englishTitle: 'The Land of Israel' },
+  { id: 'lost-objects', title: 'אבידה', englishTitle: 'Lost Objects' },
+  { id: 'children', title: 'בנים', englishTitle: 'Children' },
+  { id: 'house', title: 'בית', englishTitle: 'A House' },
+  { id: 'shame', title: 'בושה', englishTitle: 'Embarrassment; Modesty' },
+  { id: 'clothes', title: 'בגדים', englishTitle: 'Clothing' },
+  { id: 'trust', title: 'בטחון', englishTitle: 'Trust in God' },
+  { id: 'tidings', title: 'בשורה', englishTitle: 'Tidings' },
+  { id: 'blessing', title: 'ברכה', englishTitle: 'Blessing' },
+  { id: 'crying', title: 'בכייה', englishTitle: 'Crying' },
+  { id: 'arrogance', title: 'גאוה', englishTitle: 'Haughtiness' },
+  { id: 'theft', title: 'גניבה וגזילה', englishTitle: 'Theft and Robbery' },
+  { id: 'knowledge', title: 'דעת', englishTitle: 'Knowledge of God' },
+  { id: 'travel', title: 'דרך', englishTitle: 'Traveling' },
+  { id: 'judge', title: 'דיין', englishTitle: 'A Judge' },
+  { id: 'sweetening', title: 'המתקת דין', englishTitle: 'Mitigating Judgment' },
+  { id: 'seclusion', title: 'התבודדות', englishTitle: 'Seclusion' },
+  { id: 'thoughts', title: 'הרהורים', englishTitle: 'Improper Thoughts' },
+  { id: 'high-position', title: 'התנשאות', englishTitle: 'Prestige and Importance' },
+  { id: 'success', title: 'הצלחה', englishTitle: 'Success and Prosperity' },
+  { id: 'pregnancy', title: 'הריון', englishTitle: 'Conception; Pregnancy' },
+  { id: 'instruction', title: 'הוראה', englishTitle: 'Instruction' },
+  { id: 'confession', title: 'ודוי דברים', englishTitle: 'Confession' },
+  { id: 'defers', title: 'ותרן', englishTitle: 'Easygoing' },
+  { id: 'forger', title: 'זיפן', englishTitle: 'A Fraud' },
+  { id: 'ancestral-merit', title: 'זכות אבות', englishTitle: 'Ancestral Merit' },
+  { id: 'memory', title: 'זכירה', englishTitle: 'Memory' },
+  { id: 'elderly', title: 'זקנים', englishTitle: 'Elders' },
+  { id: 'zeal', title: 'זריזות', englishTitle: 'Zealousness' },
+  { id: 'dream', title: 'חלום', englishTitle: 'Dreams' },
+  { id: 'favor', title: 'חן', englishTitle: 'Grace' },
+  { id: 'flattery', title: 'חנפה', englishTitle: 'Flattery' },
+  { id: 'investigation', title: 'חקירה', englishTitle: 'Philosophical Investigation' },
+  { id: 'novelties', title: 'חדושין דאוריתא', englishTitle: 'Original Torah; Sights' },
+  { id: 'marriage', title: 'חיתון', englishTitle: 'Marriage' },
+  { id: 'nature', title: 'טבע', englishTitle: 'Nature' },
+  { id: 'wandering', title: 'טלטול', englishTitle: 'Wandering' },
+  { id: 'purity', title: 'טהרה', englishTitle: 'Purity' },
+  { id: 'salvation', title: 'ישועה', englishTitle: 'Salvation and Miracles' },
+  { id: 'fear', title: 'יראה', englishTitle: 'Fear of God' },
+  { id: 'lineage', title: 'יחוס', englishTitle: 'Distinguished Ancestry' },
+  { id: 'honor', title: 'כבוד', englishTitle: 'Honor and Respect' },
+  { id: 'anger', title: 'כעס', englishTitle: 'Anger' },
+  { id: 'sorcery', title: 'כישוף', englishTitle: 'Sorcery' },
+  { id: 'strife', title: 'מחלוקת', englishTitle: 'Strife and Quarreling' },
+  { id: 'livelihood', title: 'מזונות', englishTitle: 'Livelihood; Sustenance' },
+  { id: 'illness', title: 'מחלה', englishTitle: 'Illness' },
+  { id: 'war', title: 'מלחמה', englishTitle: 'War' },
+  { id: 'death', title: 'מיתה', englishTitle: 'Death' },
+  { id: 'heresy', title: 'מינות', englishTitle: 'Heresy' },
+  { id: 'leader', title: 'נשיא', englishTitle: 'A Leader' },
+  { id: 'soul', title: 'נשמה', englishTitle: 'The Soul' },
+  { id: 'prayer', title: 'תפילה', englishTitle: 'Prayer' },
+  { id: 'repentance', title: 'תשובה', englishTitle: 'Repentance' },
+  { id: 'torah', title: 'תורה', englishTitle: 'Torah Study' },
+  { id: 'joy', title: 'שמחה', englishTitle: 'Joy and Happiness' },
+  { id: 'peace', title: 'שלום', englishTitle: 'Peace' },
+  { id: 'humility', title: 'ענווה', englishTitle: 'Humility' },
+  { id: 'charity', title: 'צדקה', englishTitle: 'Charity' },
+  { id: 'tzaddik', title: 'צדיק', englishTitle: 'A Tzaddik' },
+  { id: 'fasting', title: 'תענית', englishTitle: 'Fasting' },
 ]
 
 export default function SeferHaMidotScreen({ navigation }) {
@@ -75,97 +135,55 @@ export default function SeferHaMidotScreen({ navigation }) {
     setLoading(true)
     setCategoryContent(null)
 
-    // First try Sefaria API - use direct endpoint: /api/texts/Sefer_HaMiddot
+    // Sefaria API requires specific tref format: Sefer HaMiddot, Category, Part I/II
     try {
-      // According to Sefaria structure at https://www.sefaria.org/Sefer_HaMiddot
-      // Map Hebrew titles to English category names as they appear in Sefaria
-      const categoryMap = {
-        'אהבה': 'Love',
-        'יראה': 'Fear of God',
-        'תפילה': 'Prayer',
-        'צדקה': 'Charity',
-        'תורה': 'Torah Study',
-        'עבודה': 'Torah Study', // Service/Work - using Torah Study as closest match
-        'בטחון': 'Trust in God',
-        'שמחה': 'Joy and Happiness'
-      }
-      
-      const englishCategory = categoryMap[category.title] || category.title
-      const bookName = 'Sefer_HaMiddot'
-      
-      // Try different tref formats based on Sefaria API structure
-      const trefOptions = [
-        `${bookName}, ${englishCategory}`,
-        `${bookName}.${englishCategory}`,
-        `${bookName}, ${englishCategory}, Part I`,
-        `${bookName}, ${englishCategory}, Part II`,
-        `${bookName}.${englishCategory}.1`, // Try with section number
-        `${bookName}.${englishCategory}.2`,
-      ]
-      
-      for (const tref of trefOptions) {
+      const bookName = 'Sefer HaMiddot'
+      const englishCategory = category.englishTitle
+
+      console.log(`🔍 Loading from Sefaria: ${bookName}, ${englishCategory}`)
+
+      // Try to load both Part I and Part II and combine them
+      const parts = []
+
+      for (const partNum of ['Part I', 'Part II']) {
         try {
-          console.log(`🔍 Trying tref: ${tref}`)
+          const tref = `${bookName}, ${englishCategory}, ${partNum}`
+          console.log(`🔍 Trying: ${tref}`)
           const textData = await getText(tref, { lang: 'he' })
-          const formatted = formatTextForDisplay(textData)
-          if (formatted.hebrew || formatted.content) {
-            console.log(`✅ Success! Loaded content from Sefaria API`)
-            setCategoryContent({
-              title: category.title,
-              content: formatted.hebrew || formatted.content,
-              hebrew: formatted.hebrew || formatted.content,
+
+          if (textData && textData.he) {
+            console.log(`✅ Loaded ${partNum}`)
+            const content = Array.isArray(textData.he) ? textData.he : [textData.he]
+            parts.push({
+              title: partNum === 'Part I' ? 'חלק ראשון' : 'חלק שני',
+              content: content.filter(p => p && p.trim()).join('\n\n')
             })
-            setLoading(false)
-            return
           }
         } catch (e) {
-          console.log(`❌ Failed: ${tref} - ${e.message}`)
+          console.log(`⚠️ ${partNum} not available: ${e.message}`)
         }
       }
-      
-      // If book index was loaded, try to find category in the structure
-      if (bookFound && bookFound.index && bookFound.index.nodes) {
-        const findCategoryInIndex = (nodes, searchTitle) => {
-          for (const node of nodes) {
-            if (node.title === searchTitle || node.heTitle === searchTitle || 
-                node.title?.includes(englishCategory) || node.heTitle?.includes(category.title)) {
-              return node
-            }
-            if (node.nodes) {
-              const found = findCategoryInIndex(node.nodes, searchTitle)
-              if (found) return found
-            }
-          }
-          return null
-        }
-        
-        const categoryNode = findCategoryInIndex(bookFound.index.nodes, category.title)
-        if (categoryNode && categoryNode.ref) {
-          try {
-            console.log(`🔍 Trying via index ref: ${categoryNode.ref}`)
-            const textData = await getText(categoryNode.ref, { lang: 'he' })
-            const formatted = formatTextForDisplay(textData)
-            if (formatted.hebrew || formatted.content) {
-              console.log(`✅ Success! Loaded via index structure`)
-              setCategoryContent({
-                title: category.title,
-                content: formatted.hebrew || formatted.content,
-                hebrew: formatted.hebrew || formatted.content,
-              })
-              setLoading(false)
-              return
-            }
-          } catch (e) {
-            console.log(`❌ Failed to load via index: ${e.message}`)
-          }
-        }
+
+      // If we have content from any part, show it
+      if (parts.length > 0) {
+        const combinedContent = parts.map(part =>
+          `${part.title}\n\n${part.content}`
+        ).join('\n\n―――――――――――\n\n')
+
+        setCategoryContent({
+          title: category.title,
+          content: combinedContent,
+          hebrew: combinedContent,
+        })
+        setLoading(false)
+        return
       }
+
+      // If no parts found, show error
+      throw new Error('No content found')
+
     } catch (error) {
       console.error('Error loading from Sefaria:', error)
-    }
-
-    // If we couldn't load from Sefaria, show error
-    if (!categoryContent) {
       Alert.alert(
         'שגיאה',
         `לא ניתן לטעון את התוכן של "${category.title}" מ-Sefaria.\n\nאנא בדוק את החיבור לאינטרנט ונסה שוב.`,
