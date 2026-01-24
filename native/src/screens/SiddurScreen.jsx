@@ -13,47 +13,55 @@ const DEEP_BLUE = '#0b1b3a'
 // Sefaria API base URL
 const SEFARIA_API_BASE = 'https://www.sefaria.org/api'
 
-// Common Siddur sections
+// Common Siddur sections - using Sefaria references
 const SIDDUR_SECTIONS = [
   { 
     title: 'ברכות השחר', 
-    sefariaRef: 'Berakhot 60b',
-    description: 'ברכות הבוקר'
+    sefariaRef: 'Siddur_Ashkenaz, Weekday, Shacharit, Preparatory Prayers, Morning Blessings',
+    description: 'ברכות הבוקר המלאות',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Weekday%2C_Shacharit%2C_Preparatory_Prayers%2C_Morning_Blessings'
   },
   { 
     title: 'פסוקי דזמרה', 
-    sefariaRef: 'Psalms 1',
-    description: 'תהלים ופסוקי דזמרה'
+    sefariaRef: 'Siddur_Ashkenaz, Weekday, Shacharit, Pesukei D\'Zimrah',
+    description: 'תהלים ופסוקי דזמרה',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Weekday%2C_Shacharit%2C_Pesukei_D%27Zimrah'
   },
   { 
     title: 'קריאת שמע וברכותיה', 
-    sefariaRef: 'Berakhot 2a',
-    description: 'קריאת שמע וברכותיה'
+    sefariaRef: 'Siddur_Ashkenaz, Weekday, Shacharit, Shema and its Blessings',
+    description: 'קריאת שמע וברכותיה',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Weekday%2C_Shacharit%2C_Shema_and_its_Blessings'
   },
   { 
     title: 'תפילת שחרית', 
-    sefariaRef: 'Berakhot 4b',
-    description: 'תפילת שחרית'
+    sefariaRef: 'Siddur_Ashkenaz, Weekday, Shacharit, Amidah',
+    description: 'תפילת שחרית',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Weekday%2C_Shacharit%2C_Amidah'
   },
   { 
     title: 'תפילת מנחה', 
-    sefariaRef: 'Berakhot 4b',
-    description: 'תפילת מנחה'
+    sefariaRef: 'Siddur_Ashkenaz, Weekday, Mincha',
+    description: 'תפילת מנחה',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Weekday%2C_Mincha'
   },
   { 
     title: 'תפילת ערבית', 
-    sefariaRef: 'Berakhot 2a',
-    description: 'תפילת ערבית'
+    sefariaRef: 'Siddur_Ashkenaz, Weekday, Maariv',
+    description: 'תפילת ערבית',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Weekday%2C_Maariv'
   },
   { 
     title: 'ברכת המזון', 
-    sefariaRef: 'Berakhot 48b',
-    description: 'ברכת המזון'
+    sefariaRef: 'Siddur_Ashkenaz, Birkat_Hamazon',
+    description: 'ברכת המזון',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Birkat_Hamazon'
   },
   { 
     title: 'קדיש', 
-    sefariaRef: 'Berakhot 3a',
-    description: 'קדיש'
+    sefariaRef: 'Siddur_Ashkenaz, Mourner\'s Kaddish',
+    description: 'קדיש',
+    directLink: 'https://www.sefaria.org/Siddur_Ashkenaz%2C_Mourner\'s_Kaddish'
   },
 ]
 
@@ -61,43 +69,204 @@ export default function SiddurScreen({ navigation }) {
   const [loading, setLoading] = useState(false)
   const [selectedSection, setSelectedSection] = useState(null)
   const [sectionContent, setSectionContent] = useState(null)
+  const [language, setLanguage] = useState('he') // 'he' for Hebrew, 'en' for English
 
   const fetchSefariaText = async (ref) => {
     try {
       setLoading(true)
-      // Sefaria API endpoint for text
-      const url = `${SEFARIA_API_BASE}/texts/${ref}?context=0`
-      const response = await fetch(url)
+      // Sefaria API endpoint - try multiple approaches for better content
+      // First try: Direct text API with full context
+      let url = `${SEFARIA_API_BASE}/texts/${ref}?context=1`
+      
+      console.log('Fetching from Sefaria:', url)
+      let response = await fetch(url)
       
       if (!response.ok) {
-        throw new Error('Failed to fetch from Sefaria API')
+        // Try with different encoding
+        const encodedRef = encodeURIComponent(ref)
+        url = `${SEFARIA_API_BASE}/texts/${encodedRef}?context=1`
+        console.log('Trying encoded URL:', url)
+        response = await fetch(url)
+      }
+      
+      if (!response.ok) {
+        // Try v2 API
+        const encodedRef = encodeURIComponent(ref)
+        url = `${SEFARIA_API_BASE}/v2/texts/${encodedRef}`
+        console.log('Trying v2 API:', url)
+        response = await fetch(url)
+      }
+      
+      if (!response.ok) {
+        console.warn('Sefaria API returned error:', response.status)
+        return null
       }
       
       const data = await response.json()
+      console.log('Sefaria API response structure:', Object.keys(data))
       return data
     } catch (error) {
       console.error('Error fetching from Sefaria:', error)
-      throw error
+      return null
     } finally {
       setLoading(false)
     }
   }
 
+  // Helper function to extract text from Sefaria API response
+  const extractText = (content, lang) => {
+    if (!content) return null
+    
+    // Handle different response structures from Sefaria API
+    // Structure 1: Direct he/text properties
+    if (lang === 'he' && content.he) {
+      return content.he
+    }
+    if (lang === 'en' && content.text) {
+      return content.text
+    }
+    
+    // Structure 2: Nested versions array
+    if (content.versions && Array.isArray(content.versions)) {
+      const hebrewVersion = content.versions.find(v => v.language === 'he' || v.lang === 'he')
+      const englishVersion = content.versions.find(v => v.language === 'en' || v.lang === 'en')
+      
+      if (lang === 'he' && hebrewVersion) {
+        return hebrewVersion.text || hebrewVersion.he
+      }
+      if (lang === 'en' && englishVersion) {
+        return englishVersion.text
+      }
+    }
+    
+    // Structure 3: Nested text object
+    if (content.text) {
+      if (typeof content.text === 'object') {
+        if (lang === 'he' && content.text.he) {
+          return content.text.he
+        }
+        if (lang === 'en' && content.text.en) {
+          return content.text.en
+        }
+      }
+    }
+    
+    // Structure 4: Array of segments
+    if (Array.isArray(content)) {
+      return content.map(item => {
+        if (lang === 'he' && item.he) return item.he
+        if (lang === 'en' && item.text) return item.text
+        return item
+      })
+    }
+    
+    // Fallback: return what we have
+    if (lang === 'he') {
+      return content.he || content.text
+    }
+    if (lang === 'en') {
+      return content.text || content.en
+    }
+    
+    return null
+  }
+
+  // Format text for display
+  const formatTextForDisplay = (text) => {
+    if (!text) return []
+    
+    // Handle string
+    if (typeof text === 'string') {
+      // Split by newlines and filter empty lines
+      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+      return lines.length > 0 ? lines : [text]
+    }
+    
+    // Handle array
+    if (Array.isArray(text)) {
+      const result = []
+      text.forEach(item => {
+        if (typeof item === 'string') {
+          const lines = item.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+          result.push(...lines)
+        } else if (Array.isArray(item)) {
+          // Nested array - flatten it
+          item.forEach(subItem => {
+            if (typeof subItem === 'string') {
+              const lines = subItem.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+              result.push(...lines)
+            } else {
+              result.push(String(subItem))
+            }
+          })
+        } else if (item && typeof item === 'object') {
+          // Object - try to extract text
+          if (item.he) result.push(item.he)
+          else if (item.text) result.push(item.text)
+          else result.push(JSON.stringify(item))
+        } else {
+          result.push(String(item))
+        }
+      })
+      return result.filter(line => line && line.length > 0)
+    }
+    
+    // Handle object
+    if (typeof text === 'object') {
+      if (text.he) return formatTextForDisplay(text.he)
+      if (text.text) return formatTextForDisplay(text.text)
+      return [JSON.stringify(text)]
+    }
+    
+    return [String(text)]
+  }
+
   const handleSectionPress = async (section) => {
     try {
       setSelectedSection(section)
+      setLoading(true)
       const content = await fetchSefariaText(section.sefariaRef)
-      setSectionContent(content)
+      
+      if (content) {
+        setSectionContent(content)
+      } else {
+        // If API failed, show option to open directly in browser
+        Alert.alert(
+          'פתח באתר Sefaria',
+          'לצפייה מלאה בתוכן, נא לפתוח את הסידור באתר Sefaria',
+          [
+            { text: 'ביטול', style: 'cancel', onPress: () => {
+              setSelectedSection(null)
+              setSectionContent(null)
+            }},
+            { 
+              text: 'פתח באתר', 
+              onPress: () => {
+                const link = section.directLink || `https://www.sefaria.org/${section.sefariaRef}`
+                Linking.openURL(link)
+                setSelectedSection(null)
+                setSectionContent(null)
+              }
+            }
+          ]
+        )
+      }
     } catch (error) {
       Alert.alert(
         'שגיאה',
         'לא ניתן לטעון את התוכן. נסה לפתוח את הסידור באתר Sefaria',
         [
-          { text: 'ביטול', style: 'cancel' },
+          { text: 'ביטול', style: 'cancel', onPress: () => {
+            setSelectedSection(null)
+            setSectionContent(null)
+          }},
           { 
             text: 'פתח באתר', 
             onPress: () => {
-              Linking.openURL(`https://www.sefaria.org/${section.sefariaRef}`)
+              const link = section.directLink || `https://www.sefaria.org/${section.sefariaRef}`
+              Linking.openURL(link)
+              setSelectedSection(null)
+              setSectionContent(null)
             }
           }
         ]
@@ -142,46 +311,74 @@ export default function SiddurScreen({ navigation }) {
             <Text style={styles.sectionDescription}>{selectedSection.description}</Text>
           </View>
 
-          <View style={styles.textContainer}>
-            {sectionContent.he && (
-              <View style={styles.hebrewText}>
-                {Array.isArray(sectionContent.he) ? (
-                  sectionContent.he.map((text, idx) => (
-                    <Text key={idx} style={styles.hebrewTextLine}>
-                      {typeof text === 'string' ? text : text.join(' ')}
-                    </Text>
-                  ))
-                ) : (
-                  <Text style={styles.hebrewTextLine}>
-                    {typeof sectionContent.he === 'string' 
-                      ? sectionContent.he 
-                      : JSON.stringify(sectionContent.he)}
-                  </Text>
-                )}
-              </View>
-            )}
+          {/* Language Toggle */}
+          <View style={styles.languageToggle}>
+            <Pressable
+              style={[styles.languageButton, language === 'he' && styles.languageButtonActive]}
+              onPress={() => setLanguage('he')}
+            >
+              <Text style={[styles.languageButtonText, language === 'he' && styles.languageButtonTextActive]}>
+                עברית
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.languageButton, language === 'en' && styles.languageButtonActive]}
+              onPress={() => setLanguage('en')}
+            >
+              <Text style={[styles.languageButtonText, language === 'en' && styles.languageButtonTextActive]}>
+                English
+              </Text>
+            </Pressable>
+          </View>
 
-            {sectionContent.text && (
-              <View style={styles.textBlock}>
-                {Array.isArray(sectionContent.text) ? (
-                  sectionContent.text.map((text, idx) => (
-                    <Text key={idx} style={styles.textLine}>
-                      {typeof text === 'string' ? text : text.join(' ')}
+          <View style={styles.textContainer}>
+            {(() => {
+              const text = extractText(sectionContent, language)
+              const formattedText = formatTextForDisplay(text)
+              
+              if (!formattedText || formattedText.length === 0) {
+                return (
+                  <View style={styles.noContentContainer}>
+                    <Ionicons name="information-circle-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.5 }} />
+                    <Text style={styles.noContentText}>
+                      {language === 'he' 
+                        ? 'התוכן לא זמין בשפה זו. נא לפתוח באתר Sefaria לצפייה מלאה.'
+                        : 'Content not available in this language. Please open in Sefaria website for full view.'}
                     </Text>
-                  ))
-                ) : (
-                  <Text style={styles.textLine}>
-                    {typeof sectionContent.text === 'string' 
-                      ? sectionContent.text 
-                      : JSON.stringify(sectionContent.text)}
-                  </Text>
-                )}
-              </View>
-            )}
+                    <Pressable
+                      style={styles.externalLinkButton}
+                      onPress={() => {
+                        const link = selectedSection.directLink || `https://www.sefaria.org/${selectedSection.sefariaRef}`
+                        Linking.openURL(link)
+                      }}
+                    >
+                      <Ionicons name="open-outline" size={18} color={PRIMARY_BLUE} />
+                      <Text style={styles.externalLinkText}>פתח באתר Sefaria</Text>
+                    </Pressable>
+                  </View>
+                )
+              }
+
+              return (
+                <View style={language === 'he' ? styles.hebrewText : styles.englishText}>
+                  {formattedText.map((line, idx) => (
+                    <Text 
+                      key={idx} 
+                      style={language === 'he' ? styles.hebrewTextLine : styles.englishTextLine}
+                    >
+                      {line}
+                    </Text>
+                  ))}
+                </View>
+              )
+            })()}
 
             <Pressable
               style={styles.externalLinkButton}
-              onPress={() => Linking.openURL(`https://www.sefaria.org/${selectedSection.sefariaRef}`)}
+              onPress={() => {
+                const link = selectedSection.directLink || `https://www.sefaria.org/${selectedSection.sefariaRef}`
+                Linking.openURL(link)
+              }}
             >
               <Ionicons name="open-outline" size={18} color={PRIMARY_BLUE} />
               <Text style={styles.externalLinkText}>פתח באתר Sefaria</Text>
@@ -402,6 +599,33 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(11,27,58,0.08)',
   },
+  languageToggle: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    padding: 4,
+  },
+  languageButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  languageButtonActive: {
+    backgroundColor: PRIMARY_BLUE,
+  },
+  languageButtonText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#6b7280',
+  },
+  languageButtonTextActive: {
+    color: '#ffffff',
+  },
   hebrewText: {
     marginBottom: 20,
   },
@@ -410,22 +634,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_400Regular',
     color: DEEP_BLUE,
     textAlign: 'right',
-    lineHeight: 32,
-    marginBottom: 12,
+    lineHeight: 36,
+    marginBottom: 16,
   },
-  textBlock: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(11,27,58,0.1)',
+  englishText: {
+    marginBottom: 20,
   },
-  textLine: {
-    fontSize: 15,
+  englishTextLine: {
+    fontSize: 16,
     fontFamily: 'Poppins_400Regular',
     color: '#4b5563',
     textAlign: 'left',
-    lineHeight: 24,
-    marginBottom: 8,
+    lineHeight: 28,
+    marginBottom: 12,
+  },
+  noContentContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 16,
+  },
+  noContentText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 20,
   },
   externalLinkButton: {
     flexDirection: 'row',

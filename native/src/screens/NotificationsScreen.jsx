@@ -58,11 +58,14 @@ export default function NotificationsScreen({ navigation }) {
       const userId = auth.currentUser?.uid
       if (!userId) return
 
-      const notificationRef = doc(db, 'notifications', notificationId)
-      const readBy = (notifications.find(n => n.id === notificationId)?.readBy || [])
+      const notification = notifications.find(n => n.id === notificationId)
+      if (!notification) return
+
+      const readBy = notification.readBy || []
       
       if (!readBy.includes(userId)) {
-        await updateDoc(notificationRef, {
+        // Use db.updateDocument instead of Firestore doc/updateDoc
+        await db.updateDocument('notifications', notificationId, {
           readBy: [...readBy, userId]
         })
         

@@ -85,16 +85,17 @@ const LEARNING_CATEGORIES = [
   {
     id: 'orchos-tzadikim',
     title: 'אורחות צדיקים',
-    description: 'ספר המוסר המפורסם',
+    description: 'ספר המוסר המפורסם - 28 שערים',
     icon: 'star-outline',
     color: '#8B5CF6',
     sefariaRef: () => {
-      // Load full book for now - has Introduction and Gates
-      return `Orchot_Tzadikim`;
+      const gate = getDailyOrchotTzadikimGate();
+      // Load specific gate (1-28)
+      return `Orchot Tzadikim ${gate}`;
     },
     formatOptions: {
       preserveStructure: true,
-      addChapterNumbers: true, // Help with structure
+      addChapterNumbers: false,
     }
   },
   {
