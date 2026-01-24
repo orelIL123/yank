@@ -206,8 +206,28 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     }
   };
 
-  // Show content view if category is selected
-  if (selectedCategory && displayContent) {
+  // Show loading while content is being fetched
+  if (selectedCategory && loading[selectedCategory.id]) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
+        
+        <AppHeader
+          title={selectedCategory.title}
+          showBackButton={true}
+          onBackPress={handleBack}
+        />
+        
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.text} />
+          <Text style={styles.loadingText}>טוען תוכן...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show content view if category is selected and content is loaded
+  if (selectedCategory && displayContent && displayContent.content) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
@@ -226,11 +246,11 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           <View style={styles.contentHeader}>
             <Text style={styles.contentTitle}>{displayContent.title || selectedCategory.title}</Text>
             <View style={styles.divider} />
-        </View>
+          </View>
 
           <View style={styles.textContainer}>
             <Text style={styles.textContent}>{displayContent.hebrew || displayContent.content}</Text>
-            </View>
+          </View>
         </ScrollView>
       </SafeAreaView>
     );
@@ -451,5 +471,18 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     letterSpacing: 0.3,
     paddingHorizontal: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: FONTS.medium,
+    color: COLORS.textLight,
+    textAlign: 'center',
   },
 });

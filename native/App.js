@@ -46,6 +46,7 @@ import ManagePermissionsScreen from './src/screens/ManagePermissionsScreen'
 import PersonalDetailsScreen from './src/screens/PersonalDetailsScreen'
 import HelpSupportScreen from './src/screens/HelpSupportScreen'
 import SeferHaMidotScreen from './src/screens/SeferHaMidotScreen'
+import SiddurScreen from './src/screens/SiddurScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
@@ -410,6 +411,7 @@ export default function App() {
           <Stack.Screen name="Prayers">
             {(props) => <PrayersScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
+          <Stack.Screen name="Siddur" component={SiddurScreen} />
           <Stack.Screen name="PrayerDetail" component={PrayerDetailScreen} />
           <Stack.Screen name="PrayerCommitment" component={PrayerCommitmentScreen} />
           <Stack.Screen name="AddPrayer" component={AddPrayerScreen} />

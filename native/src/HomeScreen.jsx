@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, Pressable, Animated, Platform, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator, Modal, TextInput, TouchableOpacity } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Audio } from 'expo-av'
+import { useFocusEffect } from '@react-navigation/native'
 import MenuDrawer from './components/MenuDrawer'
 import AppHeader from './components/AppHeader'
 import FeaturedTopic from './components/FeaturedTopic'
@@ -99,13 +100,21 @@ export default function HomeScreen({ navigation, userRole }) {
     const loadConfig = async () => {
       try {
         const config = await db.getAppConfig()
+        console.log('🔵 HomeScreen: Loaded config:', config)
+        console.log('🔵 Featured topic enabled:', config?.featured_topic_enabled)
+        console.log('🔵 Featured topic title:', config?.featured_topic_title)
+        console.log('🔵 Featured topic type:', config?.featured_topic_type)
+        
         if (config) {
           setQuote(config.daily_quote || 'ציטוט יומי - הרב הינוקא')
           setQuoteAuthor(config.quote_author || 'הרב הינוקא')
           setFeaturedConfig(config)
+          console.log('🟢 HomeScreen: Featured config set!')
+        } else {
+          console.log('🔴 HomeScreen: No config received!')
         }
       } catch (error) {
-        console.error('Error loading config:', error)
+        console.error('🔴 Error loading config:', error)
         // Keep default quote on error
       } finally {
         setQuoteLoading(false)
@@ -407,38 +416,39 @@ export default function HomeScreen({ navigation, userRole }) {
   }, [])
 
   // Load notifications and count unread
-  useEffect(() => {
-    const loadNotifications = async () => {
-      try {
-        // PERFORMANCE FIX: Limit to 30 most recent notifications only
-        const notificationsData = await db.getCollection('notifications', {
-          where: [['isActive', '==', true]],
-          orderBy: { field: 'createdAt', direction: 'desc' },
-          limit: 30
-        })
+  const loadNotifications = useCallback(async () => {
+    try {
+      // PERFORMANCE FIX: Limit to 30 most recent notifications only
+      const notificationsData = await db.getCollection('notifications', {
+        where: [['isActive', '==', true]],
+        orderBy: { field: 'createdAt', direction: 'desc' },
+        limit: 30
+      })
 
-        const userId = auth.currentUser?.uid
+      const userId = auth.currentUser?.uid
 
-        if (!userId) {
-          setUnreadCount(0)
-          return
-        }
-
-        const unreadNotifications = notificationsData.filter(notification => {
-          return !notification.readBy || !notification.readBy.includes(userId)
-        })
-
-        setUnreadCount(unreadNotifications.length)
-      } catch (error) {
-        console.error('Error loading notifications:', error)
+      if (!userId) {
+        setUnreadCount(0)
+        return
       }
-    }
 
-    loadNotifications()
-    // PERFORMANCE FIX: Removed 30-second polling - use manual refresh instead
-    // Polling every 30 seconds is expensive and unnecessary
-    // Notifications will refresh when user returns to home screen
+      const unreadNotifications = notificationsData.filter(notification => {
+        return !notification.readBy || !notification.readBy.includes(userId)
+      })
+
+      setUnreadCount(unreadNotifications.length)
+    } catch (error) {
+      console.error('Error loading notifications:', error)
+    }
   }, [])
+
+  // Reload notifications when screen comes into focus
+  // This ensures the badge updates after visiting the notifications screen
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications()
+    }, [loadNotifications])
+  )
 
   const handleCardPress = React.useCallback((key) => {
     console.log('🔵 handleCardPress called with key:', key)

@@ -14,6 +14,7 @@ const MENU_ITEMS = [
     { id: 'music', label: 'ניגונים', icon: 'musical-notes-outline', screen: 'Music' },
     { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline', screen: 'Newsletters' },
     { id: 'prayers', label: 'תפילות', icon: 'heart-outline', screen: 'Prayers' },
+    { id: 'siddur', label: 'סידור', icon: 'book-outline', screen: 'Siddur' },
     { id: 'books', label: 'ספרים', icon: 'book-outline', screen: 'Books' },
     { id: 'parshiot', label: 'פרשת הנשיאים', icon: 'scroll-outline', screen: 'ParshiotHaNasiim' },
     { id: 'news', label: 'חדשות', icon: 'newspaper-outline', screen: 'News' },

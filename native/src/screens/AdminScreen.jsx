@@ -174,6 +174,39 @@ function FeaturedTopicForm() {
     }
   }
 
+  // Helper function to extract YouTube ID from URL or clean existing ID
+  const cleanYouTubeId = (input) => {
+    if (!input) return ''
+    
+    // Remove whitespace
+    input = input.trim()
+    
+    // If it's a full YouTube URL, extract the ID
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/
+    ]
+    
+    for (const pattern of patterns) {
+      const match = input.match(pattern)
+      if (match) {
+        return match[1]
+      }
+    }
+    
+    // If it's just an ID (possibly with ?si= or other params), clean it
+    const cleanId = input.split('?')[0].split('&')[0]
+    
+    // Validate it's a proper YouTube ID (11 characters, alphanumeric + _ -)
+    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanId)) {
+      return cleanId
+    }
+    
+    // If nothing matches, return the cleaned version anyway
+    return cleanId
+  }
+
   const handleSave = async () => {
     if (config.featured_topic_enabled) {
       if (!config.featured_topic_title?.trim()) {
@@ -199,17 +232,28 @@ function FeaturedTopicForm() {
 
     setSaving(true)
     try {
+      // Clean YouTube ID before saving
+      const cleanedYouTubeId = config.featured_topic_type === 'youtube' 
+        ? cleanYouTubeId(config.featured_topic_youtube_id)
+        : config.featured_topic_youtube_id.trim()
+
       await db.updateAppConfig({
         featured_topic_enabled: config.featured_topic_enabled,
         featured_topic_title: config.featured_topic_title.trim(),
         featured_topic_description: config.featured_topic_description.trim(),
         featured_topic_type: config.featured_topic_type,
         featured_topic_image_url: config.featured_topic_image_url.trim(),
-        featured_topic_youtube_id: config.featured_topic_youtube_id.trim(),
+        featured_topic_youtube_id: cleanedYouTubeId,
         featured_topic_video_url: config.featured_topic_video_url.trim(),
         featured_topic_link_url: config.featured_topic_link_url.trim(),
         featured_topic_button_text: config.featured_topic_button_text.trim(),
       })
+      
+      // Update local state with cleaned ID
+      if (config.featured_topic_type === 'youtube') {
+        setConfig({ ...config, featured_topic_youtube_id: cleanedYouTubeId })
+      }
+      
       Alert.alert('הצלחה!', 'הנושא המרכזי עודכן בהצלחה')
     } catch (error) {
       console.error('Error saving config:', error)
@@ -384,11 +428,15 @@ function FeaturedTopicForm() {
                 style={styles.input}
                 value={config.featured_topic_youtube_id}
                 onChangeText={(text) => setConfig({ ...config, featured_topic_youtube_id: text })}
-                placeholder="לדוגמה: dQw4w9WgXcQ"
+                placeholder="לדוגמה: dQw4w9WgXcQ או הדבק את כל הקישור"
                 textAlign="right"
               />
               <Text style={styles.helperText}>
-                המזהה הוא החלק שאחרי "v=" בקישור היוטיוב
+                💡 טיפ: אפשר להדביק את כל הקישור מיוטיוב והמערכת תחלץ את המזהה אוטומטית!{'\n'}
+                דוגמאות:{'\n'}
+                • youtube.com/watch?v=Be88vYnfQdA{'\n'}
+                • youtu.be/Be88vYnfQdA{'\n'}
+                • או רק: Be88vYnfQdA
               </Text>
             </View>
           )}
