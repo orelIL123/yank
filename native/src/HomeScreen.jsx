@@ -534,7 +534,7 @@ export default function HomeScreen({ navigation, userRole }) {
             isAdmin={isAdmin}
             onEdit={() => {
               // Navigate to admin panel for featured topic
-              navigation?.navigate('AdminPanel', { tab: 'featured' })
+              navigation?.navigate('AdminScreen', { initialTab: 'featured' })
             }}
           />
 

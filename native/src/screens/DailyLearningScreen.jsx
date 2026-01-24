@@ -74,11 +74,8 @@ const LEARNING_CATEGORIES = [
     icon: 'shield-checkmark-outline',
     color: '#3B82F6',
     sefariaRef: () => {
-      // Try simpler reference format for better content
-      const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-      const section = (dayOfYear % 31) + 1; // 31 sections in Chofetz Chaim Part One
-      // Using the full path that works with Sefaria API
-      return `Chofetz_Chaim,_Part_One,_The_Prohibition_Against_Lashon_Hara.${section}`;
+      // Simplified reference - load full book
+      return `Chofetz_Chaim`;
     },
     formatOptions: {
       preserveStructure: true,
@@ -88,13 +85,16 @@ const LEARNING_CATEGORIES = [
   {
     id: 'orchos-tzadikim',
     title: 'אורחות צדיקים',
-    description: `השער היומי - שער ${getDailyOrchotTzadikimGate()}`,
+    description: 'ספר המוסר המפורסם',
     icon: 'star-outline',
     color: '#8B5CF6',
-    sefariaRef: () => `Orchot_Tzadikim.${getDailyOrchotTzadikimGate()}`,
+    sefariaRef: () => {
+      // Load full book for now - has Introduction and Gates
+      return `Orchot_Tzadikim`;
+    },
     formatOptions: {
       preserveStructure: true,
-      addChapterNumbers: false,
+      addChapterNumbers: true, // Help with structure
     }
   },
   {
@@ -188,6 +188,12 @@ export default function DailyLearningScreen({ navigation, userRole }) {
   };
 
   const handleCategoryPress = (category) => {
+    // Special handling for Sefer HaMiddot - just navigate
+    if (category.id === 'sefer-hamidos') {
+      navigation?.navigate('SeferHaMidot');
+      return;
+    }
+    
     loadCategoryContent(category);
   };
 
