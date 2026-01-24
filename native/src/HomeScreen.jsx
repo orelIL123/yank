@@ -764,7 +764,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 accessibilityLabel="Instagram"
               >
                 <Ionicons name="logo-instagram" size={28} color="#E4405F" />
-                <Text style={styles.socialLabel}>Instagram</Text>
+                <Text style={styles.socialLabel} adjustsFontSizeToFit={true} numberOfLines={1} minimumFontScale={0.7}>Instagram</Text>
               </Pressable>
 
               <Pressable
@@ -819,25 +819,6 @@ export default function HomeScreen({ navigation, userRole }) {
             </Pressable>
           </View>
 
-          {/* Last topic + manage pidyon (bottom) */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Pressable onPress={() => navigation?.navigate('News')} accessibilityRole="button">
-                <Text style={styles.sectionLinkText}>עוד →</Text>
-              </Pressable>
-              <Text style={styles.sectionTitle}>נושא אחרון באתר</Text>
-            </View>
-            <Pressable
-              style={styles.lastTopicCard}
-              onPress={() => navigation?.navigate('News')}
-              accessibilityRole="button"
-              accessibilityLabel="נושא אחרון באתר"
-            >
-              <Text style={styles.lastTopicTitle}>נושא אחרון באתר</Text>
-              <Text style={styles.lastTopicSubtitle}>בינתיים טקסט זמני — נחליף לתמונה/כותרת אחר כך</Text>
-            </Pressable>
-          </View>
-
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Pressable onPress={() => navigation?.navigate('PidyonNefesh')} accessibilityRole="button">
@@ -858,6 +839,22 @@ export default function HomeScreen({ navigation, userRole }) {
 
           {/* Social Media Links */}
           {/* (moved above) */}
+
+          {/* App Creator Footer */}
+          <View style={styles.appCreatorFooter}>
+            <Pressable
+              onPress={() => {
+                const message = encodeURIComponent('היי אהבתי את האפליקציה שעשית לרב הינוקא.. אני מעוניין באפליקציה..');
+                Linking.openURL(`https://wa.me/972523985505?text=${message}`);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="פנה למפתח האפליקציה"
+            >
+              <Text style={styles.appCreatorText}>
+                האפליקציה נבנתה ע״י אוראל אהרון
+              </Text>
+            </Pressable>
+          </View>
 
         </ScrollView>
       </View>
@@ -1822,10 +1819,11 @@ const styles = StyleSheet.create({
   },
   socialLabel: {
     color: DEEP_BLUE,
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Poppins_500Medium',
     textAlign: 'center',
     marginTop: 4,
+    flexShrink: 1,
   },
   centerNavButton: {
     alignItems: 'center',
@@ -2166,6 +2164,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.1,
     lineHeight: 16,
+  },
+  appCreatorFooter: {
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 32,
+  },
+  appCreatorText: {
+    fontSize: 12,
+    fontFamily: 'Heebo_400Regular',
+    color: '#6b7280',
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+    letterSpacing: 0.2,
   },
 })
 

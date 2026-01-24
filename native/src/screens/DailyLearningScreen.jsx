@@ -8,12 +8,21 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  Linking,
+  Pressable,
+  TextInput,
+  Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
+import * as ImagePicker from 'expo-image-picker';
 import AppHeader from '../components/AppHeader';
 import { getText, formatTextForDisplay, formatSefariaContent } from '../services/sefaria';
+import { db } from '../services/database';
+import { auth } from '../config/firebase';
 
 const { width } = Dimensions.get('window');
 
@@ -59,13 +68,44 @@ function getDailyOrchotTzadikimGate() {
 // Learning categories data with API references
 const LEARNING_CATEGORIES = [
   {
+    id: 'daily-moreinu',
+    title: 'לימוד יומי בתורת מו״ר',
+    description: 'תוכן יומי מתורת הרב',
+    icon: 'sparkles-outline',
+    color: '#F59E0B',
+    isEditable: true,
+    type: 'firebase', // Load from Firebase
+  },
+  {
+    id: 'weekly-newsletter',
+    title: 'לימוד יומי בגליון השבועי',
+    description: 'תוכן שבועי מהעלון',
+    icon: 'newspaper-outline',
+    color: '#06B6D4',
+    isEditable: true,
+    type: 'firebase',
+  },
+  {
+    id: 'two-halachot',
+    title: 'שתי הלכות',
+    description: 'הלכות יומיות',
+    icon: 'book-outline',
+    color: '#EC4899',
+    isEditable: true,
+    type: 'firebase',
+  },
+  {
     id: 'tehillim',
     title: 'תהילים',
-    description: 'כל 150 פרקי תהילים',
+    description: 'תהילים יומי',
     icon: 'book-outline',
     color: '#10B981',
-    sefariaRef: () => 'Psalms', // Load the entire book
-    dailyChapter: getDailyTehillimChapter, // Keep track of daily chapter for future features
+    type: 'sefaria',
+    sefariaRef: () => {
+      const chapter = getDailyTehillimChapter();
+      return `Psalms ${chapter}`;
+    },
+    dailyChapter: getDailyTehillimChapter,
   },
   {
     id: 'chofetz-chaim',
@@ -73,14 +113,8 @@ const LEARNING_CATEGORIES = [
     description: 'הלכות לשון הרע',
     icon: 'shield-checkmark-outline',
     color: '#3B82F6',
-    sefariaRef: () => {
-      // Simplified reference - load full book
-      return `Chofetz_Chaim`;
-    },
-    formatOptions: {
-      preserveStructure: true,
-      addChapterNumbers: false,
-    }
+    openInBrowser: true,
+    webUrl: 'https://www.sefaria.org/Chofetz_Chaim',
   },
   {
     id: 'orchos-tzadikim',
@@ -88,20 +122,16 @@ const LEARNING_CATEGORIES = [
     description: 'ספר המוסר המפורסם - 28 שערים',
     icon: 'star-outline',
     color: '#8B5CF6',
-    sefariaRef: () => {
+    openInBrowser: true,
+    webUrl: () => {
       const gate = getDailyOrchotTzadikimGate();
-      // Load specific gate (1-28)
-      return `Orchot Tzadikim ${gate}`;
+      return `https://www.sefaria.org/Orchot_Tzadikim.${gate}`;
     },
-    formatOptions: {
-      preserveStructure: true,
-      addChapterNumbers: false,
-    }
   },
   {
     id: 'sefer-hamidos',
     title: 'לימוד יומי מספר המידות',
-    description: 'מתורת החסידות, ואף מנגו לעיתים ניגוני חב"ד.',
+    description: 'לרבנו רבי נחמן מברסלב.',
     icon: 'flame-outline',
     color: '#EF4444',
     sefariaRef: () => 'Sefer HaMiddot',
@@ -113,10 +143,204 @@ export default function DailyLearningScreen({ navigation, userRole }) {
   const [content, setContent] = useState({});
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [displayContent, setDisplayContent] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editText, setEditText] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const user = auth.currentUser;
+      if (user && userRole) {
+        setIsAdmin(userRole === 'admin' || userRole === 'superadmin');
+      }
+    };
+    checkAdmin();
+  }, [userRole]);
+
+  // Load content from Supabase for editable categories
+  useEffect(() => {
+    const loadContent = async () => {
+      for (const category of LEARNING_CATEGORIES) {
+        if (category.type === 'firebase') {
+          try {
+            const doc = await db.getDocument('dailyLearning', category.id);
+            if (doc) {
+              setContent(prev => ({
+                ...prev,
+                [category.id]: {
+                  title: doc.title || '',
+                  text: doc.text || '',
+                  imageUrl: doc.imageUrl || '',
+                  updatedAt: doc.updatedAt,
+                }
+              }));
+            }
+          } catch (error) {
+            // Document doesn't exist yet - that's OK, it will be created when admin edits
+            if (error.code === 'PGRST116') {
+              console.log(`No content yet for ${category.id} - will be created on first edit`);
+            } else {
+              console.error(`Error loading ${category.id}:`, error);
+            }
+            // Initialize with empty content
+            setContent(prev => ({
+              ...prev,
+              [category.id]: { title: '', text: '', imageUrl: '' }
+            }));
+          }
+        }
+      }
+    };
+    loadContent();
+  }, []);
+
+  // Handle edit button press
+  const handleEditPress = (category) => {
+    // Open modal immediately without waiting for database
+    const existingContent = content[category.id] || {};
+    setEditingCategory(category);
+    setEditTitle(existingContent.title || '');
+    setEditText(existingContent.text || '');
+    setEditImageUrl(existingContent.imageUrl || '');
+    setEditModalVisible(true);
+  };
+
+  // Save content
+  const handleSaveEdit = async () => {
+    if (!editingCategory) return;
+
+    try {
+      setLoading(prev => ({ ...prev, [editingCategory.id]: true }));
+
+      await db.updateDocument('dailyLearning', editingCategory.id, {
+        title: editTitle,
+        text: editText,
+        imageUrl: editImageUrl,
+        updatedAt: new Date().toISOString(),
+        updatedBy: auth.currentUser?.uid,
+      });
+
+      setContent(prev => ({
+        ...prev,
+        [editingCategory.id]: {
+          title: editTitle,
+          text: editText,
+          imageUrl: editImageUrl,
+          updatedAt: new Date().toISOString(),
+        }
+      }));
+
+      setEditModalVisible(false);
+      Alert.alert('הצלחה', 'התוכן עודכן בהצלחה');
+    } catch (error) {
+      console.error('Error saving:', error);
+      Alert.alert('שגיאה', 'לא ניתן לשמור את התוכן');
+    } finally {
+      setLoading(prev => ({ ...prev, [editingCategory.id]: false }));
+    }
+  };
+
+  // Delete content
+  const handleDeleteContent = async () => {
+    if (!editingCategory) return;
+
+    Alert.alert(
+      'מחיקת תוכן',
+      'האם אתה בטוח?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await db.updateDocument('dailyLearning', editingCategory.id, {
+                title: '',
+                text: '',
+                imageUrl: '',
+                updatedAt: new Date().toISOString(),
+              });
+
+              setContent(prev => ({
+                ...prev,
+                [editingCategory.id]: { title: '', text: '', imageUrl: '' }
+              }));
+
+              setEditModalVisible(false);
+              Alert.alert('הצלחה', 'התוכן נמחק');
+            } catch (error) {
+              Alert.alert('שגיאה', 'לא ניתן למחוק');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Build Sefaria URL (similar to SiddurScreen)
+  const buildSefariaUrl = (category) => {
+    let baseUrl = category.webUrl;
+
+    if (typeof baseUrl === 'function') {
+      baseUrl = baseUrl();
+    }
+
+    if (!baseUrl) {
+      return null;
+    }
+
+    // Add language parameter
+    return `${baseUrl}?lang=he`;
+  };
+
+  const showCategoryContent = (category, contentData) => {
+    // Navigate to SeferHaMidot screen if it's Sefer HaMiddot, otherwise show content
+    if (category.id === 'sefer-hamidos') {
+      navigation?.navigate('SeferHaMidot');
+      return;
+    }
+    
+    // Show content in full screen modal
+    setSelectedCategory(category);
+    setDisplayContent(contentData);
+  };
+
+  const handleCategoryPress = (category) => {
+    // Special handling for Sefer HaMiddot - just navigate
+    if (category.id === 'sefer-hamidos') {
+      navigation?.navigate('SeferHaMidot');
+      return;
+    }
+
+    // For Firebase categories - show content directly
+    if (category.type === 'firebase') {
+      setSelectedCategory(category);
+      const firebaseContent = content[category.id];
+      if (firebaseContent) {
+        setDisplayContent(firebaseContent);
+      } else {
+        setDisplayContent({ title: '', text: '', imageUrl: '' });
+      }
+      return;
+    }
+
+    // If category should open in browser (like Siddur does)
+    if (category.openInBrowser) {
+      setSelectedCategory(category);
+      setLoading(prev => ({ ...prev, [category.id]: true }));
+      return;
+    }
+
+    // For Tehillim - load from API
+    loadCategoryContent(category);
+  };
 
   const loadCategoryContent = async (category) => {
     if (content[category.id]) {
-      // Content already loaded, show it
       showCategoryContent(category, content[category.id]);
       return;
     }
@@ -133,25 +357,20 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         throw new Error('לא התקבל תוכן מ-Sefaria API');
       }
 
-      // Use the new formatSefariaContent function for better formatting
-      // Use category-specific format options if available
       const formatOptions = {
         preserveStructure: true,
-        addChapterNumbers: category.id === 'tehillim', // Add chapter numbers for Psalms
+        addChapterNumbers: category.id === 'tehillim',
         language: 'he',
         ...(category.formatOptions || {})
       };
 
       const formatted = formatSefariaContent(textData, formatOptions);
 
-      // Enhanced fallback to handle different response structures
       if (!formatted.content && textData) {
         let fallbackContent = '';
 
-        // Try different possible data structures
         if (textData.he) {
           if (Array.isArray(textData.he)) {
-            // Handle nested arrays
             const flattenArray = (arr) => {
               return arr.map(item => {
                 if (Array.isArray(item)) {
@@ -189,13 +408,9 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         formatted.title = textData.heRef || textData.ref || category.title;
       }
 
-      // Add daily reference information to title
       if (category.id === 'tehillim') {
         const chapter = getDailyTehillimChapter();
-        formatted.title = `תהילים - פרק ${chapter}`;
-      } else if (category.id === 'orchos-tzadikim') {
-        const gate = getDailyOrchotTzadikimGate();
-        formatted.title = textData.heRef || `אורחות צדיקים - שער ${gate}`;
+        formatted.title = `תהילים יומי - פרק ${chapter}`;
       }
 
       setContent(prev => ({ ...prev, [category.id]: formatted }));
@@ -214,28 +429,6 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     }
   };
 
-  const showCategoryContent = (category, contentData) => {
-    // Navigate to SeferHaMidot screen if it's Sefer HaMiddot, otherwise show content
-    if (category.id === 'sefer-hamidos') {
-      navigation?.navigate('SeferHaMidot');
-      return;
-    }
-    
-    // Show content in full screen modal
-    setSelectedCategory(category);
-    setDisplayContent(contentData);
-  };
-
-  const handleCategoryPress = (category) => {
-    // Special handling for Sefer HaMiddot - just navigate
-    if (category.id === 'sefer-hamidos') {
-      navigation?.navigate('SeferHaMidot');
-      return;
-    }
-    
-    loadCategoryContent(category);
-  };
-
   const handleBack = () => {
     if (selectedCategory) {
       setSelectedCategory(null);
@@ -245,18 +438,307 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     }
   };
 
+  // Show WebView for browser-opened categories (like Siddur)
+  if (selectedCategory && selectedCategory.openInBrowser) {
+    const url = buildSefariaUrl(selectedCategory);
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
+
+        <AppHeader
+          title={selectedCategory.title}
+          showBackButton={true}
+          onBackPress={handleBack}
+          rightIcon="open-outline"
+          onRightIconPress={() => {
+            if (url) {
+              Linking.openURL(url);
+            }
+          }}
+        />
+
+        {url && (
+          <WebView
+            source={{ uri: url }}
+            style={styles.webview}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={COLORS.deepBlue} />
+                <Text style={styles.loadingText}>טוען תוכן...</Text>
+              </View>
+            )}
+            onLoadEnd={() => setLoading(prev => ({ ...prev, [selectedCategory.id]: false }))}
+          />
+        )}
+
+        {/* Edit Modal */}
+        <Modal
+          visible={editModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setEditModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Pressable onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.deepBlue} />
+                </Pressable>
+                <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
+              </View>
+
+              <ScrollView style={styles.modalBody}>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>כותרת</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editTitle}
+                    onChangeText={setEditTitle}
+                    placeholder="הזן כותרת..."
+                    textAlign="right"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>תוכן</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={editText}
+                    onChangeText={setEditText}
+                    placeholder="הזן תוכן..."
+                    multiline
+                    numberOfLines={8}
+                    textAlign="right"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>קישור לתמונה</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editImageUrl}
+                    onChangeText={setEditImageUrl}
+                    placeholder="https://example.com/image.jpg"
+                    textAlign="right"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                {editImageUrl ? (
+                  <View style={styles.imagePreview}>
+                    <Text style={styles.label}>תצוגה מקדימה:</Text>
+                    <Image
+                      source={{ uri: editImageUrl }}
+                      style={styles.previewImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : null}
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <Pressable
+                  style={[styles.modalButton, styles.deleteButton]}
+                  onPress={handleDeleteContent}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#fff" />
+                  <Text style={styles.modalButtonText}>מחק</Text>
+                </Pressable>
+
+                <View style={styles.modalButtonGroup}>
+                  <Pressable
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setEditModalVisible(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>ביטול</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.modalButton, styles.saveButton]}
+                    onPress={handleSaveEdit}
+                  >
+                    <Text style={styles.modalButtonText}>שמור</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
+  // Show Firebase content view
+  if (selectedCategory && selectedCategory.type === 'firebase' && displayContent !== null) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
+
+        <AppHeader
+          title={selectedCategory.title}
+          showBackButton={true}
+          onBackPress={handleBack}
+          rightIcon={isAdmin ? "create-outline" : null}
+          onRightIconPress={isAdmin ? () => handleEditPress(selectedCategory) : null}
+        />
+
+        <ScrollView
+          style={styles.contentView}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {displayContent.title || displayContent.text || displayContent.imageUrl ? (
+            <>
+              {displayContent.title ? (
+                <View style={styles.contentHeader}>
+                  <Text style={styles.contentTitle}>{displayContent.title}</Text>
+                  <View style={styles.divider} />
+                </View>
+              ) : null}
+
+              {displayContent.imageUrl ? (
+                <View style={styles.imageContainer}>
+                  <Image
+                    source={{ uri: displayContent.imageUrl }}
+                    style={styles.contentImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : null}
+
+              {displayContent.text ? (
+                <View style={styles.textContainer}>
+                  <Text style={styles.textContent}>{displayContent.text}</Text>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="document-text-outline" size={48} color={COLORS.textLight} />
+              <Text style={styles.emptyText}>אין תוכן זמין</Text>
+              {isAdmin && (
+                <Pressable
+                  style={styles.addContentButton}
+                  onPress={() => handleEditPress(selectedCategory)}
+                >
+                  <Text style={styles.addContentButtonText}>הוסף תוכן</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Edit Modal */}
+        <Modal
+          visible={editModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setEditModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Pressable onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.deepBlue} />
+                </Pressable>
+                <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
+              </View>
+
+              <ScrollView style={styles.modalBody}>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>כותרת</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editTitle}
+                    onChangeText={setEditTitle}
+                    placeholder="הזן כותרת..."
+                    textAlign="right"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>תוכן</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={editText}
+                    onChangeText={setEditText}
+                    placeholder="הזן תוכן..."
+                    multiline
+                    numberOfLines={8}
+                    textAlign="right"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>קישור לתמונה</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editImageUrl}
+                    onChangeText={setEditImageUrl}
+                    placeholder="https://example.com/image.jpg"
+                    textAlign="right"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                {editImageUrl ? (
+                  <View style={styles.imagePreview}>
+                    <Text style={styles.label}>תצוגה מקדימה:</Text>
+                    <Image
+                      source={{ uri: editImageUrl }}
+                      style={styles.previewImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : null}
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <Pressable
+                  style={[styles.modalButton, styles.deleteButton]}
+                  onPress={handleDeleteContent}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#fff" />
+                  <Text style={styles.modalButtonText}>מחק</Text>
+                </Pressable>
+
+                <View style={styles.modalButtonGroup}>
+                  <Pressable
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setEditModalVisible(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>ביטול</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.modalButton, styles.saveButton]}
+                    onPress={handleSaveEdit}
+                  >
+                    <Text style={styles.modalButtonText}>שמור</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
   // Show loading while content is being fetched
   if (selectedCategory && loading[selectedCategory.id]) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
-        
+
         <AppHeader
           title={selectedCategory.title}
           showBackButton={true}
           onBackPress={handleBack}
         />
-        
+
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.text} />
           <Text style={styles.loadingText}>טוען תוכן...</Text>
@@ -291,6 +773,100 @@ export default function DailyLearningScreen({ navigation, userRole }) {
             <Text style={styles.textContent}>{displayContent.hebrew || displayContent.content}</Text>
           </View>
         </ScrollView>
+
+        {/* Edit Modal */}
+        <Modal
+          visible={editModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setEditModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Pressable onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.deepBlue} />
+                </Pressable>
+                <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
+              </View>
+
+              <ScrollView style={styles.modalBody}>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>כותרת</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editTitle}
+                    onChangeText={setEditTitle}
+                    placeholder="הזן כותרת..."
+                    textAlign="right"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>תוכן</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={editText}
+                    onChangeText={setEditText}
+                    placeholder="הזן תוכן..."
+                    multiline
+                    numberOfLines={8}
+                    textAlign="right"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>קישור לתמונה</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editImageUrl}
+                    onChangeText={setEditImageUrl}
+                    placeholder="https://example.com/image.jpg"
+                    textAlign="right"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                {editImageUrl ? (
+                  <View style={styles.imagePreview}>
+                    <Text style={styles.label}>תצוגה מקדימה:</Text>
+                    <Image
+                      source={{ uri: editImageUrl }}
+                      style={styles.previewImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : null}
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <Pressable
+                  style={[styles.modalButton, styles.deleteButton]}
+                  onPress={handleDeleteContent}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#fff" />
+                  <Text style={styles.modalButtonText}>מחק</Text>
+                </Pressable>
+
+                <View style={styles.modalButtonGroup}>
+                  <Pressable
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setEditModalVisible(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>ביטול</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.modalButton, styles.saveButton]}
+                    onPress={handleSaveEdit}
+                  >
+                    <Text style={styles.modalButtonText}>שמור</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -300,7 +876,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
       <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
       
       <AppHeader
-        title="לימוד יומי בתורת רבנו"
+        title="לימוד יומי "
         showBackButton={true}
         onBackPress={handleBack}
       />
@@ -313,7 +889,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         <View style={styles.headerSection}>
           <Text style={styles.mainTitle}>לימוד יומי בתורת רבינו ועוד...</Text>
           <View style={styles.subtitleRow}>
-            <Text style={styles.subtitle}>סרטונים יומיים</Text>
+            <Text style={styles.subtitle}>תוכנית לימודים יומיים</Text>
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>חי</Text>
@@ -338,15 +914,12 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                   {category.description ? (
                     <Text style={styles.categoryDescription}>{category.description}</Text>
                   ) : null}
-                  {content[category.id] && (
-                    <Text style={styles.loadedIndicator}>✓ נטען בהצלחה</Text>
-                  )}
                 </View>
-                <View style={[styles.iconContainer, { backgroundColor: `${category.color}15` }]}>
+                <View style={styles.arrowContainer}>
                   {loading[category.id] ? (
-                    <ActivityIndicator size="small" color={category.color} />
+                    <ActivityIndicator size="small" color={COLORS.textLight} />
                   ) : (
-                    <Ionicons name={category.icon} size={24} color={category.color} />
+                    <Ionicons name="chevron-forward" size={24} color={COLORS.textLight} />
                   )}
                 </View>
             </View>
@@ -354,6 +927,100 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           ))}
             </View>
       </ScrollView>
+
+      {/* Edit Modal */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Pressable onPress={() => setEditModalVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.deepBlue} />
+              </Pressable>
+              <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>כותרת</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                  placeholder="הזן כותרת..."
+                  textAlign="right"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>תוכן</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={editText}
+                  onChangeText={setEditText}
+                  placeholder="הזן תוכן..."
+                  multiline
+                  numberOfLines={8}
+                  textAlign="right"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>קישור לתמונה</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editImageUrl}
+                  onChangeText={setEditImageUrl}
+                  placeholder="https://example.com/image.jpg"
+                  textAlign="right"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              {editImageUrl ? (
+                <View style={styles.imagePreview}>
+                  <Text style={styles.label}>תצוגה מקדימה:</Text>
+                  <Image
+                    source={{ uri: editImageUrl }}
+                    style={styles.previewImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Pressable
+                style={[styles.modalButton, styles.deleteButton]}
+                onPress={handleDeleteContent}
+              >
+                <Ionicons name="trash-outline" size={18} color="#fff" />
+                <Text style={styles.modalButtonText}>מחק</Text>
+              </Pressable>
+
+              <View style={styles.modalButtonGroup}>
+                <Pressable
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setEditModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>ביטול</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={handleSaveEdit}
+                >
+                  <Text style={styles.modalButtonText}>שמור</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -424,15 +1091,15 @@ const styles = StyleSheet.create({
   },
   categoryCard: {
     backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(11,27,58,0.08)',
   },
   cardContent: {
     flexDirection: 'row-reverse',
@@ -444,24 +1111,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   categoryTitle: {
-    fontSize: 16,
-    fontFamily: FONTS.semiBold,
-    color: COLORS.text,
+    fontSize: 18,
+    fontFamily: 'Heebo_600SemiBold',
+    color: COLORS.deepBlue,
     textAlign: 'right',
-    marginBottom: 4,
+    letterSpacing: 0.3,
+    marginBottom: 6,
   },
   categoryDescription: {
-    fontSize: 13,
-    fontFamily: FONTS.regular,
+    fontSize: 14,
+    fontFamily: 'Heebo_400Regular',
     color: COLORS.textLight,
     textAlign: 'right',
-    lineHeight: 18,
-    marginTop: 4,
+    lineHeight: 22,
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  arrowContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 16,
@@ -485,31 +1149,34 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   contentTitle: {
-    fontSize: 22,
-    fontFamily: FONTS.bold,
-    color: COLORS.text,
+    fontSize: 26,
+    fontFamily: 'Heebo_700Bold',
+    color: COLORS.deepBlue,
     textAlign: 'right',
-    marginBottom: 12,
+    marginBottom: 16,
+    letterSpacing: 0.5,
   },
   divider: {
-    height: 2,
-    backgroundColor: COLORS.primary,
-    opacity: 0.3,
-    borderRadius: 1,
+    height: 3,
+    backgroundColor: COLORS.deepBlue,
+    opacity: 0.2,
+    borderRadius: 2,
+    marginBottom: 8,
   },
   textContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
   },
   textContent: {
-    fontSize: 18,
-    fontFamily: FONTS.regular,
-    color: COLORS.text,
+    fontSize: 19,
+    fontFamily: 'Heebo_400Regular',
+    color: COLORS.deepBlue,
     textAlign: 'right',
-    lineHeight: 34,
+    lineHeight: 38,
     writingDirection: 'rtl',
-    letterSpacing: 0.3,
-    paddingHorizontal: 4,
+    letterSpacing: 0.2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -523,5 +1190,148 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.medium,
     color: COLORS.textLight,
     textAlign: 'center',
+  },
+  webview: {
+    flex: 1,
+  },
+  imageContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  contentImage: {
+    width: '100%',
+    height: 300,
+    borderRadius: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontFamily: 'Heebo_400Regular',
+    color: COLORS.textLight,
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  addContentButton: {
+    backgroundColor: COLORS.deepBlue,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  addContentButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Heebo_700Bold',
+    color: COLORS.deepBlue,
+    textAlign: 'right',
+    flex: 1,
+    marginRight: 16,
+  },
+  modalBody: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: 'Heebo_600SemiBold',
+    color: COLORS.deepBlue,
+    textAlign: 'right',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: 'Heebo_400Regular',
+    color: COLORS.text,
+    backgroundColor: '#f9fafb',
+  },
+  textArea: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  imagePreview: {
+    marginTop: 16,
+  },
+  previewImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  modalButtonGroup: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  saveButton: {
+    backgroundColor: COLORS.deepBlue,
+  },
+  cancelButton: {
+    backgroundColor: '#f3f4f6',
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+  },
+  cancelButtonText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
   },
 });

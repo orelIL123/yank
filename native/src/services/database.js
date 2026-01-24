@@ -172,33 +172,61 @@ class DatabaseService {
   }
 
   /**
-   * Update a document
+   * Update a document (creates if doesn't exist)
    */
   async updateDocument(collectionName, docId, updates) {
     const tableName = COLLECTION_MAP[collectionName] || toSnakeCase(collectionName)
 
-    // First get the current document
-    const current = await this.getDocument(collectionName, docId)
+    // Try to get the current document
+    let current = null
+    try {
+      current = await this.getDocument(collectionName, docId)
+    } catch (error) {
+      // Document doesn't exist - that's OK, we'll create it
+      console.log(`Document ${docId} doesn't exist, will create it`)
+      current = {}
+    }
 
     // Merge updates with current data
     const updatedData = { ...current, ...updates }
     delete updatedData.id // Remove id from data
 
-    const { data, error } = await supabase
+    // Check if document exists by trying to update first
+    const { data: updateData, error: updateError } = await supabase
       .from(tableName)
       .update({ data: updatedData, updated_at: new Date().toISOString() })
       .eq('id', docId)
       .select()
       .single()
 
-    if (error) {
-      console.error('Database error:', error)
-      throw error
+    // If update failed because document doesn't exist, create it
+    if (updateError && updateError.code === 'PGRST116') {
+      console.log(`Document ${docId} doesn't exist, creating new document`)
+      const { data: insertData, error: insertError } = await supabase
+        .from(tableName)
+        .insert([{ id: docId, data: updatedData }])
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error('Database error creating document:', insertError)
+        throw insertError
+      }
+
+      return {
+        id: insertData.id,
+        ...insertData.data
+      }
+    }
+
+    if (updateError) {
+      console.error('Database error:', updateError)
+      throw updateError
     }
 
     return {
-      id: data.id,
-      ...data.data
+      id: updateData.id,
+      ...updateData.data
     }
   }
 
