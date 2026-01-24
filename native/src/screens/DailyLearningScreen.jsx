@@ -126,9 +126,13 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     try {
       const tref = category.sefariaRef();
       console.log(`📖 Loading from Sefaria: ${tref}`);
-      
+
       const textData = await getText(tref, { lang: 'he' });
-      
+
+      if (!textData) {
+        throw new Error('לא התקבל תוכן מ-Sefaria API');
+      }
+
       // Use the new formatSefariaContent function for better formatting
       // Use category-specific format options if available
       const formatOptions = {
@@ -137,39 +141,73 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         language: 'he',
         ...(category.formatOptions || {})
       };
-      
+
       const formatted = formatSefariaContent(textData, formatOptions);
-      
-      // Fallback to old logic if new function returns empty content
+
+      // Enhanced fallback to handle different response structures
       if (!formatted.content && textData) {
         let fallbackContent = '';
+
+        // Try different possible data structures
         if (textData.he) {
           if (Array.isArray(textData.he)) {
-            fallbackContent = textData.he.filter(p => p && p.trim()).join('\n\n');
-          } else {
+            // Handle nested arrays
+            const flattenArray = (arr) => {
+              return arr.map(item => {
+                if (Array.isArray(item)) {
+                  return flattenArray(item).join(' ');
+                }
+                return typeof item === 'string' ? item : '';
+              }).filter(p => p && p.trim()).join('\n\n');
+            };
+            fallbackContent = flattenArray(textData.he);
+          } else if (typeof textData.he === 'string') {
             fallbackContent = textData.he;
           }
         } else if (textData.text) {
           if (Array.isArray(textData.text)) {
-            fallbackContent = textData.text.filter(p => p && p.trim()).join('\n\n');
-          } else {
+            const flattenArray = (arr) => {
+              return arr.map(item => {
+                if (Array.isArray(item)) {
+                  return flattenArray(item).join(' ');
+                }
+                return typeof item === 'string' ? item : '';
+              }).filter(p => p && p.trim()).join('\n\n');
+            };
+            fallbackContent = flattenArray(textData.text);
+          } else if (typeof textData.text === 'string') {
             fallbackContent = textData.text;
           }
         }
-        
+
+        if (!fallbackContent) {
+          throw new Error('לא נמצא תוכן טקסט בתגובת ה-API');
+        }
+
         formatted.content = fallbackContent;
         formatted.hebrew = fallbackContent;
-        formatted.title = textData.ref || category.title;
+        formatted.title = textData.heRef || textData.ref || category.title;
       }
-      
+
+      // Add daily reference information to title
+      if (category.id === 'tehillim') {
+        const chapter = getDailyTehillimChapter();
+        formatted.title = `תהילים - פרק ${chapter}`;
+      } else if (category.id === 'orchos-tzadikim') {
+        const gate = getDailyOrchotTzadikimGate();
+        formatted.title = textData.heRef || `אורחות צדיקים - שער ${gate}`;
+      }
+
       setContent(prev => ({ ...prev, [category.id]: formatted }));
       showCategoryContent(category, formatted);
     } catch (error) {
       console.error(`Error loading ${category.title}:`, error);
       Alert.alert(
         'שגיאה בטעינת תוכן',
-        `לא ניתן לטעון את התוכן מ-Sefaria. ${error.message}`,
-        [{ text: 'אישור' }]
+        `לא ניתן לטעון את התוכן מ-Sefaria.\n\n${error.message || 'שגיאה לא ידועה'}`,
+        [{ text: 'אישור', onPress: () => {
+          setLoading(prev => ({ ...prev, [category.id]: false }));
+        }}]
       );
     } finally {
       setLoading(prev => ({ ...prev, [category.id]: false }));

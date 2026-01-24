@@ -10,7 +10,7 @@ const DEEP_BLUE = '#0b1b3a'
 
 const MENU_ITEMS = [
     { id: 'learningLibrary', label: 'ספריית לימוד', icon: 'library-outline', screen: 'LearningLibrary' },
-    { id: 'lessons', label: 'שיעורים', icon: 'play-circle-outline', screen: 'Courses' },
+    { id: 'lessons', label: 'שיעורים', icon: 'play-circle-outline', screen: 'DailyLearning' },
     { id: 'music', label: 'ניגונים', icon: 'musical-notes-outline', screen: 'Music' },
     { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline', screen: 'Newsletters' },
     { id: 'prayers', label: 'תפילות', icon: 'heart-outline', screen: 'Prayers' },
