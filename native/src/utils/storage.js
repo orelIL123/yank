@@ -505,6 +505,17 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
       if (uploadResult.error.message?.includes('Bucket not found') || uploadResult.error.message?.includes('not found')) {
         throw new Error(`Bucket '${preferredBucket}' לא קיים ב-Supabase Storage. אנא צור אותו ב-Supabase Dashboard תחת Storage > Buckets.`)
       }
+      // RLS policy missing (common when using anon key without storage policies)
+      if (
+        uploadResult.error.message?.includes('row-level security') ||
+        uploadResult.error.message?.includes('violates row-level security') ||
+        uploadResult.error.message?.includes('RLS')
+      ) {
+        throw new Error(
+          `חסרה הרשאת העלאה ב-Supabase Storage (RLS).\n` +
+          `צריך להוסיף Policy ל-storage.objects עבור bucket '${preferredBucket}'.`
+        )
+      }
       throw uploadResult.error
     }
 
