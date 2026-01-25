@@ -96,18 +96,30 @@ export default function AddNewsletterScreen({ navigation, route }) {
         language: selectedLanguage,
         fileUrl,
         fileType,
-        publishDate: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
+        publishDate: newsletter?.publishDate || new Date().toISOString(),
+        createdAt: newsletter?.createdAt || new Date().toISOString(),
       }
 
-      await db.addDocument('newsletters', newsletterData)
+      if (isEditing && newsletter?.id) {
+        // Update existing newsletter
+        await db.updateDocument('newsletters', newsletter.id, newsletterData)
+        Alert.alert('הצלחה', 'העלון עודכן בהצלחה', [
+          {
+            text: 'אישור',
+            onPress: () => navigation.goBack()
+          }
+        ])
+      } else {
+        // Create new newsletter
+        await db.addDocument('newsletters', newsletterData)
+        Alert.alert('הצלחה', 'העלון נוסף בהצלחה', [
+          {
+            text: 'אישור',
+            onPress: () => navigation.goBack()
+          }
+        ])
+      }
 
-      Alert.alert('הצלחה', 'העלון נוסף בהצלחה', [
-        {
-          text: 'אישור',
-          onPress: () => navigation.goBack()
-        }
-      ])
     } catch (error) {
       console.error('Error saving newsletter:', error)
       const errorMessage = error.message?.includes('Bucket') 

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import { useFocusEffect } from '@react-navigation/native'
 
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system'
@@ -32,13 +33,29 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
         fetchNewsletters()
     }, [selectedLanguage])
 
+    // Refresh when screen comes into focus
+    useFocusEffect(
+        React.useCallback(() => {
+            fetchNewsletters()
+        }, [selectedLanguage])
+    )
+
     const fetchNewsletters = async () => {
         try {
-            const newslettersData = await db.getCollection('newsletters', {
-                where: [['language', '==', selectedLanguage]],
+            setLoading(true)
+            // Fetch all newsletters and filter by language (handles null language as "hebrew" for backward compatibility)
+            const allNewsletters = await db.getCollection('newsletters', {
                 orderBy: { field: 'publishDate', direction: 'desc' }
             })
-            setNewsletters(newslettersData)
+            
+            // Filter by language, treating null/undefined as 'hebrew' for backward compatibility
+            const filtered = allNewsletters.filter(nl => {
+                const lang = nl.language || 'hebrew'
+                return lang === selectedLanguage
+            })
+            
+            console.log(`Loaded ${filtered.length} newsletters for language: ${selectedLanguage}`)
+            setNewsletters(filtered)
         } catch (error) {
             console.error('Error fetching newsletters:', error)
             Alert.alert('שגיאה', 'לא ניתן לטעון את העלונים')
@@ -128,10 +145,15 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
         )
     }
 
+    const handleEditNewsletter = (newsletter) => {
+        navigation.navigate('AddNewsletter', { newsletter })
+    }
+
     const renderNewsletter = ({ item }) => (
         <Pressable
             style={styles.newsletterCard}
             onPress={() => handleNewsletterPress(item)}
+            onLongPress={canManage ? () => handleEditNewsletter(item) : undefined}
         >
             <View style={styles.newsletterImageContainer} pointerEvents="box-none">
                 {item.thumbnailUrl || item.fileType === 'image' ? (
@@ -200,16 +222,28 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
                     </Pressable>
 
                     {canManage && (
-                        <Pressable
-                            style={[styles.actionButton, { borderTopWidth: 1, borderTopColor: 'rgba(239,68,68,0.2)', paddingTop: 8, marginTop: 4 }]}
-                            onPress={(e) => {
-                                e.stopPropagation()
-                                handleDeleteNewsletter(item)
-                            }}
-                        >
-                            <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                            <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>מחק</Text>
-                        </Pressable>
+                        <>
+                            <Pressable
+                                style={[styles.actionButton, { borderTopWidth: 1, borderTopColor: 'rgba(30,58,138,0.2)', paddingTop: 8, marginTop: 4 }]}
+                                onPress={(e) => {
+                                    e.stopPropagation()
+                                    handleEditNewsletter(item)
+                                }}
+                            >
+                                <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
+                                <Text style={styles.actionButtonText}>ערוך</Text>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.actionButton, { borderTopWidth: 1, borderTopColor: 'rgba(239,68,68,0.2)', paddingTop: 8, marginTop: 4 }]}
+                                onPress={(e) => {
+                                    e.stopPropagation()
+                                    handleDeleteNewsletter(item)
+                                }}
+                            >
+                                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                                <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>מחק</Text>
+                            </Pressable>
+                        </>
                     )}
                 </View>
             </View>
