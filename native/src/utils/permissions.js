@@ -14,6 +14,8 @@ export const PERMISSIONS = {
   MUSIC: 'music_manager',            // Can manage music/nigunimם
   BOOKS: 'books_manager',            // Can manage books (תולדות אדם)
   LEARNING: 'learning_manager',      // Can manage learning library (short & long videos)
+  NEWS: 'news_manager',              // Can manage news articles
+  DAILY_LEARNING: 'daily_learning_manager', // Can manage daily learning content
   
   // Future permissions
   NEWSLETTERS: 'newsletters_manager',
@@ -29,6 +31,8 @@ export const PERMISSION_LABELS = {
   [PERMISSIONS.MUSIC]: 'אחראי ניגונים',
   [PERMISSIONS.BOOKS]: 'אחראי ספרים',
   [PERMISSIONS.LEARNING]: 'אחראי ספריית לימוד',
+  [PERMISSIONS.NEWS]: 'אחראי חדשות',
+  [PERMISSIONS.DAILY_LEARNING]: 'אחראי לימוד יומי',
   [PERMISSIONS.NEWSLETTERS]: 'אחראי עלונים',
   [PERMISSIONS.TZADIKIM]: 'אחראי צדיקים',
   [PERMISSIONS.NOTIFICATIONS]: 'אחראי התראות',
@@ -105,6 +109,20 @@ export function canManageTzadikim(userRole, userPermissions) {
  */
 export function canManageNotifications(userRole, userPermissions) {
   return hasPermission(userRole, userPermissions, PERMISSIONS.NOTIFICATIONS)
+}
+
+/**
+ * Check if user can manage news
+ */
+export function canManageNews(userRole, userPermissions) {
+  return hasPermission(userRole, userPermissions, PERMISSIONS.NEWS)
+}
+
+/**
+ * Check if user can manage daily learning
+ */
+export function canManageDailyLearning(userRole, userPermissions) {
+  return hasPermission(userRole, userPermissions, PERMISSIONS.DAILY_LEARNING)
 }
 
 /**
