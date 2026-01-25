@@ -3,11 +3,9 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Activi
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, addDoc, Timestamp } from 'firebase/firestore'
-import { db } from '../config/firebase'
 import * as DocumentPicker from 'expo-document-picker'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { storage } from '../config/firebase'
+import db from '../services/database'
+import { uploadFileToSupabaseStorage } from '../utils/storage'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -51,19 +49,20 @@ export default function AddNewsletterScreen({ navigation, route }) {
 
   const uploadFile = async (file) => {
     try {
-      const response = await fetch(file.uri)
-      const blob = await response.blob()
+      // Generate file path (without bucket name in path)
+      const fileExtension = file.name.split('.').pop() || 'pdf'
+      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
 
-      const fileExtension = file.name.split('.').pop()
-      const fileName = `newsletters/${Date.now()}_${file.name}`
-      const storageRef = ref(storage, fileName)
-
-      await uploadBytes(storageRef, blob)
-      const downloadURL = await getDownloadURL(storageRef)
-
-      return downloadURL
+      // Prefer dedicated bucket; helper will fallback if missing
+      return await uploadFileToSupabaseStorage(file.uri, 'newsletters', fileName, (progress) => {
+        console.log(`Upload progress: ${progress}%`)
+      })
     } catch (error) {
       console.error('Error uploading file:', error)
+      // Provide helpful error message for bucket not found
+      if (error.message?.includes('Bucket') && error.message?.includes('not found')) {
+        throw new Error('Bucket לא קיים. אנא צור bucket בשם "newsletters" ב-Supabase Dashboard תחת Storage.')
+      }
       throw error
     }
   }
@@ -97,11 +96,11 @@ export default function AddNewsletterScreen({ navigation, route }) {
         language: selectedLanguage,
         fileUrl,
         fileType,
-        publishDate: Timestamp.now(),
-        createdAt: Timestamp.now(),
+        publishDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       }
 
-      await addDoc(collection(db, 'newsletters'), newsletterData)
+      await db.addDocument('newsletters', newsletterData)
 
       Alert.alert('הצלחה', 'העלון נוסף בהצלחה', [
         {
@@ -111,7 +110,10 @@ export default function AddNewsletterScreen({ navigation, route }) {
       ])
     } catch (error) {
       console.error('Error saving newsletter:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את העלון')
+      const errorMessage = error.message?.includes('Bucket') 
+        ? 'Bucket לא קיים ב-Supabase Storage. אנא צור bucket בשם "newsletters" ב-Supabase Dashboard.'
+        : 'לא ניתן לשמור את העלון'
+      Alert.alert('שגיאה', errorMessage)
     } finally {
       setUploading(false)
     }

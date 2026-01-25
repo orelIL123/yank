@@ -400,3 +400,127 @@ export function generatePrayerPDFPath(prayerId, filename) {
   return generateStoragePath(`prayers/${prayerId}`, filename || 'prayer.pdf')
 }
 
+/**
+ * Upload file to Supabase Storage
+ * Creates bucket if it doesn't exist
+ */
+export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress) {
+  try {
+    const { supabase } = await import('../config/supabase')
+    const FileSystem = await import('expo-file-system/legacy')
+    const preferredBucket = bucket
+    let effectiveBucket = bucket
+    let effectivePath = path
+    
+    // Check buckets list (used for fallback if the requested bucket doesn't exist)
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets()
+    const knownBuckets = !listError ? (buckets || []) : []
+    const requestedBucketExists = knownBuckets.some(b => b.name === preferredBucket)
+    const pickFallbackBucket = () => {
+      if (!knownBuckets.length) return null
+      const preferredNames = ['public', 'uploads', 'files', 'assets']
+      const byName = preferredNames.map(n => knownBuckets.find(b => b.name === n)).find(Boolean)
+      return (byName || knownBuckets[0])?.name || null
+    }
+    
+    // Read file as base64
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+
+    // Convert base64 to Uint8Array (RN-safe, no atob)
+    const bytes = base64ToUint8Array(base64)
+
+    // Determine content type from file extension
+    const extension = path.split('.').pop()?.toLowerCase()
+    let contentType = 'application/octet-stream'
+    if (extension === 'pdf') {
+      contentType = 'application/pdf'
+    } else if (['jpg', 'jpeg'].includes(extension)) {
+      contentType = 'image/jpeg'
+    } else if (extension === 'png') {
+      contentType = 'image/png'
+    } else if (extension === 'gif') {
+      contentType = 'image/gif'
+    }
+
+    // Upload to Supabase Storage
+    let uploadResult = await supabase.storage
+      .from(effectiveBucket)
+      .upload(path, bytes, {
+        contentType,
+        upsert: false,
+      })
+
+    // If bucket doesn't exist, try to create it first
+    if (uploadResult.error && (uploadResult.error.message?.includes('Bucket not found') || uploadResult.error.message?.includes('not found'))) {
+      // If the bucket doesn't exist but we have other buckets, fallback to one of them
+      if (!requestedBucketExists) {
+        const fallback = pickFallbackBucket()
+        if (fallback) {
+          console.warn(`Bucket '${preferredBucket}' not found. Falling back to bucket '${fallback}' with folder prefix 'newsletters/'.`)
+          effectiveBucket = fallback
+          effectivePath = `newsletters/${path}`
+          uploadResult = await supabase.storage
+            .from(effectiveBucket)
+            .upload(effectivePath, bytes, {
+              contentType,
+              upsert: false,
+            })
+        }
+      }
+
+      // If still failing and we can’t fallback, try to create bucket (will usually fail with anon key)
+      if (uploadResult.error && (uploadResult.error.message?.includes('Bucket not found') || uploadResult.error.message?.includes('not found'))) {
+        console.log(`Bucket '${preferredBucket}' not found, attempting to create...`)
+      
+        // Try to create bucket (this requires admin/service role permissions)
+        const { error: createError } = await supabase.storage.createBucket(preferredBucket, {
+          public: true,
+          allowedMimeTypes: null, // Allow all types
+          fileSizeLimit: 50 * 1024 * 1024, // 50MB
+        })
+      
+        if (createError) {
+          // If we can't create it, provide helpful error
+          console.error('Could not create bucket:', createError)
+          throw new Error(`Bucket '${preferredBucket}' לא קיים ב-Supabase Storage. אנא צור אותו ב-Supabase Dashboard תחת Storage > Buckets.`)
+        } else {
+          console.log(`Bucket '${preferredBucket}' created successfully, retrying upload...`)
+          effectiveBucket = preferredBucket
+          effectivePath = path
+          uploadResult = await supabase.storage
+            .from(effectiveBucket)
+            .upload(effectivePath, bytes, {
+              contentType,
+              upsert: false,
+            })
+        }
+      }
+    }
+
+    if (uploadResult.error) {
+      console.error('Supabase Storage upload error:', uploadResult.error)
+      // Provide helpful error message for bucket not found
+      if (uploadResult.error.message?.includes('Bucket not found') || uploadResult.error.message?.includes('not found')) {
+        throw new Error(`Bucket '${preferredBucket}' לא קיים ב-Supabase Storage. אנא צור אותו ב-Supabase Dashboard תחת Storage > Buckets.`)
+      }
+      throw uploadResult.error
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from(effectiveBucket)
+      .getPublicUrl(effectivePath)
+
+    if (onProgress) {
+      onProgress(100)
+    }
+
+    return urlData.publicUrl
+  } catch (error) {
+    console.error('Error uploading file to Supabase Storage:', error)
+    throw error
+  }
+}
+

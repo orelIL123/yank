@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { auth, db as firestoreDb } from '../config/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import db from '../services/database'
-import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath, pickPDF, uploadPDFToStorage, generatePrayerPDFPath } from '../utils/storage'
+import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath, pickPDF, uploadPDFToStorage, generatePrayerPDFPath, uploadFileToSupabaseStorage } from '../utils/storage'
 import { sendPushNotifications } from '../utils/notifications'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -1002,9 +1002,9 @@ function NewslettersForm() {
     try {
       const timestamp = Date.now()
       const extension = form.fileType === 'pdf' ? 'pdf' : 'jpg'
-      const path = `newsletters/${timestamp}/newsletter.${extension}`
+      const path = `${timestamp}/newsletter.${extension}`
 
-      const url = await uploadImageToStorage(form.fileUri, path, (progress) => {
+      const url = await uploadFileToSupabaseStorage(form.fileUri, 'newsletters', path, (progress) => {
         console.log(`Upload progress: ${progress}%`)
       })
 
