@@ -3,22 +3,32 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, Share, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import { useFocusEffect } from '@react-navigation/native'
 
 import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
 import db from '../services/database'
+import { canManageNews } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-export default function NewsScreen({ navigation, userRole }) {
+export default function NewsScreen({ navigation, userRole, userPermissions }) {
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     loadNews()
   }, [])
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Refresh when returning from Add/Edit screens
+      loadNews()
+      return undefined
+    }, [])
+  )
 
   const loadNews = async () => {
     try {
@@ -49,14 +59,18 @@ export default function NewsScreen({ navigation, userRole }) {
     return new Date(date).toLocaleDateString('he-IL', { year: 'numeric', month: 'long', day: 'numeric' })
   }
 
+  const canManage = canManageNews(userRole, userPermissions)
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title={t('מהנעשה בבית המדרש')}
+          title={t('חדשות')}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
+          rightIcon={canManage ? 'add-circle-outline' : undefined}
+          onRightIconPress={canManage ? () => navigation.navigate('AddNews') : undefined}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY_BLUE} />
@@ -70,26 +84,33 @@ export default function NewsScreen({ navigation, userRole }) {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title={t('מהנעשה בבית המדרש')}
+        title={t('חדשות')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
+        rightIcon={canManage ? 'add-circle-outline' : undefined}
+        onRightIconPress={canManage ? () => navigation.navigate('AddNews') : undefined}
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.subtitle}>עדכונים וחדשות מבית המדרש</Text>
+        <Text style={styles.subtitle}>עדכונים על העמותה</Text>
 
         {articles.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="newspaper-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
             <Text style={styles.emptyText}>אין חדשות זמינות כרגע</Text>
-            <Text style={styles.emptySubtext}>החדשות יתווספו בקרוב</Text>
+            {canManage ? (
+              <Text style={styles.emptySubtext}>אפשר להוסיף כתבה חדשה באמצעות כפתור ה- (+)</Text>
+            ) : (
+              <Text style={styles.emptySubtext}>החדשות יתווספו בקרוב</Text>
+            )}
           </View>
         ) : (
           articles.map((article, idx) => (
             <Pressable
               key={article.id}
               style={[styles.articleCard, idx === 0 && styles.articleCardFirst]}
-              onPress={() => navigation.navigate('DailyInsight')}
+              onPress={() => navigation.navigate('NewsArticle', { articleId: article.id })}
+              onLongPress={canManage ? () => navigation.navigate('AddNews', { article }) : undefined}
               accessibilityRole="button"
               accessibilityLabel={`כתבה ${article.title}`}
             >
@@ -126,16 +147,6 @@ export default function NewsScreen({ navigation, userRole }) {
             </Pressable>
           ))
         )}
-
-        <View style={styles.footerCard}>
-          <Ionicons name="create-outline" size={28} color={PRIMARY_BLUE} />
-          <View style={styles.footerTextBlock}>
-            <Text style={styles.footerTitle}>עדכונים נוספים</Text>
-            <Text style={styles.footerDesc}>
-              עדכונים נוספים מבית המדרש יופיעו כאן בקרוב.
-            </Text>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   )
@@ -270,31 +281,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: 'Poppins_400Regular',
     textAlign: 'right',
-  },
-  footerCard: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: 'rgba(30,58,138,0.1)',
-  },
-  footerTextBlock: {
-    flex: 1,
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  footerTitle: {
-    color: DEEP_BLUE,
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-  footerDesc: {
-    color: '#475569',
-    fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
-    textAlign: 'right',
-    lineHeight: 18,
   },
 })

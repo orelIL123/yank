@@ -16,10 +16,13 @@ const MENU_ITEMS = [
     { id: 'prayers', label: 'תפילות', icon: 'heart-outline', screen: 'Prayers' },
     { id: 'siddur', label: 'סידור', icon: 'book-outline', screen: 'Siddur' },
     { id: 'books', label: 'ספרים', icon: 'book-outline', screen: 'Books' },
-    { id: 'parshiot', label: 'פרשת הנשיאים', icon: 'scroll-outline', screen: 'ParshiotHaNasiim' },
+    // Ionicons doesn't include "scroll-outline" (caused runtime warning). Use a valid icon.
+    { id: 'parshiot', label: 'פרשת הנשיאים', icon: 'document-text-outline', screen: 'ParshiotHaNasiim' },
     { id: 'news', label: 'חדשות', icon: 'newspaper-outline', screen: 'News' },
     { id: 'about', label: 'אודות', icon: 'information-circle-outline', screen: 'About' },
     { id: 'contact', label: 'צור קשר', icon: 'mail-outline', screen: 'ContactRabbi' },
+    // Admin panel (screen will guard access)
+    { id: 'admin', label: 'פאנל אדמין', icon: 'lock-closed-outline', screen: 'Admin' },
 ]
 
 export default function MenuDrawer({ visible, onClose, navigation }) {

@@ -6,13 +6,15 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
 import * as Updates from 'expo-updates'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore'
-import { auth, db } from './src/config/firebase'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { auth } from './src/config/firebase'
 import { getRememberMe } from './src/utils/preferences'
+import supaDb from './src/services/database'
 import HomeScreen from './src/HomeScreen'
 import DailyInsightScreen from './src/screens/DailyInsightScreen'
 import CoursesScreen from './src/screens/CoursesScreen'
 import NewsScreen from './src/screens/NewsScreen'
+import NewsArticleScreen from './src/screens/NewsArticleScreen'
 import ProfileScreen from './src/screens/ProfileScreen'
 import LiveAlertsScreen from './src/screens/LiveAlertsScreen'
 import AdminScreen from './src/screens/AdminScreen'
@@ -29,6 +31,7 @@ import MusicScreen from './src/screens/MusicScreen'
 import BooksScreen from './src/screens/BooksScreen'
 import NewslettersScreen from './src/screens/NewslettersScreen'
 import AddNewsletterScreen from './src/screens/AddNewsletterScreen'
+import AddNewsScreen from './src/screens/AddNewsScreen'
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen'
 import TzadikimScreen from './src/screens/TzadikimScreen'
 import TzadikDetailScreen from './src/screens/TzadikDetailScreen'
@@ -105,23 +108,68 @@ export default function App() {
         setUser(currentUser)
 
         if (currentUser) {
-          // Fetch user role and permissions from Firestore
+          // Load cached role immediately (works offline)
           try {
-            const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
-            if (userDoc.exists() && mounted) {
-              const userData = userDoc.data()
-              const role = userData.role
-              const permissions = userData.permissions || []
-              console.log('User role:', role)
-              console.log('User permissions:', permissions)
-              setUserRole(role)
-              setUserPermissions(permissions)
-            } else {
-              console.log('User document not found in Firestore')
+            const cached = await AsyncStorage.getItem(`user_role_cache_${currentUser.uid}`)
+            if (cached && mounted) {
+              const parsed = JSON.parse(cached)
+              if (parsed?.role) setUserRole(parsed.role)
+              if (Array.isArray(parsed?.permissions)) setUserPermissions(parsed.permissions)
             }
+          } catch {}
+
+          // Fetch role/permissions from Supabase app_config (Firebase is auth-only now)
+          try {
+            // Prefer Firebase Auth custom claims if configured (works without Firestore)
+            try {
+              const tokenResult = await currentUser.getIdTokenResult()
+              const claims = tokenResult?.claims || {}
+              const claimRole = claims.role
+              const claimAdmin = claims.admin === true
+              if (claimAdmin || claimRole === 'admin') {
+                const role = 'admin'
+                if (mounted) setUserRole(role)
+                if (mounted) setUserPermissions([])
+                try {
+                  await AsyncStorage.setItem(
+                    `user_role_cache_${currentUser.uid}`,
+                    JSON.stringify({ role, permissions: [] })
+                  )
+                } catch {}
+                // Skip app_config lookup if claims already say admin
+                throw new Error('__ROLE_SET_FROM_CLAIMS__')
+              }
+            } catch (e) {
+              // Ignore claim fetch errors; fall back to app_config
+              if (e?.message === '__ROLE_SET_FROM_CLAIMS__') {
+                // role already set above
+                // eslint-disable-next-line no-throw-literal
+                throw '__STOP__'
+              }
+            }
+
+            const cfg = await supaDb.getAppConfig()
+            const adminUids = cfg?.admin_uids || []
+            const adminEmails = cfg?.admin_emails || []
+            const isAdmin =
+              (Array.isArray(adminUids) && adminUids.includes(currentUser.uid)) ||
+              (Array.isArray(adminEmails) && currentUser.email && adminEmails.includes(currentUser.email))
+
+            const role = isAdmin ? 'admin' : 'user'
+            if (mounted) setUserRole(role)
+            if (mounted) setUserPermissions([]) // optional: keep empty for now
+
+            try {
+              await AsyncStorage.setItem(
+                `user_role_cache_${currentUser.uid}`,
+                JSON.stringify({ role, permissions: [] })
+              )
+            } catch {}
           } catch (error) {
-            console.error('Error fetching user data:', error)
-            // Don't crash if fetch fails
+            if (error !== '__STOP__') {
+              console.error('Error fetching app_config for role:', error)
+            }
+            // keep cached role if available
           }
 
           // Navigate to Home only if we're not already in the main app
@@ -255,43 +303,8 @@ export default function App() {
       registerForPushNotificationsAsync().then(async (token) => {
         if (token) {
           console.log('📱 Push Token received:', token)
-          try {
-            // Save token to Firestore users collection
-            const userRef = doc(db, 'users', user.uid)
-            const userDoc = await getDoc(userRef)
-            
-            if (userDoc.exists()) {
-              // Update existing user document
-              const userData = userDoc.data()
-              const existingTokens = userData.expoPushTokens || []
-              
-              // Add token if not already in array
-              if (!existingTokens.includes(token)) {
-                await updateDoc(userRef, {
-                  expoPushTokens: [...existingTokens, token],
-                  notificationsEnabled: true,
-                  lastPushTokenUpdate: new Date().toISOString()
-                })
-                console.log('✅ Push token saved to Firestore')
-              } else {
-                console.log('ℹ️ Push token already exists in Firestore')
-              }
-            } else {
-              // Create user document if it doesn't exist
-              await setDoc(userRef, {
-                uid: user.uid,
-                email: user.email || '',
-                displayName: user.displayName || '',
-                expoPushTokens: [token],
-                notificationsEnabled: true,
-                lastPushTokenUpdate: new Date().toISOString(),
-                createdAt: new Date().toISOString()
-              })
-              console.log('✅ User document created with push token')
-            }
-          } catch (error) {
-            console.error('❌ Error saving push token:', error)
-          }
+          // NOTE: We no longer persist push tokens to Firestore (Firebase is auth-only).
+          // If we need server-side pushes later, we'll store tokens in Supabase via Edge Function.
         }
       }).catch(error => {
         console.error('❌ Error registering for push notifications:', error)
@@ -404,6 +417,12 @@ export default function App() {
           <Stack.Screen name="News">
             {(props) => <NewsScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
+          <Stack.Screen name="NewsArticle">
+            {(props) => <NewsArticleScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
+          <Stack.Screen name="AddNews">
+            {(props) => <AddNewsScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
           <Stack.Screen name="Profile">
             {(props) => <ProfileScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
@@ -461,10 +480,10 @@ export default function App() {
           <Stack.Screen name="SeferHaMidot" component={SeferHaMidotScreen} />
           <Stack.Screen name="ManagePermissions" component={ManagePermissionsScreen} />
 
-          {/* Admin screen - only for admins */}
-          {userRole === 'admin' && (
-            <Stack.Screen name="Admin" component={AdminScreen} />
-          )}
+          {/* Admin screen - always registered; screen itself will guard access */}
+          <Stack.Screen name="Admin">
+            {(props) => <AdminScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>
       {showSplash && (

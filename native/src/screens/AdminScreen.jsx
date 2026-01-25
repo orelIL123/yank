@@ -20,6 +20,7 @@ const TABS = [
   { id: 'cards', label: 'כרטיסיות', icon: 'grid-outline' },
   { id: 'books', label: 'ספרים', icon: 'book-outline' },
   { id: 'prayers', label: 'תפילות', icon: 'heart-outline' },
+  { id: 'news', label: 'חדשות', icon: 'newspaper-outline' },
   { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline' },
   { id: 'dailyLearning', label: 'לימוד יומי', icon: 'school-outline' },
   { id: 'shortLessons', label: 'שיעורים קצרים', icon: 'videocam-outline' },
@@ -29,7 +30,37 @@ const TABS = [
   { id: 'notifications', label: 'התראות', icon: 'notifications-outline' },
 ]
 
-export default function AdminScreen({ navigation, route }) {
+export default function AdminScreen({ navigation, route, userRole, userPermissions }) {
+
+  // Guard: allow access only to admins (role is computed in App.js without Firestore)
+  if (userRole !== 'admin') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={[BG, '#f7f7f7']} style={StyleSheet.absoluteFill} />
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
+          </Pressable>
+          <Text style={styles.headerTitle}>🔐 פאנל אדמין</Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        <View style={styles.loadingContainer}>
+          <Ionicons name="lock-closed-outline" size={56} color={PRIMARY_BLUE} style={{ opacity: 0.4 }} />
+          <Text style={styles.loadingText}>אין הרשאה לפאנל אדמין</Text>
+          <Text style={[styles.loadingText, { fontSize: 14, color: '#6b7280', marginTop: 6 }]}>
+            אם זה אמור לעבוד אצלך—צריך להגדיר אותך כאדמין (Firebase Claims או app_config ב‑Supabase).
+          </Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   // Check if initialTab was passed from navigation
   const initialTab = route?.params?.initialTab || 'books';
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -86,6 +117,7 @@ export default function AdminScreen({ navigation, route }) {
         {activeTab === 'cards' && <CardsForm />}
         {activeTab === 'books' && <BooksForm />}
         {activeTab === 'prayers' && <PrayersForm />}
+        {activeTab === 'news' && <NewsForm />}
         {activeTab === 'newsletters' && <NewslettersForm />}
         {activeTab === 'dailyLearning' && <DailyLearningForm />}
         {activeTab === 'shortLessons' && <ShortLessonsForm />}
@@ -2232,6 +2264,126 @@ function PrayersForm() {
   )
 }
 
+// ========== NEWS FORM ==========
+function NewsForm() {
+  const [articles, setArticles] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadArticles()
+  }, [])
+
+  const loadArticles = async () => {
+    try {
+      setLoading(true)
+      const articlesData = await db.getCollection('news', {
+        orderBy: { field: 'date', direction: 'desc' },
+        limit: 20
+      })
+      setArticles(articlesData || [])
+    } catch (error) {
+      console.error('Error loading articles:', error)
+      Alert.alert('שגיאה', 'לא ניתן לטעון את החדשות')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteArticle = (article) => {
+    Alert.alert(
+      'מחיקת כתבה',
+      `האם אתה בטוח שברצונך למחוק את הכתבה "${article.title}"?`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await db.deleteDocument('news', article.id)
+              Alert.alert('הצלחה', 'הכתבה נמחקה בהצלחה')
+              loadArticles()
+            } catch (error) {
+              console.error('Error deleting article:', error)
+              Alert.alert('שגיאה', 'לא ניתן למחוק את הכתבה')
+            }
+          }
+        }
+      ]
+    )
+  }
+
+  const formatDate = (date) => {
+    if (!date) return new Date().toLocaleDateString('he-IL')
+    if (date.toDate) {
+      return date.toDate().toLocaleDateString('he-IL', { year: 'numeric', month: 'long', day: 'numeric' })
+    }
+    return new Date(date).toLocaleDateString('he-IL', { year: 'numeric', month: 'long', day: 'numeric' })
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>📰 ניהול חדשות</Text>
+      <Text style={styles.formSubtitle}>
+        ניהול כתבות חדשות מבית המדרש
+      </Text>
+
+      <View style={styles.separator} />
+
+      {/* Articles List */}
+      <View style={styles.listSection}>
+        <Text style={styles.sectionSubtitle}>רשימת כתבות ({articles.length})</Text>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+          </View>
+        ) : articles.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="newspaper-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+            <Text style={styles.emptyText}>אין כתבות עדיין</Text>
+            <Text style={styles.helpText}>
+              ניתן להוסיף כתבות חדשות דרך מסך החדשות באפליקציה (כפתור +)
+            </Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.articlesList}>
+            {articles.map((article) => (
+              <View key={article.id} style={styles.articleItem}>
+                <View style={styles.articleInfo}>
+                  <Text style={styles.articleTitle} numberOfLines={2}>
+                    {article.title || 'ללא כותרת'}
+                  </Text>
+                  {article.summary && (
+                    <Text style={styles.articleDescription} numberOfLines={2}>
+                      {article.summary}
+                    </Text>
+                  )}
+                  <Text style={styles.articleMeta}>
+                    תאריך: {formatDate(article.date)}
+                  </Text>
+                </View>
+                <View style={styles.articleActions}>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() => handleDeleteArticle(article)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      <Text style={styles.note}>
+        💡 ניהול מלא של חדשות (הוספה/עריכה) זמין דרך מסך החדשות באפליקציה. כאן ניתן רק לצפות ולמחוק.
+      </Text>
+    </View>
+  )
+}
+
 // ========== NOTIFICATIONS FORM ==========
 function NotificationsForm() {
   const [form, setForm] = useState({
@@ -3383,5 +3535,52 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  articlesList: {
+    maxHeight: 500,
+  },
+  articleItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  articleInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  articleTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  articleDescription: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+    marginBottom: 6,
+  },
+  articleMeta: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: '#9ca3af',
+    textAlign: 'right',
+  },
+  articleActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
 })
