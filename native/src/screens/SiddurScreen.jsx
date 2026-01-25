@@ -74,6 +74,9 @@ export default function SiddurScreen({ navigation }) {
   const [language, setLanguage] = useState('he') // 'he' for Hebrew, 'en' for English
   const [cachedSections, setCachedSections] = useState({})
   const [downloading, setDownloading] = useState(false)
+  const [renderMode, setRenderMode] = useState('web') // 'web' | 'text'
+  const [fallbackText, setFallbackText] = useState(null)
+  const [httpErrorStage, setHttpErrorStage] = useState(0) // 0: normal, 1: retried w/o lang, 2: API fallback
 
   // Load cached sections on mount
   useEffect(() => {
@@ -90,20 +93,19 @@ export default function SiddurScreen({ navigation }) {
     loadCachedSections()
   }, [])
 
-  // Build Sefaria URL with language parameter
-  const buildSefariaUrl = (section, lang) => {
-    // Always use directLink - it's already properly formatted
+  const getBaseSefariaUrl = (section) => {
     let baseUrl = section.directLink
-    
     if (!baseUrl) {
-      // Fallback: build from sefariaRef
       const ref = section.sefariaRef.replace(/, /g, ',')
       const encodedRef = encodeURIComponent(ref)
       baseUrl = `https://www.sefaria.org/${encodedRef}`
     }
-    
-    // Remove any existing lang parameter first
-    baseUrl = baseUrl.split('?')[0].split('&')[0]
+    return baseUrl.split('?')[0]
+  }
+
+  // Build Sefaria URL with language parameter
+  const buildSefariaUrl = (section, lang) => {
+    const baseUrl = getBaseSefariaUrl(section)
     
     // Add language parameter - Sefaria uses 'lang' parameter
     const langParam = lang === 'en' ? 'en' : 'he'
@@ -112,11 +114,58 @@ export default function SiddurScreen({ navigation }) {
     return `${baseUrl}?lang=${langParam}`
   }
 
+  const stripLangParam = (url) => {
+    if (!url) return url
+    try {
+      const u = new URL(url)
+      u.searchParams.delete('lang')
+      // Remove trailing ? if empty
+      const cleaned = u.toString()
+      return cleaned.replace(/\?$/, '')
+    } catch {
+      return url.split('?')[0]
+    }
+  }
+
+  const fetchSefariaApiText = async (section, lang) => {
+    const langParam = lang === 'en' ? 'en' : 'he'
+    const ref = section.sefariaRef
+    const encodedRef = encodeURIComponent(ref)
+    const apiUrl = `${SEFARIA_API_BASE}/texts/${encodedRef}?lang=${langParam}`
+
+    const res = await fetch(apiUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+      },
+    })
+    if (!res.ok) {
+      throw new Error(`Sefaria API error: ${res.status}`)
+    }
+    const data = await res.json()
+    const payload = langParam === 'he' ? data.he : (data.text || data.en || data.he)
+    if (!payload) return ''
+
+    const flatten = (v) => {
+      if (typeof v === 'string') return v
+      if (!Array.isArray(v)) return ''
+      return v
+        .map((x) => (Array.isArray(x) ? flatten(x) : (typeof x === 'string' ? x : '')))
+        .filter((x) => x && x.trim())
+        .join('\n\n')
+    }
+
+    return flatten(payload)
+  }
+
   const handleSectionPress = (section) => {
     setSelectedSection(section)
     const url = buildSefariaUrl(section, language)
     setSectionUrl(url)
     setLoading(true)
+    setRenderMode('web')
+    setFallbackText(null)
+    setHttpErrorStage(0)
   }
 
   const handleDownloadSection = async () => {
@@ -263,84 +312,136 @@ export default function SiddurScreen({ navigation }) {
             </View>
           )}
           
-          <WebView
-            source={{ uri: sectionUrl }}
-            style={styles.webView}
-            onLoadStart={() => setLoading(true)}
-            onLoadEnd={() => setLoading(false)}
-            onHttpError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent
-              console.error('WebView HTTP error: ', nativeEvent)
-              setLoading(false)
-              // Don't show alert on HTTP errors - let user see the error page
-            }}
-            onError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent
-              console.error('WebView error: ', nativeEvent)
-              setLoading(false)
-              // Only show alert for critical errors
-              if (nativeEvent.code === -1009 || nativeEvent.code === -1001) {
-                Alert.alert(
-                  'שגיאת חיבור',
-                  'לא ניתן להתחבר לשרת. בדוק את החיבור לאינטרנט.',
-                  [
-                    { text: 'ביטול', style: 'cancel' },
-                    { 
-                      text: 'נסה שוב', 
-                      onPress: () => {
-                        const url = buildSefariaUrl(selectedSection, language)
-                        setSectionUrl(url)
-                        setLoading(true)
-                      }
+          {renderMode === 'text' ? (
+            <ScrollView contentContainerStyle={styles.fallbackContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.textContainer}>
+                <Text style={styles.sectionTitle}>{selectedSection.title}</Text>
+                <Text style={styles.sectionDescription}>{selectedSection.description}</Text>
+                <View style={{ height: 12 }} />
+                <Text style={styles.hebrewTextLine}>{fallbackText || 'אין תוכן זמין כרגע.'}</Text>
+              </View>
+              <Pressable
+                style={styles.externalLinkButton}
+                onPress={() => Linking.openURL(getBaseSefariaUrl(selectedSection))}
+              >
+                <Ionicons name="open-outline" size={18} color={PRIMARY_BLUE} />
+                <Text style={styles.externalLinkText}>פתח באתר Sefaria</Text>
+              </Pressable>
+            </ScrollView>
+          ) : (
+            <WebView
+              source={{ uri: sectionUrl }}
+              style={styles.webView}
+              onLoadStart={() => setLoading(true)}
+              onLoadEnd={() => setLoading(false)}
+              onHttpError={async (syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent
+                console.error('WebView HTTP error: ', nativeEvent)
+                setLoading(false)
+
+                // Many Sefaria pages intermittently return 500 with lang param.
+                if (nativeEvent?.statusCode >= 500 && selectedSection) {
+                  // Stage 0 -> retry without lang
+                  if (httpErrorStage === 0 && sectionUrl?.includes('lang=')) {
+                    setHttpErrorStage(1)
+                    const noLang = stripLangParam(sectionUrl)
+                    setSectionUrl(noLang)
+                    setLoading(true)
+                    return
+                  }
+
+                  // Stage 1 -> fallback to Sefaria API (in-app text)
+                  if (httpErrorStage <= 1) {
+                    try {
+                      setHttpErrorStage(2)
+                      setLoading(true)
+                      const txt = await fetchSefariaApiText(selectedSection, language)
+                      setFallbackText(txt)
+                      setRenderMode('text')
+                    } catch (e) {
+                      console.error('Sefaria API fallback failed:', e)
+                      Alert.alert(
+                        'שגיאה בטעינה',
+                        'Sefaria מחזיר שגיאה כרגע. נסה שוב או פתח באתר.',
+                        [
+                          { text: 'ביטול', style: 'cancel' },
+                          { text: 'פתח באתר', onPress: () => Linking.openURL(getBaseSefariaUrl(selectedSection)) },
+                        ]
+                      )
+                    } finally {
+                      setLoading(false)
                     }
-                  ]
-                )
-              }
-            }}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            startInLoadingState={true}
-            scalesPageToFit={true}
-            allowsBackForwardNavigationGestures={true}
-            userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
-            injectedJavaScript={`
-              (function() {
-                try {
-                  // Hide Sefaria header/footer for cleaner view
-                  const style = document.createElement('style');
-                  style.textContent = \`
-                    header, footer, .header, .footer, 
-                    .siteHeader, .siteFooter,
-                    .mobile-header, .mobile-footer,
-                    .site-header, .site-footer,
-                    nav.site-nav {
-                      display: none !important;
-                    }
-                    body {
-                      padding-top: 0 !important;
-                      padding-bottom: 0 !important;
-                      margin-top: 0 !important;
-                    }
-                    .content {
-                      padding-top: 10px !important;
-                    }
-                  \`;
-                  document.head.appendChild(style);
-                  
-                  // Also try to hide after page loads
-                  setTimeout(function() {
-                    const headers = document.querySelectorAll('header, .header, .site-header, nav.site-nav');
-                    const footers = document.querySelectorAll('footer, .footer, .site-footer');
-                    headers.forEach(el => el.style.display = 'none');
-                    footers.forEach(el => el.style.display = 'none');
-                  }, 1000);
-                } catch(e) {
-                  console.log('Error in injected script:', e);
+                  }
                 }
-              })();
-              true;
-            `}
-          />
+              }}
+              onError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent
+                console.error('WebView error: ', nativeEvent)
+                setLoading(false)
+                // Only show alert for critical errors
+                if (nativeEvent.code === -1009 || nativeEvent.code === -1001) {
+                  Alert.alert(
+                    'שגיאת חיבור',
+                    'לא ניתן להתחבר לשרת. בדוק את החיבור לאינטרנט.',
+                    [
+                      { text: 'ביטול', style: 'cancel' },
+                      { 
+                        text: 'נסה שוב', 
+                        onPress: () => {
+                          const url = buildSefariaUrl(selectedSection, language)
+                          setSectionUrl(url)
+                          setLoading(true)
+                        }
+                      }
+                    ]
+                  )
+                }
+              }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              startInLoadingState={true}
+              scalesPageToFit={true}
+              allowsBackForwardNavigationGestures={true}
+              userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
+              injectedJavaScript={`
+                (function() {
+                  try {
+                    // Hide Sefaria header/footer for cleaner view
+                    const style = document.createElement('style');
+                    style.textContent = \`
+                      header, footer, .header, .footer, 
+                      .siteHeader, .siteFooter,
+                      .mobile-header, .mobile-footer,
+                      .site-header, .site-footer,
+                      nav.site-nav {
+                        display: none !important;
+                      }
+                      body {
+                        padding-top: 0 !important;
+                        padding-bottom: 0 !important;
+                        margin-top: 0 !important;
+                      }
+                      .content {
+                        padding-top: 10px !important;
+                      }
+                    \`;
+                    document.head.appendChild(style);
+                    
+                    // Also try to hide after page loads
+                    setTimeout(function() {
+                      const headers = document.querySelectorAll('header, .header, .site-header, nav.site-nav');
+                      const footers = document.querySelectorAll('footer, .footer, .site-footer');
+                      headers.forEach(el => el.style.display = 'none');
+                      footers.forEach(el => el.style.display = 'none');
+                    }, 1000);
+                  } catch(e) {
+                    console.log('Error in injected script:', e);
+                  }
+                })();
+                true;
+              `}
+            />
+          )}
         </View>
       ) : (
         <ScrollView 
@@ -728,6 +829,12 @@ const styles = StyleSheet.create({
   webView: {
     flex: 1,
     backgroundColor: '#ffffff',
+  },
+  fallbackContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    paddingTop: 12,
+    gap: 12,
   },
   cachedBadge: {
     position: 'absolute',
