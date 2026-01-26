@@ -50,6 +50,8 @@ import PersonalDetailsScreen from './src/screens/PersonalDetailsScreen'
 import HelpSupportScreen from './src/screens/HelpSupportScreen'
 import SeferHaMidotScreen from './src/screens/SeferHaMidotScreen'
 import SiddurScreen from './src/screens/SiddurScreen'
+import TehillimScreen from './src/screens/TehillimScreen'
+import ToolsScreen from './src/screens/ToolsScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
@@ -151,11 +153,20 @@ export default function App() {
             const cfg = await supaDb.getAppConfig()
             const adminUids = cfg?.admin_uids || []
             const adminEmails = cfg?.admin_emails || []
+
+            console.log('🔍 Admin check:', {
+              userEmail: currentUser.email,
+              userUid: currentUser.uid,
+              adminEmails,
+              adminUids
+            })
+
             const isAdmin =
               (Array.isArray(adminUids) && adminUids.includes(currentUser.uid)) ||
               (Array.isArray(adminEmails) && currentUser.email && adminEmails.includes(currentUser.email))
 
             const role = isAdmin ? 'admin' : 'user'
+            console.log('✅ Setting userRole:', role, 'isAdmin:', isAdmin)
             if (mounted) setUserRole(role)
             if (mounted) setUserPermissions([]) // optional: keep empty for now
 
@@ -431,6 +442,7 @@ export default function App() {
             {(props) => <PrayersScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="Siddur" component={SiddurScreen} />
+          <Stack.Screen name="Tehillim" component={TehillimScreen} />
           <Stack.Screen name="PrayerDetail" component={PrayerDetailScreen} />
           <Stack.Screen name="PrayerCommitment" component={PrayerCommitmentScreen} />
           <Stack.Screen name="AddPrayer" component={AddPrayerScreen} />
@@ -478,6 +490,7 @@ export default function App() {
           </Stack.Screen>
           <Stack.Screen name="ParshiotHaNasiim" component={ParshiotHaNasiimScreen} />
           <Stack.Screen name="SeferHaMidot" component={SeferHaMidotScreen} />
+          <Stack.Screen name="Tools" component={ToolsScreen} />
           <Stack.Screen name="ManagePermissions" component={ManagePermissionsScreen} />
 
           {/* Admin screen - always registered; screen itself will guard access */}

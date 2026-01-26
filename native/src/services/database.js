@@ -15,6 +15,7 @@ const COLLECTION_MAP = {
   prayerCommitments: 'prayer_commitments',
   dailyLearning: 'daily_learning',
   dailyVideos: 'daily_videos',
+  dailySummary: 'daily_summary',
   dailyInsights: 'daily_insights',
   shortLessons: 'short_lessons',
   longLessons: 'long_lessons',

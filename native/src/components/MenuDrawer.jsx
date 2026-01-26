@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import { isAdmin } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -15,6 +16,7 @@ const MENU_ITEMS = [
     { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline', screen: 'Newsletters' },
     { id: 'prayers', label: 'תפילות', icon: 'heart-outline', screen: 'Prayers' },
     { id: 'siddur', label: 'סידור', icon: 'book-outline', screen: 'Siddur' },
+    { id: 'sefer-hamidot', label: 'ספר המידות', icon: 'flame-outline', screen: 'SeferHaMidot' },
     { id: 'books', label: 'ספרים', icon: 'book-outline', screen: 'Books' },
     // Ionicons doesn't include "scroll-outline" (caused runtime warning). Use a valid icon.
     { id: 'parshiot', label: 'פרשת הנשיאים', icon: 'document-text-outline', screen: 'ParshiotHaNasiim' },
@@ -25,13 +27,25 @@ const MENU_ITEMS = [
     { id: 'admin', label: 'פאנל אדמין', icon: 'lock-closed-outline', screen: 'Admin' },
 ]
 
-export default function MenuDrawer({ visible, onClose, navigation }) {
+export default function MenuDrawer({ visible, onClose, navigation, userRole }) {
     const handleNavigate = (screen) => {
         onClose()
         setTimeout(() => {
             navigation?.navigate(screen)
         }, 300)
     }
+
+    // Debug: Log userRole
+    console.log('🔵 MenuDrawer - userRole:', userRole, 'isAdmin:', isAdmin(userRole))
+
+    // Filter menu items based on user role
+    const filteredMenuItems = MENU_ITEMS.filter(item => {
+        // Show admin panel only to admins
+        if (item.id === 'admin') {
+            return isAdmin(userRole)
+        }
+        return true
+    })
 
     // Don't render anything if not visible - prevents touch blocking
     if (!visible) return null
@@ -77,7 +91,7 @@ export default function MenuDrawer({ visible, onClose, navigation }) {
                             contentContainerStyle={styles.menuContent}
                             showsVerticalScrollIndicator={false}
                         >
-                            {MENU_ITEMS.map((item, index) => (
+                            {filteredMenuItems.map((item) => (
                                 <Pressable
                                     key={item.id}
                                     style={({ pressed }) => [

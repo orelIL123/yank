@@ -3,7 +3,7 @@
     "name": "הינוקא",
     "slug": "yanuka",
     "owner": "orel895",
-    "version": "1.2",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,9 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.hayanuka.app",
-      "buildNumber": "10",
+      "buildNumber": "11",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "האפליקציה זקוקה למיקום שלך כדי להציג מצפן לירושלים וזמני היום"
       }
     },
     "android": {
@@ -29,7 +30,9 @@
       "package": "com.hayanuka.app",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "notification": {
@@ -52,7 +55,13 @@
     "scheme": "hayanuka",
     "plugins": [
       "./plugins/with-firebase-modular-headers",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "האפליקציה זקוקה למיקום שלך כדי להציג מצפן לירושלים וזמני היום"
+        }
+      ]
     ]
   }
 }

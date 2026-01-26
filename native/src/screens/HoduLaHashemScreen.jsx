@@ -19,10 +19,36 @@ import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../components/AppHeader';
 import db from '../services/database'
 import { canManageLearning } from '../utils/permissions'
+import { pickVideo, uploadFileToSupabaseStorage } from '../utils/storage'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
+
+// Helper function to extract YouTube video ID from URL
+function extractYouTubeId(url) {
+  if (!url) return null
+
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+  ]
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match && match[1]) {
+      return match[1]
+    }
+  }
+
+  return null
+}
+
+// Helper function to get YouTube thumbnail URL
+function getYouTubeThumbnail(videoId, quality = 'hqdefault') {
+  if (!videoId) return null
+  return `https://img.youtube.com/vi/${videoId}/${quality}.jpg`
+}
 
 export default function HoduLaHashemScreen({ navigation, userRole, userPermissions }) {
   const [stories, setStories] = useState([]);
@@ -35,6 +61,11 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
   // Form state
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
+  const [formVideoUri, setFormVideoUri] = useState(null);
+  const [formVideoUrl, setFormVideoUrl] = useState('');
+  const [formYoutubeUrl, setFormYoutubeUrl] = useState('');
+  const [videoType, setVideoType] = useState('upload'); // 'upload' or 'youtube'
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -57,26 +88,87 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
     }
   };
 
-  const handleSaveStory = async () => {
-    if (!formTitle.trim() || !formContent.trim()) {
-      Alert.alert('שגיאה', 'יש למלא כותרת ותוכן');
+  const handlePickVideo = async () => {
+    try {
+      const video = await pickVideo();
+      if (video) {
+        setFormVideoUri(video.uri);
+        setFormVideoUrl(''); // Reset URL until uploaded
+      }
+    } catch (error) {
+      console.error('Error picking video:', error);
+      Alert.alert('שגיאה', 'לא ניתן לבחור סרטון');
+    }
+  };
+
+  const handleUploadVideo = async () => {
+    if (!formVideoUri) {
+      Alert.alert('שגיאה', 'אנא בחר סרטון תחילה');
       return;
+    }
+
+    setUploadingVideo(true);
+    try {
+      const fileName = `hodu_${Date.now()}.mp4`;
+      const path = `hodu-la-hashem/${fileName}`;
+      const url = await uploadFileToSupabaseStorage(formVideoUri, 'newsletters', path, (progress) => {
+        console.log(`Video upload progress: ${progress}%`);
+      });
+      setFormVideoUrl(url);
+      Alert.alert('הצלחה', 'הסרטון הועלה בהצלחה');
+    } catch (error) {
+      console.error('Error uploading video:', error);
+      Alert.alert('שגיאה', `לא ניתן להעלות את הסרטון: ${error.message || 'שגיאה לא ידועה'}`);
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
+  const handleSaveStory = async () => {
+    if (!formTitle.trim() || (!formContent.trim() && !formVideoUrl && !formYoutubeUrl.trim())) {
+      Alert.alert('שגיאה', 'יש למלא כותרת ותוכן או סרטון');
+      return;
+    }
+
+    if (videoType === 'upload' && formVideoUri && !formVideoUrl) {
+      Alert.alert('שים לב', 'אנא העלה את הסרטון לפני השמירה');
+      return;
+    }
+
+    if (videoType === 'youtube' && formYoutubeUrl.trim()) {
+      const youtubeId = extractYouTubeId(formYoutubeUrl.trim());
+      if (!youtubeId) {
+        Alert.alert('שגיאה', 'קישור YouTube לא תקין');
+        return;
+      }
     }
 
     setSaving(true);
     try {
+      const storyData = {
+        title: formTitle.trim(),
+        content: formContent.trim(),
+      };
+
+      if (videoType === 'upload' && formVideoUrl) {
+        storyData.videoUrl = formVideoUrl;
+        storyData.videoType = 'upload';
+      } else if (videoType === 'youtube' && formYoutubeUrl.trim()) {
+        const youtubeId = extractYouTubeId(formYoutubeUrl.trim());
+        storyData.youtubeUrl = formYoutubeUrl.trim();
+        storyData.youtubeId = youtubeId;
+        storyData.videoType = 'youtube';
+        storyData.thumbnailUrl = getYouTubeThumbnail(youtubeId);
+      }
+
       if (editingStory) {
         // Update existing story
-        await db.updateDocument('hoduLaHashem', editingStory.id, {
-          title: formTitle.trim(),
-          content: formContent.trim(),
-        });
+        await db.updateDocument('hoduLaHashem', editingStory.id, storyData);
         Alert.alert('הצלחה', 'הסיפור עודכן בהצלחה');
       } else {
         // Add new story
         await db.addDocument('hoduLaHashem', {
-          title: formTitle.trim(),
-          content: formContent.trim(),
+          ...storyData,
           isActive: true,
           createdAt: new Date().toISOString(),
         });
@@ -88,6 +180,10 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
       setEditingStory(null);
       setFormTitle('');
       setFormContent('');
+      setFormVideoUri(null);
+      setFormVideoUrl('');
+      setFormYoutubeUrl('');
+      setVideoType('upload');
       loadStories();
     } catch (error) {
       console.error('Error saving story:', error);
@@ -101,6 +197,16 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
     setEditingStory(story);
     setFormTitle(story.title || '');
     setFormContent(story.content || '');
+    if (story.videoType === 'youtube' || story.youtubeUrl) {
+      setVideoType('youtube');
+      setFormYoutubeUrl(story.youtubeUrl || '');
+      setFormVideoUrl('');
+    } else {
+      setVideoType('upload');
+      setFormVideoUrl(story.videoUrl || '');
+      setFormYoutubeUrl('');
+    }
+    setFormVideoUri(null); // Reset local URI
     setShowEditModal(true);
   };
 
@@ -129,16 +235,49 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
   };
 
   const renderStory = ({ item }) => {
+    const hasVideo = item.videoUrl || item.youtubeUrl;
+    const youtubeId = item.youtubeId || (item.youtubeUrl ? extractYouTubeId(item.youtubeUrl) : null);
+    
     return (
       <TouchableOpacity
         style={styles.storyCard}
         activeOpacity={0.8}
+        onPress={() => {
+          if (item.videoUrl) {
+            navigation.navigate('PdfViewer', {
+              pdfUrl: item.videoUrl,
+              title: item.title,
+              isVideo: true,
+            });
+          } else if (youtubeId) {
+            // For YouTube videos, we'll show them in a modal or navigate to a video player
+            // For now, we can open YouTube app or show in WebView
+            navigation.navigate('PdfViewer', {
+              pdfUrl: `https://www.youtube.com/watch?v=${youtubeId}`,
+              title: item.title,
+              isVideo: true,
+            });
+          }
+        }}
       >
+        {youtubeId && item.thumbnailUrl && (
+          <Image
+            source={{ uri: item.thumbnailUrl }}
+            style={styles.youtubeThumbnail}
+            resizeMode="cover"
+          />
+        )}
         <View style={styles.storyContent}>
           <View style={styles.storyInfo}>
             <Text style={styles.storyTitle} numberOfLines={2}>
               {item.title || 'סיפור ניסים'}
             </Text>
+            {hasVideo && (
+              <View style={styles.videoBadge}>
+                <Ionicons name={youtubeId ? "logo-youtube" : "videocam"} size={16} color={PRIMARY_BLUE} />
+                <Text style={styles.videoBadgeText}>{youtubeId ? 'YouTube' : 'סרטון'}</Text>
+              </View>
+            )}
             <Text style={styles.storyText} numberOfLines={4}>
               {item.content || ''}
             </Text>
@@ -248,6 +387,10 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                     setShowAddModal(false);
                     setFormTitle('');
                     setFormContent('');
+                    setFormVideoUri(null);
+                    setFormVideoUrl('');
+                    setFormYoutubeUrl('');
+                    setVideoType('upload');
                   }}
                   style={styles.modalCloseButton}
                 >
@@ -273,16 +416,126 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                 </View>
 
                 <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>תוכן *</Text>
+                  <Text style={styles.formLabel}>תוכן</Text>
                   <TextInput
                     style={[styles.formInput, styles.formTextArea]}
                     value={formContent}
                     onChangeText={setFormContent}
-                    placeholder="הכנס תוכן הסיפור"
+                    placeholder="הכנס תוכן הסיפור (אופציונלי אם יש סרטון)"
                     placeholderTextColor="#9ca3af"
                     multiline
                     numberOfLines={8}
                   />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>סרטון</Text>
+                  
+                  {/* Video Type Selection */}
+                  <View style={styles.videoTypeButtons}>
+                    <TouchableOpacity
+                      style={[styles.videoTypeButton, videoType === 'upload' && styles.videoTypeButtonActive]}
+                      onPress={() => {
+                        setVideoType('upload');
+                        setFormYoutubeUrl('');
+                      }}
+                    >
+                      <Ionicons name="videocam-outline" size={20} color={videoType === 'upload' ? PRIMARY_BLUE : '#6b7280'} />
+                      <Text style={[styles.videoTypeButtonText, videoType === 'upload' && styles.videoTypeButtonTextActive]}>
+                        העלה מהגלריה
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.videoTypeButton, videoType === 'youtube' && styles.videoTypeButtonActive]}
+                      onPress={() => {
+                        setVideoType('youtube');
+                        setFormVideoUri(null);
+                        setFormVideoUrl('');
+                      }}
+                    >
+                      <Ionicons name="logo-youtube" size={20} color={videoType === 'youtube' ? PRIMARY_BLUE : '#6b7280'} />
+                      <Text style={[styles.videoTypeButtonText, videoType === 'youtube' && styles.videoTypeButtonTextActive]}>
+                        קישור YouTube
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Upload Video Section */}
+                  {videoType === 'upload' && (
+                    <>
+                      {formVideoUrl ? (
+                        <View style={styles.videoPreview}>
+                          <Ionicons name="videocam" size={24} color={PRIMARY_BLUE} />
+                          <Text style={styles.videoPreviewText}>סרטון הועלה בהצלחה</Text>
+                          <TouchableOpacity
+                            style={styles.removeVideoButton}
+                            onPress={() => {
+                              setFormVideoUrl('');
+                              setFormVideoUri(null);
+                            }}
+                          >
+                            <Ionicons name="close-circle" size={24} color="#dc2626" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.videoUploadContainer}>
+                          <TouchableOpacity
+                            style={styles.pickVideoButton}
+                            onPress={handlePickVideo}
+                            disabled={uploadingVideo}
+                          >
+                            <Ionicons name="videocam-outline" size={24} color={PRIMARY_BLUE} />
+                            <Text style={styles.pickVideoButtonText}>
+                              {formVideoUri ? 'סרטון נבחר' : 'בחר סרטון'}
+                            </Text>
+                          </TouchableOpacity>
+                          {formVideoUri && (
+                            <TouchableOpacity
+                              style={styles.uploadVideoButton}
+                              onPress={handleUploadVideo}
+                              disabled={uploadingVideo}
+                            >
+                              {uploadingVideo ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+                              )}
+                              <Text style={styles.uploadVideoButtonText}>
+                                {uploadingVideo ? 'מעלה...' : 'העלה סרטון'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </>
+                  )}
+
+                  {/* YouTube URL Section */}
+                  {videoType === 'youtube' && (
+                    <View style={styles.youtubeInputContainer}>
+                      <TextInput
+                        style={styles.formInput}
+                        value={formYoutubeUrl}
+                        onChangeText={setFormYoutubeUrl}
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        placeholderTextColor="#9ca3af"
+                        autoCapitalize="none"
+                        keyboardType="url"
+                      />
+                      {formYoutubeUrl.trim() && extractYouTubeId(formYoutubeUrl.trim()) && (
+                        <View style={styles.youtubePreview}>
+                          <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                          <Text style={styles.youtubePreviewText}>קישור YouTube תקין</Text>
+                        </View>
+                      )}
+                      {formYoutubeUrl.trim() && !extractYouTubeId(formYoutubeUrl.trim()) && (
+                        <View style={styles.youtubeError}>
+                          <Ionicons name="alert-circle" size={20} color="#ef4444" />
+                          <Text style={styles.youtubeErrorText}>קישור YouTube לא תקין</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
                 </View>
               </ScrollView>
 
@@ -293,6 +546,10 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                     setShowAddModal(false);
                     setFormTitle('');
                     setFormContent('');
+                    setFormVideoUri(null);
+                    setFormVideoUrl('');
+                    setFormYoutubeUrl('');
+                    setVideoType('upload');
                   }}
                 >
                   <Text style={styles.cancelButtonText}>ביטול</Text>
@@ -329,6 +586,10 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
           setEditingStory(null);
           setFormTitle('');
           setFormContent('');
+          setFormVideoUri(null);
+          setFormVideoUrl('');
+          setFormYoutubeUrl('');
+          setVideoType('upload');
         }}
       >
         <KeyboardAvoidingView
@@ -346,6 +607,8 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                     setEditingStory(null);
                     setFormTitle('');
                     setFormContent('');
+                    setFormVideoUri(null);
+                    setFormVideoUrl('');
                   }}
                   style={styles.modalCloseButton}
                 >
@@ -371,16 +634,126 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                 </View>
 
                 <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>תוכן *</Text>
+                  <Text style={styles.formLabel}>תוכן</Text>
                   <TextInput
                     style={[styles.formInput, styles.formTextArea]}
                     value={formContent}
                     onChangeText={setFormContent}
-                    placeholder="הכנס תוכן הסיפור"
+                    placeholder="הכנס תוכן הסיפור (אופציונלי אם יש סרטון)"
                     placeholderTextColor="#9ca3af"
                     multiline
                     numberOfLines={8}
                   />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>סרטון</Text>
+                  
+                  {/* Video Type Selection */}
+                  <View style={styles.videoTypeButtons}>
+                    <TouchableOpacity
+                      style={[styles.videoTypeButton, videoType === 'upload' && styles.videoTypeButtonActive]}
+                      onPress={() => {
+                        setVideoType('upload');
+                        setFormYoutubeUrl('');
+                      }}
+                    >
+                      <Ionicons name="videocam-outline" size={20} color={videoType === 'upload' ? PRIMARY_BLUE : '#6b7280'} />
+                      <Text style={[styles.videoTypeButtonText, videoType === 'upload' && styles.videoTypeButtonTextActive]}>
+                        העלה מהגלריה
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.videoTypeButton, videoType === 'youtube' && styles.videoTypeButtonActive]}
+                      onPress={() => {
+                        setVideoType('youtube');
+                        setFormVideoUri(null);
+                        setFormVideoUrl('');
+                      }}
+                    >
+                      <Ionicons name="logo-youtube" size={20} color={videoType === 'youtube' ? PRIMARY_BLUE : '#6b7280'} />
+                      <Text style={[styles.videoTypeButtonText, videoType === 'youtube' && styles.videoTypeButtonTextActive]}>
+                        קישור YouTube
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Upload Video Section */}
+                  {videoType === 'upload' && (
+                    <>
+                      {formVideoUrl ? (
+                        <View style={styles.videoPreview}>
+                          <Ionicons name="videocam" size={24} color={PRIMARY_BLUE} />
+                          <Text style={styles.videoPreviewText}>סרטון הועלה בהצלחה</Text>
+                          <TouchableOpacity
+                            style={styles.removeVideoButton}
+                            onPress={() => {
+                              setFormVideoUrl('');
+                              setFormVideoUri(null);
+                            }}
+                          >
+                            <Ionicons name="close-circle" size={24} color="#dc2626" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.videoUploadContainer}>
+                          <TouchableOpacity
+                            style={styles.pickVideoButton}
+                            onPress={handlePickVideo}
+                            disabled={uploadingVideo}
+                          >
+                            <Ionicons name="videocam-outline" size={24} color={PRIMARY_BLUE} />
+                            <Text style={styles.pickVideoButtonText}>
+                              {formVideoUri ? 'סרטון נבחר' : 'בחר סרטון'}
+                            </Text>
+                          </TouchableOpacity>
+                          {formVideoUri && (
+                            <TouchableOpacity
+                              style={styles.uploadVideoButton}
+                              onPress={handleUploadVideo}
+                              disabled={uploadingVideo}
+                            >
+                              {uploadingVideo ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+                              )}
+                              <Text style={styles.uploadVideoButtonText}>
+                                {uploadingVideo ? 'מעלה...' : 'העלה סרטון'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </>
+                  )}
+
+                  {/* YouTube URL Section */}
+                  {videoType === 'youtube' && (
+                    <View style={styles.youtubeInputContainer}>
+                      <TextInput
+                        style={styles.formInput}
+                        value={formYoutubeUrl}
+                        onChangeText={setFormYoutubeUrl}
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        placeholderTextColor="#9ca3af"
+                        autoCapitalize="none"
+                        keyboardType="url"
+                      />
+                      {formYoutubeUrl.trim() && extractYouTubeId(formYoutubeUrl.trim()) && (
+                        <View style={styles.youtubePreview}>
+                          <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                          <Text style={styles.youtubePreviewText}>קישור YouTube תקין</Text>
+                        </View>
+                      )}
+                      {formYoutubeUrl.trim() && !extractYouTubeId(formYoutubeUrl.trim()) && (
+                        <View style={styles.youtubeError}>
+                          <Ionicons name="alert-circle" size={20} color="#ef4444" />
+                          <Text style={styles.youtubeErrorText}>קישור YouTube לא תקין</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
                 </View>
               </ScrollView>
 
@@ -392,6 +765,10 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                     setEditingStory(null);
                     setFormTitle('');
                     setFormContent('');
+                    setFormVideoUri(null);
+                    setFormVideoUrl('');
+                    setFormYoutubeUrl('');
+                    setVideoType('upload');
                   }}
                 >
                   <Text style={styles.cancelButtonText}>ביטול</Text>
@@ -636,6 +1013,146 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Heebo_600SemiBold',
     color: '#fff',
+  },
+  videoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  videoBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Heebo_600SemiBold',
+    color: PRIMARY_BLUE,
+  },
+  videoUploadContainer: {
+    gap: 12,
+  },
+  pickVideoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.2)',
+    borderStyle: 'dashed',
+  },
+  pickVideoButtonText: {
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+    color: PRIMARY_BLUE,
+  },
+  uploadVideoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: PRIMARY_BLUE,
+  },
+  uploadVideoButtonText: {
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+    color: '#fff',
+  },
+  videoPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.2)',
+  },
+  videoPreviewText: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+    color: PRIMARY_BLUE,
+  },
+  removeVideoButton: {
+    padding: 4,
+  },
+  videoTypeButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  videoTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.1)',
+  },
+  videoTypeButtonActive: {
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    borderColor: PRIMARY_BLUE,
+  },
+  videoTypeButtonText: {
+    fontSize: 14,
+    fontFamily: 'Heebo_600SemiBold',
+    color: '#6b7280',
+  },
+  videoTypeButtonTextActive: {
+    color: PRIMARY_BLUE,
+  },
+  youtubeInputContainer: {
+    gap: 8,
+  },
+  youtubePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(16,185,129,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.2)',
+  },
+  youtubePreviewText: {
+    fontSize: 14,
+    fontFamily: 'Heebo_600SemiBold',
+    color: '#10b981',
+  },
+  youtubeError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.2)',
+  },
+  youtubeErrorText: {
+    fontSize: 14,
+    fontFamily: 'Heebo_600SemiBold',
+    color: '#ef4444',
+  },
+  youtubeThumbnail: {
+    width: '100%',
+    height: 200,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
 });
 

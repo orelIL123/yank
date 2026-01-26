@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, ActivityIndicator, Alert, Modal, Dimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native'
+import React, { useState, useEffect, useRef } from 'react'
+import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, ActivityIndicator, Alert, Modal, Dimensions, TextInput, KeyboardAvoidingView, Platform, Image, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import { Video, ResizeMode } from 'expo-av'
+import * as ImagePicker from 'expo-image-picker'
+import * as FileSystem from 'expo-file-system/legacy'
 
 import YoutubePlayer from 'react-native-youtube-iframe'
 import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
 import db from '../services/database'
 import { canManageVideos } from '../utils/permissions'
+import { pickVideo, uploadFileToSupabaseStorage } from '../utils/storage'
+import { supabase } from '../config/supabase'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -55,67 +60,188 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
   const [formDescription, setFormDescription] = useState('')
   const [formYoutubeUrl, setFormYoutubeUrl] = useState('')
 
+  // Daily videos state
+  const [dailyVideos, setDailyVideos] = useState([])
+  const [dailyVideosLoading, setDailyVideosLoading] = useState(true)
+  const [selectedDailyVideo, setSelectedDailyVideo] = useState(null)
+  const [playingDailyVideo, setPlayingDailyVideo] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [formVideoTitle, setFormVideoTitle] = useState('')
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null)
+
+  // Daily summary state
+  const [dailySummaryVideos, setDailySummaryVideos] = useState([])
+  const [dailySummaryLoading, setDailySummaryLoading] = useState(true)
+  const [selectedSummaryVideo, setSelectedSummaryVideo] = useState(null)
+  const [playingSummaryVideo, setPlayingSummaryVideo] = useState(false)
+
+  const videoRefs = useRef({})
+
   useEffect(() => {
     console.log('MiBeitRabeinuScreen - userRole:', userRole, 'canManage:', canManage)
-    loadCategories()
+    loadDailyVideos()
+    loadDailySummary()
+    // Don't load categories anymore - we're replacing the screen structure
   }, [userRole, userPermissions])
 
-  const loadCategories = async () => {
+  // Load daily videos (uploaded videos, max 4, deleted after 24 hours)
+  const loadDailyVideos = async () => {
     try {
-      console.log('🔍 Loading categories from rabbiStudents collection...')
-      const categoriesRaw = await db.getCollection('rabbiStudents', {
-        where: [['isActive', '==', true]],
-        orderBy: { field: 'order', direction: 'asc' }
+      setDailyVideosLoading(true)
+      const now = new Date()
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+      // Get videos created in the last 24 hours, limit to 4
+      // Filter by expiresAt field in the data JSONB column
+      const videos = await db.getCollection('dailyVideos', {
+        orderBy: { field: 'createdAt', direction: 'desc' },
+        limit: 20 // Get more to filter by expiresAt
       })
 
-      console.log(`📊 Found ${categoriesRaw.length} categories`)
-
-      const categoriesData = []
-
-      for (const categoryData of categoriesRaw) {
-        console.log(`📁 Loading category: ${categoryData.name || categoryData.id}`)
-
-        // Load videos for each category
-        try {
-          const videos = await db.getSubcollection('rabbiStudents', categoryData.id, 'videos', {
-            orderBy: { field: 'createdAt', direction: 'desc' }
-          })
-
-          console.log(`  📹 Found ${videos.length} videos`)
-
-          const videosWithThumbnails = videos.map(vData => {
-            const youtubeId = extractYouTubeId(vData.videoUrl || vData.youtubeUrl)
-            return {
-              ...vData,
-              youtubeId,
-              thumbnailUrl: youtubeId ? getYouTubeThumbnail(youtubeId) : null
-            }
-          }).filter(video => video.youtubeId)
-
-          categoriesData.push({
-            ...categoryData,
-            videos: videosWithThumbnails
-          })
-        } catch (videoError) {
-          console.error(`  ⚠️ Error loading videos for category ${categoryData.id}:`, videoError)
-          // Add category even if videos failed to load
-          categoriesData.push({
-            ...categoryData,
-            videos: []
-          })
+      // Filter videos that haven't expired yet (expiresAt > now)
+      const activeVideos = videos.filter(video => {
+        const expiresAt = video.expiresAt ? new Date(video.expiresAt) : null
+        const createdAt = video.createdAt ? new Date(video.createdAt) : null
+        
+        // If expiresAt exists, check if it's in the future
+        if (expiresAt) {
+          return expiresAt > now
         }
-      }
+        
+        // Fallback: if no expiresAt, check if created in last 24 hours
+        if (createdAt) {
+          return createdAt > yesterday
+        }
+        
+        return false
+      })
 
-      console.log(`✅ Loaded ${categoriesData.length} categories successfully`)
-      setCategories(categoriesData)
+      setDailyVideos(activeVideos.slice(0, 4))
     } catch (error) {
-      console.error('❌ Error loading categories:', error)
-      console.error('Error details:', error.message, error.code)
-      Alert.alert('שגיאה', `לא ניתן לטעון את הקטגוריות: ${error.message}`)
-      setCategories([])
+      console.error('Error loading daily videos:', error)
+      setDailyVideos([])
     } finally {
+      setDailyVideosLoading(false)
       setLoading(false)
     }
+  }
+
+  // Load daily summary videos (YouTube videos)
+  const loadDailySummary = async () => {
+    try {
+      setDailySummaryLoading(true)
+      // For now, we'll use a collection called 'daily_summary' or similar
+      // If it doesn't exist, we can create it or use existing structure
+      try {
+        const summaryVideos = await db.getCollection('dailySummary', {
+          orderBy: { field: 'createdAt', direction: 'desc' },
+          limit: 10
+        })
+
+        const videosWithThumbnails = summaryVideos.map(vData => {
+          const youtubeId = extractYouTubeId(vData.youtubeUrl || vData.videoUrl)
+          return {
+            ...vData,
+            youtubeId,
+            thumbnailUrl: youtubeId ? getYouTubeThumbnail(youtubeId) : null
+          }
+        }).filter(video => video.youtubeId)
+
+        setDailySummaryVideos(videosWithThumbnails)
+      } catch (error) {
+        // Collection might not exist yet, that's OK
+        console.log('Daily summary collection not found, will be created on first add')
+        setDailySummaryVideos([])
+      }
+    } catch (error) {
+      console.error('Error loading daily summary:', error)
+      setDailySummaryVideos([])
+    } finally {
+      setDailySummaryLoading(false)
+    }
+  }
+
+  // Handle daily video upload
+  const handlePickVideo = async () => {
+    try {
+      const video = await pickVideo()
+      if (video) {
+        setSelectedVideoFile(video)
+      }
+    } catch (error) {
+      console.error('Error picking video:', error)
+      Alert.alert('שגיאה', 'לא ניתן לבחור סרטון')
+    }
+  }
+
+  const handleUploadDailyVideo = async () => {
+    if (!formVideoTitle.trim() || !selectedVideoFile) {
+      Alert.alert('שגיאה', 'יש למלא כותרת ולבחור סרטון')
+      return
+    }
+
+    if (dailyVideos.length >= 4) {
+      Alert.alert('שגיאה', 'ניתן להעלות עד 4 סרטונים יומיים')
+      return
+    }
+
+    setUploadingVideo(true)
+    try {
+      // Generate unique filename
+      const timestamp = Date.now()
+      const extension = selectedVideoFile.uri.split('.').pop() || 'mp4'
+      const fileName = `daily-video-${timestamp}.${extension}`
+      const storagePath = `daily-videos/${fileName}`
+
+      // Upload to Supabase Storage
+      const videoUrl = await uploadFileToSupabaseStorage(
+        selectedVideoFile.uri,
+        'daily-videos',
+        storagePath,
+        (progress) => {
+          console.log('Upload progress:', progress)
+        }
+      )
+
+      // Create thumbnail (for now, we'll use a placeholder or extract first frame later)
+      const thumbnailUrl = videoUrl.replace(/\.(mp4|mov|avi)$/i, '.jpg')
+
+      // Calculate expiresAt (24 hours from now)
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+      // Save to database
+      await db.addDocument('dailyVideos', {
+        title: formVideoTitle.trim(),
+        videoUrl,
+        thumbnailUrl,
+        createdAt: new Date().toISOString(),
+        expiresAt,
+      })
+
+      Alert.alert('הצלחה', 'הסרטון הועלה בהצלחה')
+      setShowUploadModal(false)
+      setFormVideoTitle('')
+      setSelectedVideoFile(null)
+      loadDailyVideos()
+    } catch (error) {
+      console.error('Error uploading video:', error)
+      Alert.alert('שגיאה', `לא ניתן להעלות את הסרטון: ${error.message}`)
+    } finally {
+      setUploadingVideo(false)
+    }
+  }
+
+  // Handle daily video press
+  const handleDailyVideoPress = (video) => {
+    setSelectedDailyVideo(video)
+    setPlayingDailyVideo(true)
+  }
+
+  // Handle daily summary video press
+  const handleSummaryVideoPress = (video) => {
+    setSelectedSummaryVideo(video)
+    setPlayingSummaryVideo(true)
   }
 
   const handleCategoryPress = (category) => {
@@ -130,8 +256,10 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
   const handleStateChange = (state) => {
     if (state === 'playing') {
       setPlayingVideo(true)
+      setPlayingSummaryVideo(true)
     } else if (state === 'paused' || state === 'ended') {
       setPlayingVideo(false)
+      setPlayingSummaryVideo(false)
     }
   }
 
@@ -457,53 +585,309 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
     )
   }
 
-  // Show students list
+  // Main screen - new structure
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title="מבית רבינו"
+        title="מהנעשה בבית המדרש"
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.subtitle}>{t('קטגוריות')}</Text>
-
-        {categories.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="folder-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-            <Text style={styles.emptyText}>אין קטגוריות זמינות כרגע</Text>
+        {/* Daily Videos Section */}
+        <View style={styles.dailyVideosSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>סרטונים יומיים</Text>
+            {canManage && (
+              <Pressable
+                style={styles.addVideoButton}
+                onPress={() => setShowUploadModal(true)}
+              >
+                <Ionicons name="add-circle" size={24} color={PRIMARY_BLUE} />
+              </Pressable>
+            )}
           </View>
-        ) : (
-          categories.map((category, idx) => (
-            <Pressable
-              key={category.id}
-              style={[styles.studentCard, idx === 0 && styles.studentCardFirst]}
-              onPress={() => handleCategoryPress(category)}
-              accessibilityRole="button"
-              accessibilityLabel={category.name}
+          <Text style={styles.sectionSubtitle}>נמחק אחרי 24 שעות</Text>
+          
+          {dailyVideosLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+            </View>
+          ) : dailyVideos.length === 0 ? (
+            <View style={styles.emptyDailyVideos}>
+              <Ionicons name="videocam-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+              <Text style={styles.emptyText}>אין סרטונים יומיים כרגע</Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dailyVideosScroll}
             >
-              <View style={styles.studentContent}>
-                <View style={styles.studentIcon}>
-                  <Ionicons name="folder" size={32} color={PRIMARY_BLUE} />
-                </View>
-                <View style={styles.studentTextBlock}>
-                  <Text style={styles.studentName}>{category.name}</Text>
-                  {category.description && (
-                    <Text style={styles.studentDesc} numberOfLines={2}>{category.description}</Text>
+              {dailyVideos.map((video, idx) => (
+                <Pressable
+                  key={video.id}
+                  style={styles.dailyVideoCard}
+                  onPress={() => handleDailyVideoPress(video)}
+                >
+                  {video.thumbnailUrl ? (
+                    <Image
+                      source={{ uri: video.thumbnailUrl }}
+                      style={styles.dailyVideoThumbnail}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.dailyVideoPlaceholder}>
+                      <Ionicons name="play-circle" size={40} color={PRIMARY_BLUE} />
+                    </View>
                   )}
-                  <View style={styles.videoCountBadge}>
-                    <Ionicons name="videocam-outline" size={16} color={PRIMARY_BLUE} />
-                    <Text style={styles.videoCountText}>{category.videos.length} סרטונים</Text>
+                  <View style={styles.playIconOverlay}>
+                    <Ionicons name="play" size={24} color="#fff" />
                   </View>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color={PRIMARY_BLUE} />
+                  {video.title && (
+                    <Text style={styles.dailyVideoTitle} numberOfLines={2}>
+                      {video.title}
+                    </Text>
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* Daily Summary Card */}
+        <Pressable
+          style={styles.summaryCard}
+          onPress={() => {
+            // Navigate to daily summary screen or show videos
+            if (dailySummaryVideos.length > 0) {
+              // Show first video or list
+              handleSummaryVideoPress(dailySummaryVideos[0])
+            }
+          }}
+        >
+          <LinearGradient
+            colors={['rgba(30,58,138,0.1)', 'rgba(30,58,138,0.05)']}
+            style={styles.summaryCardGradient}
+          >
+            <View style={styles.summaryCardContent}>
+              <Ionicons name="newspaper-outline" size={32} color={PRIMARY_BLUE} />
+              <View style={styles.summaryCardText}>
+                <Text style={styles.summaryCardTitle}>תקציר יומי</Text>
+                <Text style={styles.summaryCardDescription}>
+                  סרטונים מהיוטיוב
+                </Text>
               </View>
-            </Pressable>
-          ))
-        )}
+              <Ionicons name="chevron-forward" size={24} color={PRIMARY_BLUE} />
+            </View>
+          </LinearGradient>
+        </Pressable>
+
+        {/* Updates and More Card */}
+        <Pressable
+          style={styles.updatesCard}
+          onPress={() => navigation.navigate('News')}
+        >
+          <LinearGradient
+            colors={['rgba(30,58,138,0.1)', 'rgba(30,58,138,0.05)']}
+            style={styles.updatesCardGradient}
+          >
+            <View style={styles.updatesCardContent}>
+              <Ionicons name="megaphone-outline" size={32} color={PRIMARY_BLUE} />
+              <View style={styles.updatesCardText}>
+                <Text style={styles.updatesCardTitle}>עדכונים ועוד...</Text>
+                <Text style={styles.updatesCardDescription}>
+                  חדשות ועדכונים מהעמותה
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={PRIMARY_BLUE} />
+            </View>
+          </LinearGradient>
+        </Pressable>
       </ScrollView>
+
+      {/* Daily Video Player Modal */}
+      {selectedDailyVideo && (
+        <Modal
+          visible={!!selectedDailyVideo}
+          animationType="slide"
+          onRequestClose={() => {
+            setSelectedDailyVideo(null)
+            setPlayingDailyVideo(false)
+          }}
+        >
+          <View style={styles.videoModalContainer}>
+            <Pressable
+              style={styles.closeButton}
+              onPress={() => {
+                setSelectedDailyVideo(null)
+                setPlayingDailyVideo(false)
+              }}
+            >
+              <Ionicons name="close" size={32} color="#fff" />
+            </Pressable>
+            <Video
+              ref={(ref) => {
+                if (ref) videoRefs.current[selectedDailyVideo.id] = ref
+              }}
+              source={{ uri: selectedDailyVideo.videoUrl }}
+              style={styles.videoPlayer}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay={playingDailyVideo}
+              onPlaybackStatusUpdate={(status) => {
+                if (status.didJustFinish) {
+                  setPlayingDailyVideo(false)
+                }
+              }}
+            />
+            <View style={styles.videoInfo}>
+              <Text style={styles.modalVideoTitle}>{selectedDailyVideo.title || 'סרטון'}</Text>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Daily Summary Video Modal */}
+      {selectedSummaryVideo && (
+        <Modal
+          visible={!!selectedSummaryVideo}
+          animationType="slide"
+          onRequestClose={() => {
+            setSelectedSummaryVideo(null)
+            setPlayingSummaryVideo(false)
+          }}
+        >
+          <View style={styles.modalContainer}>
+            <Pressable
+              style={styles.closeButton}
+              onPress={() => {
+                setSelectedSummaryVideo(null)
+                setPlayingSummaryVideo(false)
+              }}
+            >
+              <Ionicons name="close" size={28} color={PRIMARY_BLUE} />
+            </Pressable>
+            {selectedSummaryVideo && (
+              <View style={styles.videoPlayerContainer}>
+                <View style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' }}>
+                  <YoutubePlayer
+                    height={240}
+                    videoId={selectedSummaryVideo.youtubeId}
+                    play={playingSummaryVideo}
+                    onChangeState={handleStateChange}
+                    webViewStyle={{ opacity: 0.99 }}
+                  />
+                </View>
+                <View style={styles.videoInfo}>
+                  <Text style={styles.modalVideoTitle}>{selectedSummaryVideo.title || 'סרטון'}</Text>
+                  {selectedSummaryVideo.description && (
+                    <Text style={styles.modalVideoDescription}>{selectedSummaryVideo.description}</Text>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+        </Modal>
+      )}
+
+      {/* Upload Video Modal */}
+      <Modal
+        visible={showUploadModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowUploadModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.select({ ios: 80, android: 40 })}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>הוסף סרטון יומי</Text>
+                <Pressable
+                  onPress={() => {
+                    setShowUploadModal(false)
+                    setFormVideoTitle('')
+                    setSelectedVideoFile(null)
+                  }}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={28} color={DEEP_BLUE} />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                style={styles.modalBody}
+                contentContainerStyle={{ paddingBottom: 24 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>כותרת *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={formVideoTitle}
+                    onChangeText={setFormVideoTitle}
+                    placeholder="הכנס כותרת"
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Pressable
+                    style={styles.videoPickerButton}
+                    onPress={handlePickVideo}
+                  >
+                    <Ionicons name="videocam-outline" size={24} color={PRIMARY_BLUE} />
+                    <Text style={styles.videoPickerText}>
+                      {selectedVideoFile ? 'סרטון נבחר' : 'בחר סרטון'}
+                    </Text>
+                  </Pressable>
+                  {selectedVideoFile && (
+                    <Text style={styles.selectedVideoText}>
+                      {selectedVideoFile.uri.split('/').pop()}
+                    </Text>
+                  )}
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <Pressable
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setShowUploadModal(false)
+                    setFormVideoTitle('')
+                    setSelectedVideoFile(null)
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>ביטול</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.saveButton}
+                  onPress={handleUploadDailyVideo}
+                  disabled={uploadingVideo}
+                >
+                  <LinearGradient
+                    colors={[PRIMARY_BLUE, '#1e40af']}
+                    style={styles.saveButtonGradient}
+                  >
+                    {uploadingVideo ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>שמור</Text>
+                    )}
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -885,5 +1269,195 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     color: '#fff',
+  },
+  // Daily Videos Section Styles
+  dailyVideosSection: {
+    marginBottom: 24,
+    backgroundColor: '#f9fafb',
+    borderRadius: 20,
+    padding: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+    marginBottom: 12,
+  },
+  addVideoButton: {
+    padding: 4,
+  },
+  dailyVideosScroll: {
+    paddingRight: 4,
+    gap: 12,
+  },
+  dailyVideoCard: {
+    width: width * 0.35,
+    height: width * 0.35 * (16 / 9), // 9:16 aspect ratio (portrait)
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    marginRight: 12,
+  },
+  dailyVideoThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  dailyVideoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playIconOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  dailyVideoTitle: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    padding: 8,
+    textAlign: 'right',
+  },
+  emptyDailyVideos: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  // Summary Card Styles
+  summaryCard: {
+    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  summaryCardGradient: {
+    padding: 20,
+  },
+  summaryCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  summaryCardText: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  summaryCardTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  summaryCardDescription: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+  },
+  // Updates Card Styles
+  updatesCard: {
+    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  updatesCardGradient: {
+    padding: 20,
+  },
+  updatesCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  updatesCardText: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  updatesCardTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  updatesCardDescription: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+  },
+  // Video Modal Styles
+  videoModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  videoPlayer: {
+    width: width,
+    height: width * (16 / 9),
+    marginTop: 60,
+  },
+  videoPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: PRIMARY_BLUE,
+    borderStyle: 'dashed',
+  },
+  videoPickerText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: PRIMARY_BLUE,
+  },
+  selectedVideoText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
   },
 })

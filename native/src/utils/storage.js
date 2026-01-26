@@ -256,6 +256,37 @@ export async function pickPDF() {
 }
 
 /**
+ * Pick a video from the device
+ */
+export async function pickVideo() {
+  try {
+    const hasPermission = await requestImagePermissions()
+    if (!hasPermission) return null
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: true,
+      quality: 1,
+    })
+
+    if (result.canceled) return null
+
+    return {
+      uri: result.assets[0].uri,
+      width: result.assets[0].width,
+      height: result.assets[0].height,
+      duration: result.assets[0].duration,
+      type: result.assets[0].type,
+      mimeType: result.assets[0].mimeType,
+    }
+  } catch (error) {
+    console.error('Error picking video:', error)
+    Alert.alert('שגיאה', 'לא ניתן לבחור סרטון')
+    return null
+  }
+}
+
+/**
  * Upload PDF to Firebase Storage
  * Similar to uploadImageToStorage but for PDFs
  */
@@ -442,6 +473,14 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
       contentType = 'image/png'
     } else if (extension === 'gif') {
       contentType = 'image/gif'
+    } else if (extension === 'mp4') {
+      contentType = 'video/mp4'
+    } else if (extension === 'mov') {
+      contentType = 'video/quicktime'
+    } else if (extension === 'avi') {
+      contentType = 'video/x-msvideo'
+    } else if (extension === 'webm') {
+      contentType = 'video/webm'
     }
 
     // Upload to Supabase Storage

@@ -82,27 +82,35 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
 
     const handleDownload = async (newsletter) => {
         try {
-            const fileUri = FileSystem.documentDirectory + `${newsletter.title}.${newsletter.fileType === 'pdf' ? 'pdf' : 'jpg'}`
+            if (!newsletter.fileUrl) {
+                Alert.alert('שגיאה', 'אין קישור לקובץ')
+                return
+            }
 
-            Alert.alert(
-                'הורדה',
-                'מוריד את הקובץ...',
-                [{ text: 'אישור' }]
-            )
+            // Clean filename - remove special characters
+            const cleanTitle = newsletter.title.replace(/[^a-zA-Z0-9\u0590-\u05FF\s]/g, '_').trim()
+            const extension = newsletter.fileType === 'pdf' ? 'pdf' : (newsletter.fileUrl.match(/\.(jpg|jpeg|png|gif)$/i)?.[1] || 'jpg')
+            const fileName = `${cleanTitle}.${extension}`
+            const fileUri = FileSystem.documentDirectory + fileName
+
+            console.log('Downloading file:', newsletter.fileUrl, 'to:', fileUri)
 
             const downloadResult = await FileSystem.downloadAsync(
                 newsletter.fileUrl,
                 fileUri
             )
 
+            console.log('Download completed:', downloadResult.uri)
+
             if (await Sharing.isAvailableAsync()) {
                 await Sharing.shareAsync(downloadResult.uri)
+                Alert.alert('הצלחה', 'הקובץ הורד ומוכן לשיתוף')
             } else {
-                Alert.alert('הצלחה', 'הקובץ הורד בהצלחה')
+                Alert.alert('הצלחה', `הקובץ הורד בהצלחה ל: ${fileName}`)
             }
         } catch (error) {
             console.error('Error downloading:', error)
-            Alert.alert('שגיאה', 'לא ניתן להוריד את הקובץ')
+            Alert.alert('שגיאה', `לא ניתן להוריד את הקובץ: ${error.message || 'שגיאה לא ידועה'}`)
         }
     }
 
@@ -199,51 +207,53 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
                 )}
 
                 <View style={styles.actionButtons}>
-                    <Pressable
-                        style={styles.actionButton}
-                        onPress={(e) => {
-                            e.stopPropagation()
-                            handleDownload(item)
-                        }}
-                    >
-                        <Ionicons name="download-outline" size={20} color={PRIMARY_BLUE} />
-                        <Text style={styles.actionButtonText}>הורדה</Text>
-                    </Pressable>
+                    <View style={styles.actionButtonsRow}>
+                        <Pressable
+                            style={styles.actionButton}
+                            onPress={(e) => {
+                                e.stopPropagation()
+                                handleDownload(item)
+                            }}
+                        >
+                            <Ionicons name="download-outline" size={18} color={PRIMARY_BLUE} />
+                            <Text style={styles.actionButtonText}>הורדה</Text>
+                        </Pressable>
 
-                    <Pressable
-                        style={styles.actionButton}
-                        onPress={(e) => {
-                            e.stopPropagation()
-                            handleShare(item)
-                        }}
-                    >
-                        <Ionicons name="share-outline" size={20} color={PRIMARY_BLUE} />
-                        <Text style={styles.actionButtonText}>שיתוף</Text>
-                    </Pressable>
+                        <Pressable
+                            style={styles.actionButton}
+                            onPress={(e) => {
+                                e.stopPropagation()
+                                handleShare(item)
+                            }}
+                        >
+                            <Ionicons name="share-outline" size={18} color={PRIMARY_BLUE} />
+                            <Text style={styles.actionButtonText}>שיתוף</Text>
+                        </Pressable>
+                    </View>
 
                     {canManage && (
-                        <>
+                        <View style={[styles.actionButtonsRow, styles.adminButtonsRow]}>
                             <Pressable
-                                style={[styles.actionButton, { borderTopWidth: 1, borderTopColor: 'rgba(30,58,138,0.2)', paddingTop: 8, marginTop: 4 }]}
+                                style={[styles.actionButton, styles.editButton]}
                                 onPress={(e) => {
                                     e.stopPropagation()
                                     handleEditNewsletter(item)
                                 }}
                             >
-                                <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
+                                <Ionicons name="create-outline" size={18} color={PRIMARY_BLUE} />
                                 <Text style={styles.actionButtonText}>ערוך</Text>
                             </Pressable>
                             <Pressable
-                                style={[styles.actionButton, { borderTopWidth: 1, borderTopColor: 'rgba(239,68,68,0.2)', paddingTop: 8, marginTop: 4 }]}
+                                style={[styles.actionButton, styles.deleteButton]}
                                 onPress={(e) => {
                                     e.stopPropagation()
                                     handleDeleteNewsletter(item)
                                 }}
                             >
-                                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                                <Ionicons name="trash-outline" size={18} color="#ef4444" />
                                 <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>מחק</Text>
                             </Pressable>
-                        </>
+                        </View>
                     )}
                 </View>
             </View>
@@ -453,18 +463,40 @@ const styles = StyleSheet.create({
         color: PRIMARY_BLUE,
     },
     actionButtons: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
+        gap: 8,
         borderTopWidth: 1,
         borderTopColor: 'rgba(11,27,58,0.05)',
         paddingTop: 8,
         marginTop: 4,
     },
+    actionButtonsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        gap: 8,
+    },
+    adminButtonsRow: {
+        marginTop: 4,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(11,27,58,0.08)',
+    },
     actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        paddingVertical: 4,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        backgroundColor: 'rgba(30,58,138,0.05)',
+        flex: 1,
+        justifyContent: 'center',
+        minHeight: 40,
+    },
+    editButton: {
+        backgroundColor: 'rgba(30,58,138,0.1)',
+    },
+    deleteButton: {
+        backgroundColor: 'rgba(239,68,68,0.1)',
     },
     actionButtonText: {
         fontSize: 12,

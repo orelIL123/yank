@@ -42,11 +42,11 @@ export default function HomeScreen({ navigation, userRole }) {
 
   // Debug: Log when HomeScreen mounts/unmounts
   React.useEffect(() => {
-    console.log('🟢 HomeScreen MOUNTED')
+    console.log('🟢 HomeScreen MOUNTED - userRole:', userRole, 'isAdmin:', isAdmin)
     return () => {
       console.log('🔴 HomeScreen UNMOUNTED')
     }
-  }, [])
+  }, [userRole, isAdmin])
 
   const [activeTab, setActiveTab] = React.useState('home')
   const pulse = React.useRef(new Animated.Value(0)).current
@@ -529,6 +529,7 @@ export default function HomeScreen({ navigation, userRole }) {
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
           navigation={navigation}
+          userRole={userRole}
         />
       )}
 
@@ -669,29 +670,29 @@ export default function HomeScreen({ navigation, userRole }) {
               ))}
           </View>
 
-          {/* Featured Buttons Row - Sefer HaMidot & Shulchan Shlomo */}
+          {/* Featured Buttons Row - Tools & Shulchan Shlomo */}
           <View style={styles.section}>
             <View style={styles.featuredButtonsRow}>
-              {/* Sefer HaMidot - Small Button */}
+              {/* Tools - Small Button */}
               <Pressable
                 style={styles.featuredButton}
-                onPress={() => navigation?.navigate('SeferHaMidot')}
+                onPress={() => navigation?.navigate('Tools')}
                 accessibilityRole="button"
-                accessibilityLabel="ספר המידות - לרבי נחמן מברסלב"
+                accessibilityLabel="כלי עזר - סידור, זמני היום ומצפן"
               >
                 <LinearGradient
-                  colors={['#0f172a', '#1e293b', '#334155']}
+                  colors={['#7c3aed', '#8b5cf6', '#a78bfa']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.featuredGradient}
                 >
                   <View style={styles.featuredContent}>
                     <View style={styles.featuredIconWrapper}>
-                      <Ionicons name="book" size={36} color="#fff" />
+                      <Ionicons name="construct" size={36} color="#fff" />
                     </View>
                     <View style={styles.featuredText}>
-                      <Text style={styles.featuredTitle}>ספר המידות</Text>
-                      <Text style={styles.featuredSubtitle}>לרבי נחמן מברסלב</Text>
+                      <Text style={styles.featuredTitle}>כלי עזר</Text>
+                      <Text style={styles.featuredSubtitle}>סידור, זמנים ומצפן</Text>
                     </View>
                   </View>
                 </LinearGradient>

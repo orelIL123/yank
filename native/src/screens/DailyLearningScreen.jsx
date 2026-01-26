@@ -45,15 +45,7 @@ const FONTS = {
   regular: 'Poppins_400Regular',
 };
 
-// Helper function to calculate daily Tehillim chapter (1-150 cycle)
-function getDailyTehillimChapter() {
-  const startDate = new Date(2024, 0, 1); // January 1, 2024
-  const today = new Date();
-  const diffTime = Math.abs(today - startDate);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  const chapter = (diffDays % 150) + 1; // Cycle through 1-150
-  return chapter;
-}
+// Helper function removed - now handled in TehillimScreen
 
 // Helper function to calculate daily Orchot Tzadikim gate (1-28 cycle)
 function getDailyOrchotTzadikimGate() {
@@ -97,15 +89,10 @@ const LEARNING_CATEGORIES = [
   {
     id: 'tehillim',
     title: 'תהילים',
-    description: 'תהילים יומי',
+    description: 'תהילים יומי - כל הפרקים',
     icon: 'book-outline',
     color: '#10B981',
-    type: 'sefaria',
-    sefariaRef: () => {
-      const chapter = getDailyTehillimChapter();
-      return `Psalms ${chapter}`;
-    },
-    dailyChapter: getDailyTehillimChapter,
+    navigateTo: 'Tehillim',
   },
   {
     id: 'chofetz-chaim',
@@ -130,11 +117,19 @@ const LEARNING_CATEGORIES = [
   },
   {
     id: 'sefer-hamidos',
-    title: 'לימוד יומי מספר המידות',
-    description: 'לרבנו רבי נחמן מברסלב.',
+    title: 'ספר המידות',
+    description: 'לרבנו רבי נחמן מברסלב',
     icon: 'flame-outline',
     color: '#EF4444',
-    sefariaRef: () => 'Sefer HaMiddot',
+    navigateTo: 'SeferHaMidot',
+  },
+  {
+    id: 'tools',
+    title: 'כלי עזר',
+    description: 'סידור, זמני היום ומצפן לירושלים',
+    icon: 'construct-outline',
+    color: '#8B5CF6',
+    navigateTo: 'Tools',
   },
 ];
 
@@ -310,9 +305,21 @@ export default function DailyLearningScreen({ navigation, userRole }) {
   };
 
   const handleCategoryPress = (category) => {
+    // Special handling for Tools - navigate to Tools screen
+    if (category.navigateTo) {
+      navigation?.navigate(category.navigateTo);
+      return;
+    }
+
     // Special handling for Sefer HaMiddot - just navigate
     if (category.id === 'sefer-hamidos') {
       navigation?.navigate('SeferHaMidot');
+      return;
+    }
+
+    // Special handling for Tehillim - navigate to Tehillim screen
+    if (category.id === 'tehillim') {
+      navigation?.navigate('Tehillim');
       return;
     }
 
@@ -335,7 +342,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
       return;
     }
 
-    // For Tehillim - load from API
+    // For other Sefaria categories - load from API
     loadCategoryContent(category);
   };
 
@@ -408,10 +415,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         formatted.title = textData.heRef || textData.ref || category.title;
       }
 
-      if (category.id === 'tehillim') {
-        const chapter = getDailyTehillimChapter();
-        formatted.title = `תהילים יומי - פרק ${chapter}`;
-      }
+      // Tehillim is now handled in TehillimScreen, no need to format here
 
       setContent(prev => ({ ...prev, [category.id]: formatted }));
       showCategoryContent(category, formatted);
