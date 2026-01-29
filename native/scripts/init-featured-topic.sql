@@ -24,3 +24,4 @@ SELECT
 FROM app_config 
 WHERE id = 'config';
 
+

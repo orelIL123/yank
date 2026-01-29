@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,19 @@ import {
   Platform,
   Image,
   KeyboardAvoidingView,
+  Dimensions,
+  Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
 import db from '../services/database'
 import { canManageLearning } from '../utils/permissions'
 import { pickVideo, uploadFileToSupabaseStorage } from '../utils/storage'
+
+const { width } = Dimensions.get('window')
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -32,6 +38,7 @@ function extractYouTubeId(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
     /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+    /youtube\.com\/shorts\/([^&\n?#]+)/, // YouTube Shorts support
   ]
 
   for (const pattern of patterns) {
@@ -67,6 +74,11 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
   const [videoType, setVideoType] = useState('upload'); // 'upload' or 'youtube'
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Video playback state
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [playingVideo, setPlayingVideo] = useState(false);
+  const videoRefs = useRef({});
 
   useEffect(() => {
     loadStories();
@@ -111,9 +123,19 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
     try {
       const fileName = `hodu_${Date.now()}.mp4`;
       const path = `hodu-la-hashem/${fileName}`;
-      const url = await uploadFileToSupabaseStorage(formVideoUri, 'newsletters', path, (progress) => {
-        console.log(`Video upload progress: ${progress}%`);
-      });
+      // Try 'hodu-la-hashem' bucket first, fallback to 'videos' or 'public'
+      let url;
+      try {
+        url = await uploadFileToSupabaseStorage(formVideoUri, 'hodu-la-hashem', path, (progress) => {
+          console.log(`Video upload progress: ${progress}%`);
+        });
+      } catch (bucketError) {
+        // Fallback to 'videos' bucket
+        console.log('Trying videos bucket as fallback...');
+        url = await uploadFileToSupabaseStorage(formVideoUri, 'videos', path, (progress) => {
+          console.log(`Video upload progress: ${progress}%`);
+        });
+      }
       setFormVideoUrl(url);
       Alert.alert('הצלחה', 'הסרטון הועלה בהצלחה');
     } catch (error) {
@@ -234,6 +256,19 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
     );
   };
 
+  const handleVideoPress = (story) => {
+    setSelectedVideo(story);
+    setPlayingVideo(true);
+  };
+
+  const handleStateChange = (state) => {
+    if (state === 'playing') {
+      setPlayingVideo(true);
+    } else if (state === 'paused' || state === 'ended') {
+      setPlayingVideo(false);
+    }
+  };
+
   const renderStory = ({ item }) => {
     const hasVideo = item.videoUrl || item.youtubeUrl;
     const youtubeId = item.youtubeId || (item.youtubeUrl ? extractYouTubeId(item.youtubeUrl) : null);
@@ -243,20 +278,8 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
         style={styles.storyCard}
         activeOpacity={0.8}
         onPress={() => {
-          if (item.videoUrl) {
-            navigation.navigate('PdfViewer', {
-              pdfUrl: item.videoUrl,
-              title: item.title,
-              isVideo: true,
-            });
-          } else if (youtubeId) {
-            // For YouTube videos, we'll show them in a modal or navigate to a video player
-            // For now, we can open YouTube app or show in WebView
-            navigation.navigate('PdfViewer', {
-              pdfUrl: `https://www.youtube.com/watch?v=${youtubeId}`,
-              title: item.title,
-              isVideo: true,
-            });
+          if (hasVideo) {
+            handleVideoPress(item);
           }
         }}
       >
@@ -278,7 +301,7 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                 <Text style={styles.videoBadgeText}>{youtubeId ? 'YouTube' : 'סרטון'}</Text>
               </View>
             )}
-            <Text style={styles.storyText} numberOfLines={4}>
+            <Text style={styles.storyText} numberOfLines={3}>
               {item.content || ''}
             </Text>
           </View>
@@ -517,7 +540,7 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                         style={styles.formInput}
                         value={formYoutubeUrl}
                         onChangeText={setFormYoutubeUrl}
-                        placeholder="https://www.youtube.com/watch?v=..."
+                        placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
                         placeholderTextColor="#9ca3af"
                         autoCapitalize="none"
                         keyboardType="url"
@@ -735,7 +758,7 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                         style={styles.formInput}
                         value={formYoutubeUrl}
                         onChangeText={setFormYoutubeUrl}
-                        placeholder="https://www.youtube.com/watch?v=..."
+                        placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
                         placeholderTextColor="#9ca3af"
                         autoCapitalize="none"
                         keyboardType="url"
@@ -794,6 +817,67 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Video Player Modal */}
+      {selectedVideo && (
+        <Modal
+          visible={!!selectedVideo}
+          animationType="slide"
+          onRequestClose={() => {
+            setSelectedVideo(null);
+            setPlayingVideo(false);
+          }}
+        >
+          <View style={styles.videoModalContainer}>
+            <Pressable
+              style={styles.closeButton}
+              onPress={() => {
+                setSelectedVideo(null);
+                setPlayingVideo(false);
+              }}
+            >
+              <Ionicons name="close" size={32} color="#fff" />
+            </Pressable>
+            {selectedVideo.videoUrl && !selectedVideo.youtubeId ? (
+              // Uploaded video - use expo-av
+              <Video
+                ref={(ref) => {
+                  if (ref) videoRefs.current[selectedVideo.id] = ref;
+                }}
+                source={{ uri: selectedVideo.videoUrl }}
+                style={styles.videoPlayer}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay={playingVideo}
+                onPlaybackStatusUpdate={(status) => {
+                  if (status.didJustFinish) {
+                    setPlayingVideo(false);
+                  }
+                }}
+              />
+            ) : selectedVideo.youtubeId ? (
+              // YouTube video - use YoutubePlayer
+              <View style={styles.videoPlayerContainer}>
+                <View style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' }}>
+                  <YoutubePlayer
+                    height={240}
+                    videoId={selectedVideo.youtubeId}
+                    play={playingVideo}
+                    onChangeState={handleStateChange}
+                    webViewStyle={{ opacity: 0.99 }}
+                  />
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.videoInfo}>
+              <Text style={styles.modalVideoTitle}>{selectedVideo.title || 'סרטון'}</Text>
+              {selectedVideo.content && (
+                <Text style={styles.modalVideoDescription}>{selectedVideo.content}</Text>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -844,7 +928,7 @@ const styles = StyleSheet.create({
   storyCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    marginBottom: 12,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -856,8 +940,8 @@ const styles = StyleSheet.create({
   storyContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 16,
+    padding: 12,
+    gap: 12,
   },
   storyInfo: {
     flex: 1,
@@ -885,19 +969,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   storyTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Heebo_700Bold',
     color: DEEP_BLUE,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'right',
-    lineHeight: 24,
+    lineHeight: 22,
   },
   storyText: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Heebo_400Regular',
     color: '#6b7280',
     textAlign: 'right',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   emptyState: {
     flex: 1,
@@ -1150,9 +1234,56 @@ const styles = StyleSheet.create({
   },
   youtubeThumbnail: {
     width: '100%',
-    height: 200,
+    height: 140,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+  },
+  videoModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  videoPlayer: {
+    width: width,
+    height: width * (16 / 9),
+    marginTop: 60,
+  },
+  videoPlayerContainer: {
+    flex: 1,
+    padding: 20,
+    paddingTop: 60,
+  },
+  videoInfo: {
+    marginTop: 24,
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    alignItems: 'flex-end',
+  },
+  modalVideoTitle: {
+    fontSize: 22,
+    fontFamily: 'Heebo_700Bold',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  modalVideoDescription: {
+    fontSize: 16,
+    fontFamily: 'Heebo_400Regular',
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'right',
+    lineHeight: 24,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

@@ -69,3 +69,4 @@ SELECT 'RLS policies fixed! ✅' as status;
 זה בסדר כי `app_config` היא טבלה עם שורה אחת בלבד (singleton),  
 ובאפליקציה רק אדמינים יכולים לגשת לפונקציית העריכה.
 
+

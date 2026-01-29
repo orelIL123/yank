@@ -42,3 +42,4 @@ WITH CHECK (auth.role() = 'authenticated');
 -- Done!
 SELECT 'app_config table created successfully!' as status;
 
+

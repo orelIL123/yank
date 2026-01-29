@@ -58,3 +58,4 @@
 
 העלאת סרטונים דרך המסך עובדת למשתמשים עם הרשאה `canManageVideos` (admin או `videos_manager`).
 
+

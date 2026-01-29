@@ -97,3 +97,4 @@ WHERE id = 'config'
   AND featured_topic_type = 'youtube'
   AND featured_topic_youtube_id IS NOT NULL;
 
+

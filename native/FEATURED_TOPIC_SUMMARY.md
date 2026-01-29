@@ -204,3 +204,4 @@ URL: https://stream.example.com/live.m3u8
 **מפתח:** Claude AI Assistant
 **סטטוס:** ✅ מוכן לשימוש!
 
+

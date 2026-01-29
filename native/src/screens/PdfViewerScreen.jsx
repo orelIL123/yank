@@ -25,7 +25,11 @@ const BG = '#FFFFFF'
 const { width, height } = Dimensions.get('window')
 
 export default function PdfViewerScreen({ route, navigation }) {
-  const { pdf, title } = route.params || {}
+  const params = route.params || {}
+  // Support both pdf (object/string) and pdfUrl for newsletters
+  const pdf = params.pdf ?? params.pdfUrl
+  const title = params.title
+  const isImage = params.isImage === true
   const [pdfUri, setPdfUri] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState(false)
@@ -67,44 +71,37 @@ export default function PdfViewerScreen({ route, navigation }) {
           }
           
           if (uri && uri.startsWith('http')) {
-            // Download PDF to local file system first for better compatibility
+            // For images (e.g. newsletters), use URL directly; for PDFs try cache then download
+            if (isImage) {
+              setPdfUri(uri)
+              setLoading(false)
+              return
+            }
             try {
               console.log('Downloading PDF from:', uri)
               const filename = uri.split('/').pop() || `prayer_${Date.now()}.pdf`
               const localUri = `${FileSystem.cacheDirectory}${filename}`
               
-              // Check if file already exists in cache
               const fileInfo = await FileSystem.getInfoAsync(localUri)
               if (fileInfo.exists) {
-                console.log('Using cached PDF:', localUri)
                 setPdfUri(localUri)
                 setLoading(false)
                 return
               }
               
-              // Download the file
               const downloadResult = await FileSystem.downloadAsync(uri, localUri, {
-                headers: {
-                  'Accept': 'application/pdf',
-                },
+                headers: { 'Accept': 'application/pdf' },
               })
               
               if (downloadResult.status === 200) {
-                console.log('PDF downloaded successfully:', localUri)
                 setPdfUri(localUri)
-                setLoading(false)
               } else {
-                console.error('Download failed with status:', downloadResult.status)
-                // Fallback to direct URL
                 setPdfUri(uri)
-                setLoading(false)
               }
             } catch (downloadError) {
-              console.error('Error downloading PDF, using direct URL:', downloadError)
-              // Fallback to direct URL if download fails
               setPdfUri(uri)
-              setLoading(false)
             }
+            setLoading(false)
           } else {
             console.error('PDF is not a valid URL:', pdf)
             setError(true)
@@ -121,7 +118,7 @@ export default function PdfViewerScreen({ route, navigation }) {
       }
     }
     loadPdf()
-  }, [pdf])
+  }, [pdf, isImage])
 
   const handleOpenInBrowser = async () => {
     if (pdfUri && pdfUri.startsWith('http')) {

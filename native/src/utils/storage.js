@@ -43,41 +43,21 @@ export async function pickImage(options = {}) {
 }
 
 /**
- * Convert base64 string to Uint8Array
+ * Convert base64 string to Uint8Array using atob
+ * More efficient for React Native
  */
 function base64ToUint8Array(base64) {
-  // Simple base64 decoder for React Native
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
-  let output = ''
-  
-  base64 = base64.replace(/[^A-Za-z0-9\+\/\=]/g, '')
-  
-  for (let i = 0; i < base64.length; i += 4) {
-    const enc1 = chars.indexOf(base64.charAt(i))
-    const enc2 = chars.indexOf(base64.charAt(i + 1))
-    const enc3 = chars.indexOf(base64.charAt(i + 2))
-    const enc4 = chars.indexOf(base64.charAt(i + 3))
-    
-    const chr1 = (enc1 << 2) | (enc2 >> 4)
-    const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2)
-    const chr3 = ((enc3 & 3) << 6) | enc4
-    
-    output += String.fromCharCode(chr1)
-    
-    if (enc3 !== 64) {
-      output += String.fromCharCode(chr2)
+  try {
+    const binaryString = atob(base64)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
     }
-    if (enc4 !== 64) {
-      output += String.fromCharCode(chr3)
-    }
+    return bytes
+  } catch (error) {
+    console.error('Error converting base64:', error)
+    throw new Error('שגיאה בהמרת הקובץ')
   }
-  
-  const bytes = new Uint8Array(output.length)
-  for (let i = 0; i < output.length; i++) {
-    bytes[i] = output.charCodeAt(i)
-  }
-  
-  return bytes
 }
 
 /**
@@ -449,18 +429,46 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
     const requestedBucketExists = knownBuckets.some(b => b.name === preferredBucket)
     const pickFallbackBucket = () => {
       if (!knownBuckets.length) return null
+      // For videos, prefer 'videos' bucket, otherwise use common buckets
+      const videoBuckets = ['videos', 'daily-videos', 'video-uploads']
+      const videoBucket = videoBuckets.map(n => knownBuckets.find(b => b.name === n)).find(Boolean)
+      if (videoBucket) return videoBucket.name
+      
+      // For videos, prefer 'newsletters' bucket as fallback (it exists)
+      if (preferredBucket === 'daily-videos' || preferredBucket === 'videos') {
+        const newslettersBucket = knownBuckets.find(b => b.name === 'newsletters')
+        if (newslettersBucket) return 'newsletters'
+      }
+      
       const preferredNames = ['public', 'uploads', 'files', 'assets']
       const byName = preferredNames.map(n => knownBuckets.find(b => b.name === n)).find(Boolean)
       return (byName || knownBuckets[0])?.name || null
     }
     
+    // Determine folder prefix based on bucket type
+    const getFolderPrefix = (bucketName) => {
+      if (bucketName === 'daily-videos' || bucketName === 'videos') {
+        return 'daily-videos/'
+      }
+      if (bucketName.includes('newsletter')) {
+        return 'daily-videos/' // Use daily-videos folder inside newsletters bucket
+      }
+      return ''
+    }
+    
     // Read file as base64
-    const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    })
+    let bytes
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
 
-    // Convert base64 to Uint8Array (RN-safe, no atob)
-    const bytes = base64ToUint8Array(base64)
+      // Convert base64 to Uint8Array
+      bytes = base64ToUint8Array(base64)
+    } catch (error) {
+      console.error('Error reading file:', error)
+      throw new Error('לא ניתן לקרוא את הקובץ. ודא שהקובץ קיים ושיש לך הרשאות לקרוא אותו.')
+    }
 
     // Determine content type from file extension
     const extension = path.split('.').pop()?.toLowerCase()
@@ -484,12 +492,37 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
     }
 
     // Upload to Supabase Storage
+    // Note: Supabase doesn't support progress callbacks in the JS client
+    // We'll simulate progress for better UX
+    let uploadStartTime = Date.now()
+    const simulateProgress = () => {
+      if (onProgress) {
+        // Simulate progress: 0-90% during upload, 100% when done
+        const elapsed = Date.now() - uploadStartTime
+        const estimatedTotal = 5000 // 5 seconds estimate
+        const simulatedProgress = Math.min(90, (elapsed / estimatedTotal) * 90)
+        onProgress(simulatedProgress)
+      }
+    }
+    
+    // Start progress simulation
+    const progressInterval = setInterval(simulateProgress, 100)
+    
     let uploadResult = await supabase.storage
       .from(effectiveBucket)
-      .upload(path, bytes, {
+      .upload(effectivePath, bytes, {
         contentType,
         upsert: false,
+        cacheControl: '3600', // Cache for 1 hour
       })
+    
+    // Clear progress interval
+    clearInterval(progressInterval)
+    
+    // Set to 100% when done
+    if (onProgress) {
+      onProgress(100)
+    }
 
     // If bucket doesn't exist, try to create it first
     if (uploadResult.error && (uploadResult.error.message?.includes('Bucket not found') || uploadResult.error.message?.includes('not found'))) {
@@ -497,15 +530,34 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
       if (!requestedBucketExists) {
         const fallback = pickFallbackBucket()
         if (fallback) {
-          console.warn(`Bucket '${preferredBucket}' not found. Falling back to bucket '${fallback}' with folder prefix 'newsletters/'.`)
+          const folderPrefix = getFolderPrefix(preferredBucket)
+          console.warn(`Bucket '${preferredBucket}' not found. Falling back to bucket '${fallback}' with folder prefix '${folderPrefix}'.`)
           effectiveBucket = fallback
-          effectivePath = `newsletters/${path}`
+          effectivePath = folderPrefix ? `${folderPrefix}${path}` : path
+          
+          // Restart progress simulation for retry
+          uploadStartTime = Date.now()
+          const retryProgressInterval = setInterval(() => {
+            if (onProgress) {
+              const elapsed = Date.now() - uploadStartTime
+              const estimatedTotal = 5000
+              const simulatedProgress = Math.min(90, (elapsed / estimatedTotal) * 90)
+              onProgress(simulatedProgress)
+            }
+          }, 100)
+          
           uploadResult = await supabase.storage
             .from(effectiveBucket)
             .upload(effectivePath, bytes, {
               contentType,
               upsert: false,
+              cacheControl: '3600',
             })
+          
+          clearInterval(retryProgressInterval)
+          if (onProgress) {
+            onProgress(100)
+          }
         }
       }
 
@@ -528,12 +580,30 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
           console.log(`Bucket '${preferredBucket}' created successfully, retrying upload...`)
           effectiveBucket = preferredBucket
           effectivePath = path
+          
+          // Restart progress simulation for retry after bucket creation
+          uploadStartTime = Date.now()
+          const bucketCreateProgressInterval = setInterval(() => {
+            if (onProgress) {
+              const elapsed = Date.now() - uploadStartTime
+              const estimatedTotal = 5000
+              const simulatedProgress = Math.min(90, (elapsed / estimatedTotal) * 90)
+              onProgress(simulatedProgress)
+            }
+          }, 100)
+          
           uploadResult = await supabase.storage
             .from(effectiveBucket)
             .upload(effectivePath, bytes, {
               contentType,
               upsert: false,
+              cacheControl: '3600',
             })
+          
+          clearInterval(bucketCreateProgressInterval)
+          if (onProgress) {
+            onProgress(100)
+          }
         }
       }
     }
@@ -573,4 +643,3 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
     throw error
   }
 }
-

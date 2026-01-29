@@ -37,3 +37,4 @@ USING (true);
 -- Verify it worked
 SELECT '✅ RLS policies fixed successfully!' as status;
 
+

@@ -258,3 +258,4 @@ npx react-native start --reset-cache
 **עודכן:** ינואר 2026
 **סטטוס:** ✅ תוקן ומוכן!
 
+

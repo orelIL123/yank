@@ -48,3 +48,4 @@ hodu_la_hashem table created successfully! ✨
 
 הטבלה מוכנה לשימוש! 🎉
 
+

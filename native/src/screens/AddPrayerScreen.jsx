@@ -136,12 +136,21 @@ export default function AddPrayerScreen({ navigation, route }) {
   }
 
   const handleSubmit = async () => {
-    // Trim and check if fields are not empty
+    // Trim and check if title is not empty
     const trimmedTitle = form.title?.trim() || ''
     const trimmedContent = form.content?.trim() || ''
-    
-    if (!trimmedTitle || !trimmedContent) {
-      Alert.alert('שגיאה', 'אנא מלא כותרת ותוכן')
+
+    if (!trimmedTitle) {
+      Alert.alert('שגיאה', 'אנא מלא כותרת')
+      return
+    }
+
+    // Check if at least one content type exists (PDF or images)
+    const hasImages = images.some(img => img.url)
+    const hasPDF = pdf && pdf.url
+
+    if (!hasImages && !hasPDF) {
+      Alert.alert('שגיאה', 'אנא העלה לפחות תמונה אחת או קובץ PDF')
       return
     }
 
@@ -241,10 +250,18 @@ export default function AddPrayerScreen({ navigation, route }) {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Info Box */}
+        <View style={styles.infoBox}>
+          <Ionicons name="information-circle" size={24} color={PRIMARY_BLUE} />
+          <Text style={styles.infoText}>
+            יש להעלות לפחות תמונה אחת או קובץ PDF. התפילה תוצג למשתמשים כ-PDF/תמונות בלבד.
+          </Text>
+        </View>
+
         <View style={styles.formGroup}>
           <Text style={styles.label}>כותרת התפילה *</Text>
           <TextInput
@@ -268,12 +285,15 @@ export default function AddPrayerScreen({ navigation, route }) {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>תוכן התפילה *</Text>
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>תוכן התפילה (אופציונלי)</Text>
+            <Text style={styles.labelHint}>לצורך פנימי בלבד - לא יוצג למשתמשים</Text>
+          </View>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={form.content}
             onChangeText={text => setForm({ ...form, content: text })}
-            placeholder="כתוב את תוכן התפילה כאן..."
+            placeholder="תוכן התפילה (לא חובה - המשתמשים יראו רק PDF/תמונות)"
             placeholderTextColor="#9ca3af"
             multiline
             numberOfLines={8}
@@ -485,6 +505,23 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 40,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    lineHeight: 20,
   },
   formGroup: {
     marginBottom: 24,

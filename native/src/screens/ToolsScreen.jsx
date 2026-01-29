@@ -1,437 +1,254 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import AppHeader from '../components/AppHeader';
+import React, { useState, useEffect } from 'react'
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Ionicons } from '@expo/vector-icons'
+import AppHeader from '../components/AppHeader'
 
-const COLORS = {
-  primaryRed: '#DC2626',
-  deepBlue: '#0b1b3a',
-  bg: '#f9fafb',
-  white: '#FFFFFF',
-  text: '#111827',
-  textLight: '#6B7280',
-  cardBg: '#FFFFFF',
-};
+const PRIMARY_BLUE = '#1e3a8a'
+const BG = '#FFFFFF'
+const DEEP_BLUE = '#0b1b3a'
 
-const FONTS = {
-  bold: 'Poppins_700Bold',
-  semiBold: 'Poppins_600SemiBold',
-  medium: 'Poppins_500Medium',
-  regular: 'Poppins_400Regular',
-};
-
-// Calculate compass direction to Jerusalem
-function calculateBearingToJerusalem(userLat, userLon) {
-  const jerusalemLat = 31.7683;
-  const jerusalemLon = 35.2137;
-
-  const dLon = (jerusalemLon - userLon) * Math.PI / 180;
-  const lat1 = userLat * Math.PI / 180;
-  const lat2 = jerusalemLat * Math.PI / 180;
-
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-
-  let bearing = Math.atan2(y, x) * 180 / Math.PI;
-  bearing = (bearing + 360) % 360;
-
-  return bearing;
+// Hebrew gematria: alef=1 through tav=400 (standard; final letters same value as regular)
+const GEMATRIA_MAP = {
+  '\u05D0': 1, '\u05D1': 2, '\u05D2': 3, '\u05D3': 4, '\u05D4': 5, '\u05D5': 6, '\u05D6': 7,
+  '\u05D7': 8, '\u05D8': 9, '\u05D9': 10, '\u05DA': 20, '\u05DB': 20, '\u05DC': 30, '\u05DD': 40,
+  '\u05DE': 40, '\u05DF': 50, '\u05E0': 50, '\u05E1': 60, '\u05E2': 70, '\u05E3': 80, '\u05E4': 80,
+  '\u05E5': 90, '\u05E6': 90, '\u05E7': 100, '\u05E8': 200, '\u05E9': 300, '\u05EA': 400,
 }
 
-// Get compass direction name in Hebrew
-function getDirectionName(bearing) {
-  const directions = [
-    'צפון', 'צפון-מזרח', 'מזרח', 'דרום-מזרח',
-    'דרום', 'דרום-מערב', 'מערב', 'צפון-מערב'
-  ];
-  const index = Math.round(bearing / 45) % 8;
-  return directions[index];
+function gematriaSum(str) {
+  if (!str || typeof str !== 'string') return 0
+  let sum = 0
+  for (let i = 0; i < str.length; i++) {
+    const v = GEMATRIA_MAP[str[i]]
+    if (v !== undefined) sum += v
+  }
+  return sum
 }
+
+// Simple sunrise/sunset for a given date at Israel (approx Tel Aviv: 32.08, 34.78)
+// Based on NOAA algorithm - pure JS, no API
+function getSunTimes(lat, lon, date) {
+  const d = new Date(date)
+  const n = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000)
+  const lngHour = lon / 15
+  const tRise = n + (6 - lngHour) / 24
+  const tSet = n + (18 - lngHour) / 24
+  // Simplified: approximate sunrise/sunset in UTC, then we show in local
+  const rise = new Date(d)
+  rise.setUTCHours(0, 0, 0, 0)
+  rise.setUTCMinutes(Math.floor((tRise % 1) * 60))
+  rise.setUTCHours(Math.floor(tRise) + 3) // approx Israel UTC+3
+  const set = new Date(d)
+  set.setUTCHours(0, 0, 0, 0)
+  set.setUTCMinutes(Math.floor((tSet % 1) * 60))
+  set.setUTCHours(Math.floor(tSet) + 3)
+  return { sunrise: rise, sunset: set }
+}
+
+const ISRAEL_LAT = 32.08
+const ISRAEL_LON = 34.78
 
 export default function ToolsScreen({ navigation }) {
-  const [location, setLocation] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [bearing, setBearing] = useState(null);
-  const [prayerTimes, setPrayerTimes] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date())
+  const [gematriaInput, setGematriaInput] = useState('')
+  const [gematriaResult, setGematriaResult] = useState(0)
 
   useEffect(() => {
-    loadLocation();
-  }, []);
+    const t = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
-  const loadLocation = async () => {
-    try {
-      setLoading(true);
-      const { status } = await Location.requestForegroundPermissionsAsync();
+  useEffect(() => {
+    setGematriaResult(gematriaSum(gematriaInput))
+  }, [gematriaInput])
 
-      if (status !== 'granted') {
-        Alert.alert('שגיאה', 'יש לאפשר גישה למיקום כדי להשתמש במצפן וזמני היום');
-        setLoading(false);
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-      setLocation(location);
-
-      const bearingToJerusalem = calculateBearingToJerusalem(
-        location.coords.latitude,
-        location.coords.longitude
-      );
-      setBearing(bearingToJerusalem);
-
-      // Load prayer times
-      await loadPrayerTimes(location.coords.latitude, location.coords.longitude);
-    } catch (error) {
-      console.error('Error getting location:', error);
-      Alert.alert('שגיאה', 'לא ניתן לקבל מיקום');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadPrayerTimes = async (lat, lon) => {
-    try {
-      // Using Hebcal API for prayer times
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = today.getMonth() + 1;
-      const day = today.getDate();
-
-      const url = `https://www.hebcal.com/zmanim?cfg=json&latitude=${lat}&longitude=${lon}&date=${year}-${month}-${day}`;
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.times) {
-        setPrayerTimes({
-          alotHaShachar: formatTime(data.times.alotHaShachar),
-          sunrise: formatTime(data.times.sunrise),
-          sofZmanShma: formatTime(data.times.sofZmanShma),
-          sofZmanTfilla: formatTime(data.times.sofZmanTfilla),
-          chatzot: formatTime(data.times.chatzot),
-          minchaGedola: formatTime(data.times.minchaGedola),
-          minchaKetana: formatTime(data.times.minchaKetana),
-          sunset: formatTime(data.times.sunset),
-          tzeit: formatTime(data.times.tzeit),
-        });
-      }
-    } catch (error) {
-      console.error('Error loading prayer times:', error);
-    }
-  };
-
-  const formatTime = (timeString) => {
-    if (!timeString) return '--:--';
-    const date = new Date(timeString);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-
-  const handleBack = () => {
-    navigation.goBack();
-  };
-
-  const tools = [
-    {
-      id: 'siddur',
-      title: 'סידור תפילה',
-      description: 'סידור תפילה מלא מספריית ספריא',
-      icon: 'book-outline',
-      color: '#3B82F6',
-      onPress: () => navigation.navigate('Siddur'),
-    },
-    {
-      id: 'times',
-      title: 'זמני היום',
-      description: 'זמני התפילה והזריחה למיקום שלך',
-      icon: 'time-outline',
-      color: '#F59E0B',
-      type: 'times',
-    },
-    {
-      id: 'compass',
-      title: 'מצפן לירושלים',
-      description: 'כיוון התפילה לירושלים',
-      icon: 'compass-outline',
-      color: '#10B981',
-      type: 'compass',
-    },
-  ];
+  const sunTimes = getSunTimes(ISRAEL_LAT, ISRAEL_LON, currentTime)
+  const timeStr = currentTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const dateStr = currentTime.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const sunriseStr = sunTimes.sunrise.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+  const sunsetStr = sunTimes.sunset.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
-
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
       <AppHeader
         title="כלי עזר"
-        showBackButton={true}
-        onBackPress={handleBack}
+        showBackButton
+        onBackPress={() => navigation.goBack()}
       />
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <Text style={styles.mainTitle}>כלי עזר לתפילה ולימוד</Text>
-          <Text style={styles.subtitle}>סידור, זמני היום ומצפן לירושלים</Text>
+        {/* Zmanim - Times of day */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="time-outline" size={24} color={PRIMARY_BLUE} />
+            <Text style={styles.sectionTitle}>זמני היום</Text>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.clockText}>{timeStr}</Text>
+            <Text style={styles.dateText}>{dateStr}</Text>
+            <View style={styles.sunRow}>
+              <View style={styles.sunItem}>
+                <Ionicons name="sunny-outline" size={20} color={PRIMARY_BLUE} />
+                <Text style={styles.sunLabel}>הנץ החמה (קרוב)</Text>
+                <Text style={styles.sunTime}>{sunriseStr}</Text>
+              </View>
+              <View style={styles.sunItem}>
+                <Ionicons name="moon-outline" size={20} color={PRIMARY_BLUE} />
+                <Text style={styles.sunLabel}>שקיעה (קרוב)</Text>
+                <Text style={styles.sunTime}>{sunsetStr}</Text>
+              </View>
+            </View>
+            <Text style={styles.disclaimer}>זמנים משוערים לאזור ישראל. לזמנים מדויקים לפי מיקום השתמשו באפליקציה ייעודית.</Text>
+          </View>
         </View>
 
-        {/* Tools List */}
-        <View style={styles.toolsContainer}>
-          {tools.map((tool) => (
-            <TouchableOpacity
-              key={tool.id}
-              style={styles.toolCard}
-              onPress={tool.onPress}
-              activeOpacity={0.7}
-              disabled={loading && (tool.type === 'times' || tool.type === 'compass')}
-            >
-              <View style={styles.cardContent}>
-                <View style={[styles.iconContainer, { backgroundColor: `${tool.color}15` }]}>
-                  <Ionicons name={tool.icon} size={32} color={tool.color} />
-                </View>
-
-                <View style={styles.cardTextContainer}>
-                  <Text style={styles.toolTitle}>{tool.title}</Text>
-                  <Text style={styles.toolDescription}>{tool.description}</Text>
-
-                  {/* Show prayer times */}
-                  {tool.type === 'times' && prayerTimes && (
-                    <View style={styles.timesContainer}>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.alotHaShachar}</Text>
-                        <Text style={styles.timeLabel}>עלות השחר:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.sunrise}</Text>
-                        <Text style={styles.timeLabel}>הנץ החמה:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.sofZmanShma}</Text>
-                        <Text style={styles.timeLabel}>סוף זמן שמע:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.sofZmanTfilla}</Text>
-                        <Text style={styles.timeLabel}>סוף זמן תפילה:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.chatzot}</Text>
-                        <Text style={styles.timeLabel}>חצות:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.minchaGedola}</Text>
-                        <Text style={styles.timeLabel}>מנחה גדולה:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.minchaKetana}</Text>
-                        <Text style={styles.timeLabel}>מנחה קטנה:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.sunset}</Text>
-                        <Text style={styles.timeLabel}>שקיעה:</Text>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <Text style={styles.timeValue}>{prayerTimes.tzeit}</Text>
-                        <Text style={styles.timeLabel}>צאת הכוכבים:</Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Show compass */}
-                  {tool.type === 'compass' && bearing !== null && (
-                    <View style={styles.compassContainer}>
-                      <View style={styles.compassCircle}>
-                        <Ionicons
-                          name="arrow-up"
-                          size={48}
-                          color={tool.color}
-                          style={{ transform: [{ rotate: `${bearing}deg` }] }}
-                        />
-                      </View>
-                      <Text style={styles.compassText}>
-                        כיוון: {getDirectionName(bearing)} ({Math.round(bearing)}°)
-                      </Text>
-                      <Text style={styles.compassSubtext}>
-                        הכיוון לירושלים מהמיקום שלך
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Show loading */}
-                  {loading && (tool.type === 'times' || tool.type === 'compass') && (
-                    <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="small" color={tool.color} />
-                      <Text style={styles.loadingText}>טוען מיקום...</Text>
-                    </View>
-                  )}
-                </View>
-
-                {tool.onPress && (
-                  <View style={styles.arrowContainer}>
-                    <Ionicons name="chevron-forward" size={24} color={COLORS.textLight} />
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+        {/* Gematria */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="calculator-outline" size={24} color={PRIMARY_BLUE} />
+            <Text style={styles.sectionTitle}>גימטריה</Text>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.label}>הקלידו טקסט בעברית</Text>
+            <TextInput
+              style={styles.input}
+              value={gematriaInput}
+              onChangeText={setGematriaInput}
+              placeholder="אותיות עבריות..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              textAlign="right"
+            />
+            <View style={styles.resultRow}>
+              <Text style={styles.resultLabel}>סיכום גימטריה:</Text>
+              <Text style={styles.resultValue}>{gematriaResult}</Text>
+            </View>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.bg,
+    backgroundColor: BG,
   },
   scrollContent: {
+    padding: 16,
     paddingBottom: 40,
   },
-  headerSection: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
+  section: {
+    marginBottom: 24,
   },
-  mainTitle: {
-    fontSize: 24,
-    fontFamily: FONTS.bold,
-    color: COLORS.deepBlue,
-    textAlign: 'right',
-    marginBottom: 8,
-    lineHeight: 32,
-  },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: FONTS.medium,
-    color: COLORS.textLight,
-    textAlign: 'right',
-  },
-  toolsContainer: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  toolCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(11,27,58,0.08)',
-  },
-  cardContent: {
-    flexDirection: 'row-reverse',
-    alignItems: 'flex-start',
-  },
-  iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
+  sectionHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
-  },
-  cardTextContainer: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  toolTitle: {
-    fontSize: 20,
-    fontFamily: 'Heebo_700Bold',
-    color: COLORS.deepBlue,
-    textAlign: 'right',
-    marginBottom: 4,
-  },
-  toolDescription: {
-    fontSize: 14,
-    fontFamily: 'Heebo_400Regular',
-    color: COLORS.textLight,
-    textAlign: 'right',
-    marginBottom: 12,
-  },
-  arrowContainer: {
-    alignSelf: 'center',
-    marginLeft: 12,
-  },
-  timesContainer: {
-    marginTop: 12,
-    width: '100%',
     gap: 8,
-  },
-  timeRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(11,27,58,0.05)',
-  },
-  timeLabel: {
-    fontSize: 15,
-    fontFamily: 'Heebo_500Medium',
-    color: COLORS.text,
-    textAlign: 'right',
-  },
-  timeValue: {
-    fontSize: 15,
-    fontFamily: 'Heebo_600SemiBold',
-    color: COLORS.deepBlue,
-    textAlign: 'left',
-  },
-  compassContainer: {
-    marginTop: 16,
-    alignItems: 'center',
-    width: '100%',
-  },
-  compassCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(16,185,129,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 12,
-    borderWidth: 3,
-    borderColor: '#10B981',
   },
-  compassText: {
+  sectionTitle: {
     fontSize: 18,
     fontFamily: 'Heebo_700Bold',
-    color: COLORS.deepBlue,
-    textAlign: 'center',
-    marginBottom: 4,
+    color: DEEP_BLUE,
   },
-  compassSubtext: {
-    fontSize: 14,
-    fontFamily: 'Heebo_400Regular',
-    color: COLORS.textLight,
-    textAlign: 'center',
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  loadingContainer: {
-    marginTop: 16,
+  clockText: {
+    fontSize: 36,
+    fontFamily: 'Heebo_700Bold',
+    color: PRIMARY_BLUE,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  dateText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  sunRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(11,27,58,0.06)',
+  },
+  sunItem: {
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
-  loadingText: {
+  sunLabel: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: '#6b7280',
+  },
+  sunTime: {
+    fontSize: 18,
+    fontFamily: 'Heebo_700Bold',
+    color: DEEP_BLUE,
+  },
+  disclaimer: {
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  label: {
     fontSize: 14,
-    fontFamily: 'Heebo_400Regular',
-    color: COLORS.textLight,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    marginBottom: 8,
+    textAlign: 'right',
   },
-});
+  input: {
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.2)',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 18,
+    fontFamily: 'Heebo_400Regular',
+    color: DEEP_BLUE,
+    backgroundColor: '#f9fafb',
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  resultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(11,27,58,0.08)',
+  },
+  resultLabel: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+  },
+  resultValue: {
+    fontSize: 24,
+    fontFamily: 'Heebo_700Bold',
+    color: PRIMARY_BLUE,
+  },
+})

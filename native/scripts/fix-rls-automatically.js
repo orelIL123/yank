@@ -130,3 +130,4 @@ ON app_config FOR UPDATE USING (true);
 
 fixRLSPolicies()
 
+

@@ -44,14 +44,16 @@ import HoduLaHashemScreen from './src/screens/HoduLaHashemScreen'
 import NotificationsScreen from './src/screens/NotificationsScreen'
 import PidyonNefeshScreen from './src/screens/PidyonNefeshScreen'
 import MiBeitRabeinuScreen from './src/screens/MiBeitRabeinuScreen'
+import DailySummaryScreen from './src/screens/DailySummaryScreen'
 import ParshiotHaNasiimScreen from './src/screens/ParshiotHaNasiimScreen'
 import ManagePermissionsScreen from './src/screens/ManagePermissionsScreen'
 import PersonalDetailsScreen from './src/screens/PersonalDetailsScreen'
 import HelpSupportScreen from './src/screens/HelpSupportScreen'
+import ToolsScreen from './src/screens/ToolsScreen'
 import SeferHaMidotScreen from './src/screens/SeferHaMidotScreen'
 import SiddurScreen from './src/screens/SiddurScreen'
 import TehillimScreen from './src/screens/TehillimScreen'
-import ToolsScreen from './src/screens/ToolsScreen'
+import OrchotTzadikimScreen from './src/screens/OrchotTzadikimScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
@@ -442,7 +444,12 @@ export default function App() {
             {(props) => <PrayersScreen {...props} user={user} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="Siddur" component={SiddurScreen} />
-          <Stack.Screen name="Tehillim" component={TehillimScreen} />
+          <Stack.Screen name="Tehillim">
+            {(props) => <TehillimScreen {...props} userRole={userRole} />}
+          </Stack.Screen>
+          <Stack.Screen name="OrchotTzadikim">
+            {(props) => <OrchotTzadikimScreen {...props} userRole={userRole} />}
+          </Stack.Screen>
           <Stack.Screen name="PrayerDetail" component={PrayerDetailScreen} />
           <Stack.Screen name="PrayerCommitment" component={PrayerCommitmentScreen} />
           <Stack.Screen name="AddPrayer" component={AddPrayerScreen} />
@@ -484,13 +491,16 @@ export default function App() {
             {(props) => <PersonalDetailsScreen {...props} user={user} />}
           </Stack.Screen>
           <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+          <Stack.Screen name="Tools" component={ToolsScreen} />
           <Stack.Screen name="PidyonNefesh" component={PidyonNefeshScreen} />
           <Stack.Screen name="MiBeitRabeinu">
             {(props) => <MiBeitRabeinuScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
+          <Stack.Screen name="DailySummary">
+            {(props) => <DailySummaryScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
           <Stack.Screen name="ParshiotHaNasiim" component={ParshiotHaNasiimScreen} />
           <Stack.Screen name="SeferHaMidot" component={SeferHaMidotScreen} />
-          <Stack.Screen name="Tools" component={ToolsScreen} />
           <Stack.Screen name="ManagePermissions" component={ManagePermissionsScreen} />
 
           {/* Admin screen - always registered; screen itself will guard access */}

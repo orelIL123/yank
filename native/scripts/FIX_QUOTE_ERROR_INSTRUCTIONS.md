@@ -78,3 +78,4 @@ The `app_config` table is used to store app-wide configuration, including:
 - Database Service: `native/src/services/database.js` (lines 460-509)
 - Home Screen: `native/src/HomeScreen.jsx` (lines 119-144)
 
+

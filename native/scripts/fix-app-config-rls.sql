@@ -33,3 +33,4 @@ USING (true);
 -- Done!
 SELECT 'RLS policies fixed successfully!' as status;
 
+

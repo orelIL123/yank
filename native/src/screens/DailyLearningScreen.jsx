@@ -88,8 +88,8 @@ const LEARNING_CATEGORIES = [
   },
   {
     id: 'tehillim',
-    title: 'תהילים',
-    description: 'תהילים יומי - כל הפרקים',
+    title: 'תהילים יומי',
+    description: 'פרקי תהילים מעודכנים יומית',
     icon: 'book-outline',
     color: '#10B981',
     navigateTo: 'Tehillim',
@@ -106,14 +106,10 @@ const LEARNING_CATEGORIES = [
   {
     id: 'orchos-tzadikim',
     title: 'אורחות צדיקים',
-    description: 'ספר המוסר המפורסם - 28 שערים',
+    description: 'קטע יומי מספר המוסר המפורסם',
     icon: 'star-outline',
     color: '#8B5CF6',
-    openInBrowser: true,
-    webUrl: () => {
-      const gate = getDailyOrchotTzadikimGate();
-      return `https://www.sefaria.org/Orchot_Tzadikim.${gate}`;
-    },
+    navigateTo: 'OrchotTzadikim',
   },
   {
     id: 'sefer-hamidos',
@@ -122,14 +118,6 @@ const LEARNING_CATEGORIES = [
     icon: 'flame-outline',
     color: '#EF4444',
     navigateTo: 'SeferHaMidot',
-  },
-  {
-    id: 'tools',
-    title: 'כלי עזר',
-    description: 'סידור, זמני היום ומצפן לירושלים',
-    icon: 'construct-outline',
-    color: '#8B5CF6',
-    navigateTo: 'Tools',
   },
 ];
 
@@ -305,7 +293,6 @@ export default function DailyLearningScreen({ navigation, userRole }) {
   };
 
   const handleCategoryPress = (category) => {
-    // Special handling for Tools - navigate to Tools screen
     if (category.navigateTo) {
       navigation?.navigate(category.navigateTo);
       return;

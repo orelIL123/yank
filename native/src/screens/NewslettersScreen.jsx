@@ -23,21 +23,28 @@ const LANGUAGES = [
   { key: 'english', label: 'English', icon: 'language-outline' },
 ]
 
+const FILTER_OPTIONS = [
+  { key: 'all', label: 'הכל' },
+  { key: 'parsha', label: 'פרשת השבוע' },
+  { key: 'holiday', label: 'חגים' },
+]
+
 export default function NewslettersScreen({ navigation, userRole, userPermissions }) {
     const [newsletters, setNewsletters] = useState([])
     const [loading, setLoading] = useState(true)
     const [selectedLanguage, setSelectedLanguage] = useState('hebrew')
+    const [filterType, setFilterType] = useState('all')
     const canManage = canManageNewsletters(userRole, userPermissions)
 
     useEffect(() => {
         fetchNewsletters()
-    }, [selectedLanguage])
+    }, [selectedLanguage, filterType])
 
     // Refresh when screen comes into focus
     useFocusEffect(
         React.useCallback(() => {
             fetchNewsletters()
-        }, [selectedLanguage])
+        }, [selectedLanguage, filterType])
     )
 
     const fetchNewsletters = async () => {
@@ -49,12 +56,19 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
             })
             
             // Filter by language, treating null/undefined as 'hebrew' for backward compatibility
-            const filtered = allNewsletters.filter(nl => {
+            let filtered = allNewsletters.filter(nl => {
                 const lang = nl.language || 'hebrew'
                 return lang === selectedLanguage
             })
+
+            // Filter by parsha/holiday when filter is active
+            if (filterType === 'parsha') {
+                filtered = filtered.filter(nl => nl.parsha || (nl.category && /פרש|parsha/i.test(nl.category)))
+            } else if (filterType === 'holiday') {
+                filtered = filtered.filter(nl => nl.holiday || (nl.category && /חג|holiday|chag/i.test(nl.category)))
+            }
             
-            console.log(`Loaded ${filtered.length} newsletters for language: ${selectedLanguage}`)
+            console.log(`Loaded ${filtered.length} newsletters for language: ${selectedLanguage}, filter: ${filterType}`)
             setNewsletters(filtered)
         } catch (error) {
             console.error('Error fetching newsletters:', error)
@@ -157,13 +171,20 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
         navigation.navigate('AddNewsletter', { newsletter })
     }
 
-    const renderNewsletter = ({ item }) => (
+    const renderNewsletter = ({ item, index }) => {
+        const isLatest = index === 0
+        return (
         <Pressable
-            style={styles.newsletterCard}
+            style={[styles.newsletterCard, isLatest && styles.newsletterCardLatest]}
             onPress={() => handleNewsletterPress(item)}
             onLongPress={canManage ? () => handleEditNewsletter(item) : undefined}
         >
             <View style={styles.newsletterImageContainer} pointerEvents="box-none">
+                {isLatest && (
+                    <View style={styles.latestBadge} pointerEvents="none">
+                        <Text style={styles.latestBadgeText}>חדש</Text>
+                    </View>
+                )}
                 {item.thumbnailUrl || item.fileType === 'image' ? (
                     <Image
                         source={{ uri: item.thumbnailUrl || item.fileUrl }}
@@ -258,7 +279,8 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
                 </View>
             </View>
         </Pressable>
-    )
+        )
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -297,6 +319,28 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
                             selectedLanguage === lang.key && styles.languageButtonTextActive
                         ]}>
                             {lang.label}
+                        </Text>
+                    </Pressable>
+                ))}
+            </View>
+
+            {/* Filter: parsha / holidays */}
+            <View style={styles.filterRow}>
+                {FILTER_OPTIONS.map((opt) => (
+                    <Pressable
+                        key={opt.key}
+                        style={[
+                            styles.filterButton,
+                            filterType === opt.key && styles.filterButtonActive
+                        ]}
+                        onPress={() => setFilterType(opt.key)}
+                        accessibilityRole="button"
+                    >
+                        <Text style={[
+                            styles.filterButtonText,
+                            filterType === opt.key && styles.filterButtonTextActive
+                        ]}>
+                            {opt.label}
                         </Text>
                     </Pressable>
                 ))}
@@ -553,6 +597,56 @@ const styles = StyleSheet.create({
     },
     languageButtonTextActive: {
         color: '#fff',
+    },
+    filterRow: {
+        flexDirection: 'row',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        flexWrap: 'wrap',
+        backgroundColor: BG,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(11,27,58,0.05)',
+    },
+    filterButton: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 999,
+        backgroundColor: 'rgba(30,58,138,0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(30,58,138,0.3)',
+    },
+    filterButtonActive: {
+        backgroundColor: PRIMARY_BLUE,
+        borderColor: PRIMARY_BLUE,
+    },
+    filterButtonText: {
+        fontSize: 12,
+        fontFamily: 'Poppins_600SemiBold',
+        color: PRIMARY_BLUE,
+    },
+    filterButtonTextActive: {
+        color: '#fff',
+    },
+    newsletterCardLatest: {
+        borderWidth: 2,
+        borderColor: PRIMARY_BLUE,
+        shadowOpacity: 0.15,
+    },
+    latestBadge: {
+        position: 'absolute',
+        top: 8,
+        left: 8,
+        zIndex: 2,
+        backgroundColor: '#10b981',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    latestBadgeText: {
+        color: '#fff',
+        fontSize: 11,
+        fontFamily: 'Poppins_700Bold',
     },
     addButton: {
         width: 44,

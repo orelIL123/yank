@@ -67,8 +67,10 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
   const [playingDailyVideo, setPlayingDailyVideo] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [formVideoTitle, setFormVideoTitle] = useState('')
   const [selectedVideoFile, setSelectedVideoFile] = useState(null)
+  const [videoPreviewUri, setVideoPreviewUri] = useState(null)
 
   // Daily summary state
   const [dailySummaryVideos, setDailySummaryVideos] = useState([])
@@ -168,6 +170,8 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
       const video = await pickVideo()
       if (video) {
         setSelectedVideoFile(video)
+        // Set preview URI for immediate preview
+        setVideoPreviewUri(video.uri)
       }
     } catch (error) {
       console.error('Error picking video:', error)
@@ -187,6 +191,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
     }
 
     setUploadingVideo(true)
+    setUploadProgress(0)
     try {
       // Generate unique filename
       const timestamp = Date.now()
@@ -194,15 +199,32 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
       const fileName = `daily-video-${timestamp}.${extension}`
       const storagePath = `daily-videos/${fileName}`
 
-      // Upload to Supabase Storage
-      const videoUrl = await uploadFileToSupabaseStorage(
-        selectedVideoFile.uri,
-        'daily-videos',
-        storagePath,
-        (progress) => {
-          console.log('Upload progress:', progress)
-        }
-      )
+      // Upload to Supabase Storage - try 'daily-videos' bucket first, fallback to 'newsletters' (which exists)
+      let videoUrl;
+      try {
+        videoUrl = await uploadFileToSupabaseStorage(
+          selectedVideoFile.uri,
+          'daily-videos',
+          storagePath,
+          (progress) => {
+            setUploadProgress(progress)
+            console.log('Upload progress:', progress)
+          }
+        )
+      } catch (bucketError) {
+        console.log('Trying newsletters bucket as fallback...');
+        // Fallback to 'newsletters' bucket (which exists) with folder prefix
+        const fallbackPath = `daily-videos/${fileName}`
+        videoUrl = await uploadFileToSupabaseStorage(
+          selectedVideoFile.uri,
+          'newsletters',
+          fallbackPath,
+          (progress) => {
+            setUploadProgress(progress)
+            console.log('Upload progress:', progress)
+          }
+        )
+      }
 
       // Create thumbnail (for now, we'll use a placeholder or extract first frame later)
       const thumbnailUrl = videoUrl.replace(/\.(mp4|mov|avi)$/i, '.jpg')
@@ -223,12 +245,15 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
       setShowUploadModal(false)
       setFormVideoTitle('')
       setSelectedVideoFile(null)
+      setVideoPreviewUri(null)
+      setUploadProgress(0)
       loadDailyVideos()
     } catch (error) {
       console.error('Error uploading video:', error)
       Alert.alert('שגיאה', `לא ניתן להעלות את הסרטון: ${error.message}`)
     } finally {
       setUploadingVideo(false)
+      setUploadProgress(0)
     }
   }
 
@@ -639,9 +664,11 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                       resizeMode="cover"
                     />
                   ) : (
-                    <View style={styles.dailyVideoPlaceholder}>
-                      <Ionicons name="play-circle" size={40} color={PRIMARY_BLUE} />
-                    </View>
+                    <Image
+                      source={require('../../assets/splash-icon.png')}
+                      style={styles.dailyVideoThumbnail}
+                      resizeMode="cover"
+                    />
                   )}
                   <View style={styles.playIconOverlay}>
                     <Ionicons name="play" size={24} color="#fff" />
@@ -661,11 +688,8 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
         <Pressable
           style={styles.summaryCard}
           onPress={() => {
-            // Navigate to daily summary screen or show videos
-            if (dailySummaryVideos.length > 0) {
-              // Show first video or list
-              handleSummaryVideoPress(dailySummaryVideos[0])
-            }
+            // Navigate to daily summary screen
+            navigation.navigate('DailySummary', { userRole, userPermissions })
           }}
         >
           <LinearGradient
@@ -708,7 +732,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
         </Pressable>
       </ScrollView>
 
-      {/* Daily Video Player Modal */}
+      {/* Daily Video Player Modal - splash image as poster until video plays */}
       {selectedDailyVideo && (
         <Modal
           visible={!!selectedDailyVideo}
@@ -737,6 +761,12 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
               useNativeControls
               resizeMode={ResizeMode.CONTAIN}
               shouldPlay={playingDailyVideo}
+              posterSource={
+                selectedDailyVideo.thumbnailUrl
+                  ? { uri: selectedDailyVideo.thumbnailUrl }
+                  : require('../../assets/splash-icon.png')
+              }
+              posterStyle={styles.videoPosterStyle}
               onPlaybackStatusUpdate={(status) => {
                 if (status.didJustFinish) {
                   setPlayingDailyVideo(false)
@@ -770,7 +800,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
             >
               <Ionicons name="close" size={28} color={PRIMARY_BLUE} />
             </Pressable>
-            {selectedSummaryVideo && (
+            {selectedSummaryVideo && selectedSummaryVideo.youtubeId && (
               <View style={styles.videoPlayerContainer}>
                 <View style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' }}>
                   <YoutubePlayer
@@ -787,6 +817,11 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                     <Text style={styles.modalVideoDescription}>{selectedSummaryVideo.description}</Text>
                   )}
                 </View>
+              </View>
+            )}
+            {selectedSummaryVideo && !selectedSummaryVideo.youtubeId && (
+              <View style={styles.videoPlayerContainer}>
+                <Text style={styles.errorText}>שגיאה: לא ניתן לפתוח את הסרטון</Text>
               </View>
             )}
           </View>
@@ -814,6 +849,8 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                     setShowUploadModal(false)
                     setFormVideoTitle('')
                     setSelectedVideoFile(null)
+                    setVideoPreviewUri(null)
+                    setUploadProgress(0)
                   }}
                   style={styles.modalCloseButton}
                 >
@@ -842,6 +879,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                   <Pressable
                     style={styles.videoPickerButton}
                     onPress={handlePickVideo}
+                    disabled={uploadingVideo}
                   >
                     <Ionicons name="videocam-outline" size={24} color={PRIMARY_BLUE} />
                     <Text style={styles.videoPickerText}>
@@ -853,6 +891,41 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                       {selectedVideoFile.uri.split('/').pop()}
                     </Text>
                   )}
+                  
+                  {/* Video Preview */}
+                  {videoPreviewUri && !uploadingVideo && (
+                    <View style={styles.videoPreviewContainer}>
+                      <Video
+                        source={{ uri: videoPreviewUri }}
+                        style={styles.videoPreview}
+                        useNativeControls
+                        resizeMode={ResizeMode.CONTAIN}
+                        shouldPlay={false}
+                      />
+                      <Pressable
+                        style={styles.removePreviewButton}
+                        onPress={() => {
+                          setSelectedVideoFile(null)
+                          setVideoPreviewUri(null)
+                        }}
+                      >
+                        <Ionicons name="close-circle" size={24} color="#dc2626" />
+                      </Pressable>
+                    </View>
+                  )}
+                  
+                  {/* Upload Progress */}
+                  {uploadingVideo && (
+                    <View style={styles.uploadProgressContainer}>
+                      <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+                      <Text style={styles.uploadProgressText}>
+                        מעלה סרטון... {Math.round(uploadProgress)}%
+                      </Text>
+                      <View style={styles.progressBarContainer}>
+                        <View style={[styles.progressBar, { width: `${uploadProgress}%` }]} />
+                      </View>
+                    </View>
+                  )}
                 </View>
               </ScrollView>
 
@@ -863,6 +936,8 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                     setShowUploadModal(false)
                     setFormVideoTitle('')
                     setSelectedVideoFile(null)
+                    setVideoPreviewUri(null)
+                    setUploadProgress(0)
                   }}
                 >
                   <Text style={styles.cancelButtonText}>ביטול</Text>
@@ -1436,6 +1511,9 @@ const styles = StyleSheet.create({
     height: width * (16 / 9),
     marginTop: 60,
   },
+  videoPosterStyle: {
+    resizeMode: 'cover',
+  },
   videoPickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1459,5 +1537,58 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: '#6b7280',
     textAlign: 'right',
+  },
+  videoPreviewContainer: {
+    marginTop: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  videoPreview: {
+    width: '100%',
+    height: 200,
+  },
+  removePreviewButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  uploadProgressContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.1)',
+  },
+  uploadProgressText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: PRIMARY_BLUE,
+    textAlign: 'right',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  progressBarContainer: {
+    height: 6,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: PRIMARY_BLUE,
+    borderRadius: 3,
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#ef4444',
+    textAlign: 'center',
+    padding: 20,
   },
 })

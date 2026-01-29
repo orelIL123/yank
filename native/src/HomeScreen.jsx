@@ -4,9 +4,11 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Audio } from 'expo-av'
 import { useFocusEffect } from '@react-navigation/native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import MenuDrawer from './components/MenuDrawer'
 import AppHeader from './components/AppHeader'
 import FeaturedTopic from './components/FeaturedTopic'
+import NotificationModal from './components/NotificationModal'
 import { auth } from './config/firebase'
 import db from './services/database'
 import cache from './utils/cache'
@@ -69,11 +71,13 @@ export default function HomeScreen({ navigation, userRole }) {
   }
   const [quote, setQuote] = useState('ציטוט יומי - הרב הינוקא')
   const [quoteAuthor, setQuoteAuthor] = useState('הרב הינוקא')
+  const [quoteImage, setQuoteImage] = useState(null)
   const [quoteLoading, setQuoteLoading] = useState(true)
   const [showQuoteEditModal, setShowQuoteEditModal] = useState(false)
   const [editingQuote, setEditingQuote] = useState('')
   const [editingAuthor, setEditingAuthor] = useState('')
   const [savingQuote, setSavingQuote] = useState(false)
+  const [showQuoteImageModal, setShowQuoteImageModal] = useState(false)
   const [unreadCount, setUnreadCount] = React.useState(0)
   const [menuVisible, setMenuVisible] = React.useState(false)
   const [songs, setSongs] = useState([])
@@ -90,6 +94,8 @@ export default function HomeScreen({ navigation, userRole }) {
   const pidyonScrollPosition = React.useRef(0)
   const [featuredConfig, setFeaturedConfig] = useState(null)
   const [showFeaturedEditModal, setShowFeaturedEditModal] = useState(false)
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false)
+  const [currentNotification, setCurrentNotification] = useState(null)
 
   const onShareQuote = React.useCallback(() => {
     Share.share({ message: `"${quote}" - ${quoteAuthor}` }).catch(() => { })
@@ -108,6 +114,7 @@ export default function HomeScreen({ navigation, userRole }) {
         if (config) {
           setQuote(config.daily_quote || 'ציטוט יומי - הרב הינוקא')
           setQuoteAuthor(config.quote_author || 'הרב הינוקא')
+          setQuoteImage(config.quote_image || null)
           setFeaturedConfig(config)
           console.log('🟢 HomeScreen: Featured config set!')
         } else {
@@ -123,10 +130,73 @@ export default function HomeScreen({ navigation, userRole }) {
     loadConfig()
   }, [])
 
+  // Check for new notifications on app start (once per notification)
+  useEffect(() => {
+    const checkNewNotifications = async () => {
+      try {
+        const userId = auth.currentUser?.uid
+        if (!userId) return
+
+        // Load active notifications
+        const notifications = await db.getCollection('notifications', {
+          where: [['isActive', '==', true]],
+          orderBy: { field: 'createdAt', direction: 'desc' },
+          limit: 1
+        })
+
+        if (notifications.length === 0) return
+
+        const latestNotification = notifications[0]
+        
+        // Check if this notification was already shown
+        const shownNotifications = await AsyncStorage.getItem('shown_notifications')
+        const shownIds = shownNotifications ? JSON.parse(shownNotifications) : []
+        
+        if (shownIds.includes(latestNotification.id)) {
+          return // Already shown
+        }
+
+        // Check if user hasn't read this notification
+        const readBy = latestNotification.readBy || []
+        if (!readBy.includes(userId)) {
+          // Show modal
+          setCurrentNotification(latestNotification)
+          setNotificationModalVisible(true)
+          
+          // Mark as shown
+          await AsyncStorage.setItem('shown_notifications', JSON.stringify([...shownIds, latestNotification.id]))
+        }
+      } catch (error) {
+        console.error('Error checking notifications:', error)
+      }
+    }
+
+    // Small delay to ensure UI is ready
+    const timer = setTimeout(() => {
+      checkNewNotifications()
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [])
+
   const handleEditQuote = () => {
     setEditingQuote(quote)
     setEditingAuthor(quoteAuthor)
+    // Keep current quoteImage state (already loaded from config)
     setShowQuoteEditModal(true)
+  }
+
+  const handlePickQuoteImage = async () => {
+    try {
+      const { pickImage } = await import('./utils/storage')
+      const image = await pickImage()
+      if (image) {
+        setQuoteImage(image.uri)
+      }
+    } catch (error) {
+      console.error('Error picking image:', error)
+      Alert.alert('שגיאה', 'לא ניתן לבחור תמונה')
+    }
   }
 
   const handleSaveQuote = async () => {
@@ -137,12 +207,28 @@ export default function HomeScreen({ navigation, userRole }) {
 
     try {
       setSavingQuote(true)
+      
+      // Upload image if needed
+      let finalImageUrl = quoteImage
+      if (quoteImage && !quoteImage.startsWith('http')) {
+        const { uploadImageToStorage, generateStoragePath, uploadFileToSupabaseStorage } = await import('./utils/storage')
+        const path = generateStoragePath('quote-images', 'quote.jpg')
+        try {
+          finalImageUrl = await uploadImageToStorage(quoteImage, path)
+        } catch (firebaseErr) {
+          console.warn('Firebase upload failed, trying Supabase:', firebaseErr?.message)
+          finalImageUrl = await uploadFileToSupabaseStorage(quoteImage, 'newsletters', path, () => {})
+        }
+      }
+      
       await db.updateAppConfig({
         daily_quote: editingQuote.trim(),
-        quote_author: editingAuthor.trim() || 'הרב הינוקא'
+        quote_author: editingAuthor.trim() || 'הרב הינוקא',
+        quote_image: finalImageUrl || null
       })
       setQuote(editingQuote.trim())
       setQuoteAuthor(editingAuthor.trim() || 'הרב הינוקא')
+      setQuoteImage(finalImageUrl)
       setShowQuoteEditModal(false)
       Alert.alert('הצלחה', 'הציטוט עודכן בהצלחה')
       // Clear cache to force reload
@@ -533,6 +619,44 @@ export default function HomeScreen({ navigation, userRole }) {
         />
       )}
 
+      <NotificationModal
+        visible={notificationModalVisible}
+        notification={currentNotification}
+        onClose={() => {
+          setNotificationModalVisible(false)
+          setCurrentNotification(null)
+        }}
+      />
+
+      {/* Quote Image Modal */}
+      <Modal
+        visible={showQuoteImageModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowQuoteImageModal(false)}
+      >
+        <Pressable
+          style={styles.imageModalOverlay}
+          onPress={() => setShowQuoteImageModal(false)}
+        >
+          <View style={styles.imageModalContent}>
+            <Pressable
+              style={styles.imageModalCloseButton}
+              onPress={() => setShowQuoteImageModal(false)}
+            >
+              <Ionicons name="close" size={32} color="#fff" />
+            </Pressable>
+            {quoteImage && (
+              <Image
+                source={{ uri: quoteImage }}
+                style={styles.imageModalImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+
       <View style={styles.main}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -670,15 +794,15 @@ export default function HomeScreen({ navigation, userRole }) {
               ))}
           </View>
 
-          {/* Featured Buttons Row - Tools & Shulchan Shlomo */}
+          {/* Featured Buttons Row - Sefer HaMidot & Shulchan Shlomo */}
           <View style={styles.section}>
             <View style={styles.featuredButtonsRow}>
-              {/* Tools - Small Button */}
+              {/* Sefer HaMidot - Small Button */}
               <Pressable
                 style={styles.featuredButton}
-                onPress={() => navigation?.navigate('Tools')}
+                onPress={() => navigation?.navigate('SeferHaMidot')}
                 accessibilityRole="button"
-                accessibilityLabel="כלי עזר - סידור, זמני היום ומצפן"
+                accessibilityLabel="ספר המידות - לרבי נחמן מברסלב"
               >
                 <LinearGradient
                   colors={['#7c3aed', '#8b5cf6', '#a78bfa']}
@@ -688,11 +812,11 @@ export default function HomeScreen({ navigation, userRole }) {
                 >
                   <View style={styles.featuredContent}>
                     <View style={styles.featuredIconWrapper}>
-                      <Ionicons name="construct" size={36} color="#fff" />
+                      <Ionicons name="flame" size={36} color="#fff" />
                     </View>
                     <View style={styles.featuredText}>
-                      <Text style={styles.featuredTitle}>כלי עזר</Text>
-                      <Text style={styles.featuredSubtitle}>סידור, זמנים ומצפן</Text>
+                      <Text style={styles.featuredTitle}>ספר המידות</Text>
+                      <Text style={styles.featuredSubtitle}>לרבי נחמן מברסלב</Text>
                     </View>
                   </View>
                 </LinearGradient>
@@ -741,10 +865,26 @@ export default function HomeScreen({ navigation, userRole }) {
               </View>
             ) : (
               <View style={styles.quoteCard}>
-                <Text style={styles.quoteText}>"{quote}"</Text>
-                {quoteAuthor && quoteAuthor !== 'הרב הינוקא' && (
-                  <Text style={styles.quoteAuthor}>— {quoteAuthor}</Text>
-                )}
+                <View style={styles.quoteContent}>
+                  <View style={styles.quoteTextContainer}>
+                    <Text style={styles.quoteText}>"{quote}"</Text>
+                    {quoteAuthor && quoteAuthor !== 'הרב הינוקא' && (
+                      <Text style={styles.quoteAuthor}>— {quoteAuthor}</Text>
+                    )}
+                  </View>
+                  {quoteImage && (
+                    <Pressable
+                      onPress={() => setShowQuoteImageModal(true)}
+                      style={styles.quoteImageContainer}
+                    >
+                      <Image
+                        source={{ uri: quoteImage }}
+                        style={styles.quoteImage}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
+                  )}
+                </View>
                 <View style={styles.quoteFooter}>
                   <Pressable onPress={onShareQuote} style={styles.shareBtn} accessibilityRole="button">
                     <Ionicons name="share-social-outline" size={16} color="#ffffff" />
@@ -900,6 +1040,35 @@ export default function HomeScreen({ navigation, userRole }) {
                   placeholder="הרב הינוקא"
                   textAlign="right"
                 />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>תמונה (אופציונלי)</Text>
+                <View style={styles.imagePickerContainer}>
+                  {quoteImage ? (
+                    <View style={styles.imagePreviewContainer}>
+                      <Image
+                        source={{ uri: quoteImage }}
+                        style={styles.imagePreview}
+                        resizeMode="cover"
+                      />
+                      <Pressable
+                        style={styles.removeImageButton}
+                        onPress={() => setQuoteImage(null)}
+                      >
+                        <Ionicons name="close-circle" size={24} color="#dc2626" />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Pressable
+                      style={styles.imagePickerButton}
+                      onPress={handlePickQuoteImage}
+                    >
+                      <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
+                      <Text style={styles.imagePickerText}>בחר תמונה</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             </View>
 
@@ -1395,6 +1564,91 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginBottom: 12,
     fontStyle: 'italic',
+  },
+  quoteContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  quoteTextContainer: {
+    flex: 1,
+  },
+  quoteImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(30,58,138,0.1)',
+  },
+  quoteImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePickerContainer: {
+    marginTop: 8,
+  },
+  imagePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(30,58,138,0.2)',
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(30,58,138,0.05)',
+  },
+  imagePickerText: {
+    fontSize: 14,
+    fontFamily: 'Heebo_500Medium',
+    color: PRIMARY_BLUE,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalContent: {
+    width: '90%',
+    height: '80%',
+    position: 'relative',
+  },
+  imageModalCloseButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalImage: {
+    width: '100%',
+    height: '100%',
   },
   shareBtn: {
     flexDirection: 'row',

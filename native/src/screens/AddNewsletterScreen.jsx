@@ -25,6 +25,8 @@ export default function AddNewsletterScreen({ navigation, route }) {
   const [title, setTitle] = useState(newsletter?.title || '')
   const [description, setDescription] = useState(newsletter?.description || '')
   const [category, setCategory] = useState(newsletter?.category || '')
+  const [parsha, setParsha] = useState(newsletter?.parsha || '')
+  const [holiday, setHoliday] = useState(newsletter?.holiday || '')
   const [selectedLanguage, setSelectedLanguage] = useState(newsletter?.language || 'hebrew')
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -36,34 +38,65 @@ export default function AddNewsletterScreen({ navigation, route }) {
         copyToCacheDirectory: true,
       })
 
-      if (result.type === 'success' || result.assets) {
-        const file = result.assets ? result.assets[0] : result
+      console.log('Document picker result:', result)
+
+      if (result.canceled) {
+        console.log('User canceled document picker')
+        return
+      }
+
+      if (result.assets && result.assets.length > 0) {
+        const file = result.assets[0]
+        console.log('Selected file:', { name: file.name, uri: file.uri, mimeType: file.mimeType })
         setSelectedFile(file)
         Alert.alert('הצלחה', `הקובץ ${file.name} נבחר בהצלחה`)
+      } else if (result.type === 'success') {
+        // Old API format (expo-document-picker < v11)
+        console.log('Selected file (legacy):', { name: result.name, uri: result.uri })
+        setSelectedFile(result)
+        Alert.alert('הצלחה', `הקובץ ${result.name} נבחר בהצלחה`)
       }
     } catch (error) {
       console.error('Error picking file:', error)
-      Alert.alert('שגיאה', 'לא ניתן לבחור קובץ')
+      Alert.alert('שגיאה', 'לא ניתן לבחור קובץ: ' + error.message)
     }
   }
 
   const uploadFile = async (file) => {
     try {
+      console.log('Starting file upload:', { name: file.name, uri: file.uri })
+
+      // Verify file URI exists
+      if (!file.uri) {
+        throw new Error('URI של הקובץ לא נמצא')
+      }
+
       // Generate file path (without bucket name in path)
       const fileExtension = file.name.split('.').pop() || 'pdf'
       const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
 
+      console.log('Uploading file:', fileName)
+
       // Prefer dedicated bucket; helper will fallback if missing
-      return await uploadFileToSupabaseStorage(file.uri, 'newsletters', fileName, (progress) => {
+      const url = await uploadFileToSupabaseStorage(file.uri, 'newsletters', fileName, (progress) => {
         console.log(`Upload progress: ${progress}%`)
       })
+
+      console.log('File uploaded successfully:', url)
+      return url
     } catch (error) {
       console.error('Error uploading file:', error)
-      // Provide helpful error message for bucket not found
-      if (error.message?.includes('Bucket') && error.message?.includes('not found')) {
-        throw new Error('Bucket לא קיים. אנא צור bucket בשם "newsletters" ב-Supabase Dashboard תחת Storage.')
+
+      // Provide helpful error messages
+      if (error.message?.includes('Bucket') || error.message?.includes('bucket')) {
+        throw new Error('שגיאה בהעלאת הקובץ: הבאקט לא קיים. אנא צור bucket בשם "newsletters" ב-Supabase Dashboard.')
       }
-      throw error
+
+      if (error.message?.includes('קרוא')) {
+        throw new Error('לא ניתן לקרוא את הקובץ. נסה לבחור קובץ אחר.')
+      }
+
+      throw new Error('שגיאה בהעלאת הקובץ: ' + (error.message || 'שגיאה לא ידועה'))
     }
   }
 
@@ -93,6 +126,8 @@ export default function AddNewsletterScreen({ navigation, route }) {
         title: title.trim(),
         description: description.trim(),
         category: category.trim(),
+        parsha: parsha.trim() || null,
+        holiday: holiday.trim() || null,
         language: selectedLanguage,
         fileUrl,
         fileType,
@@ -176,7 +211,27 @@ export default function AddNewsletterScreen({ navigation, route }) {
             style={styles.input}
             value={category}
             onChangeText={setCategory}
-            placeholder="פרשת השבוע / חגים / כללי"
+            placeholder="כללי / פרשת השבוע / חגים"
+            placeholderTextColor="#9ca3af"
+            textAlign="right"
+          />
+
+          <Text style={styles.label}>פרשת השבוע (אופציונלי)</Text>
+          <TextInput
+            style={styles.input}
+            value={parsha}
+            onChangeText={setParsha}
+            placeholder="שם הפרשה לסינון"
+            placeholderTextColor="#9ca3af"
+            textAlign="right"
+          />
+
+          <Text style={styles.label}>חג (אופציונלי)</Text>
+          <TextInput
+            style={styles.input}
+            value={holiday}
+            onChangeText={setHoliday}
+            placeholder="שם החג לסינון"
             placeholderTextColor="#9ca3af"
             textAlign="right"
           />

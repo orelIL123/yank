@@ -113,39 +113,42 @@ export default function PrayerCommitmentScreen({ navigation }) {
     setSubmitting(true)
     try {
       const startDate = new Date().toISOString()
-      const endDate = Timestamp.fromMillis(startDate.toMillis() + (7 * 24 * 60 * 60 * 1000))
+      // Calculate endDate (7 days from now)
+      const endDate = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString()
 
       // מצא מישהו אחר שצריך אותה ישועה (אוטומטי)
       let assignedTo = null
       
       // נסה למצוא מישהו שצריך אותה ישועה
       try {
-        const matchQuery = query(
-          collection(db, 'prayerCommitments'),
-          where('prayerType', '==', formData.prayerType),
-          where('status', '==', 'active'),
-          limit(50) // נביא 50 ונסנן ידנית
-        )
-                // מצא מישהו שאין עליו עוד מתפללים (או הכי פחות)
+        // Get all active commitments with the same prayer type
+        const allCommitments = await db.getCollection('prayerCommitments', {
+          where: [
+            ['prayerType', '==', formData.prayerType],
+            ['status', '==', 'active']
+          ],
+          limit: 50
+        })
+        
+        // מצא מישהו שאין עליו עוד מתפללים (או הכי פחות)
         let bestMatch = null
         let minPrayingCount = Infinity
         
-        for (const doc of matchSnapshot.docs) {
-          const matchData = doc.data()
-          
+        for (const matchData of allCommitments) {
           // סנן את עצמו
           if (matchData.userId === auth.currentUser.uid) {
             continue
           }
           
           // ספור כמה אנשים מתפללים עליו
-          const prayingForHimQuery = query(
-            collection(db, 'prayerCommitments'),
-            where('prayerType', '==', formData.prayerType),
-            where('status', '==', 'active'),
-            where('prayingForUserId', '==', matchData.userId)
-          )
-          const prayingCount = (await getDocs(prayingForHimQuery)).size
+          const prayingForHim = await db.getCollection('prayerCommitments', {
+            where: [
+              ['prayerType', '==', formData.prayerType],
+              ['status', '==', 'active'],
+              ['prayingForUserId', '==', matchData.userId]
+            ]
+          })
+          const prayingCount = prayingForHim.length
           
           // בחר את האדם עם הכי פחות מתפללים
           if (prayingCount < minPrayingCount) {
@@ -180,7 +183,7 @@ export default function PrayerCommitmentScreen({ navigation }) {
       }
 
       // יצירת התחייבות חדשה - האדם מתפלל על האדם שנמצא
-      await addDoc(collection(db, 'prayerCommitments'), {
+      await db.addDocument('prayerCommitments', {
         userId: auth.currentUser.uid,
         userName: formData.userName.trim(),
         prayerType: formData.prayerType,
@@ -226,12 +229,24 @@ export default function PrayerCommitmentScreen({ navigation }) {
 
   const markDayComplete = async (commitmentId, day) => {
     try {
-      const commitmentRef = doc(db, 'prayerCommitments', commitmentId)
-      await updateDoc(commitmentRef, {
-        [`dailyProgress.${day}.completed`]: true,
-        [`dailyProgress.${day}.date`]: new Date().toISOString(),
+      // Get current commitment
+      const commitment = await db.getDocument('prayerCommitments', commitmentId)
+      
+      // Update daily progress
+      const updatedProgress = {
+        ...commitment.dailyProgress,
+        [day]: {
+          completed: true,
+          date: new Date().toISOString()
+        }
+      }
+      
+      // Update document
+      await db.updateDocument('prayerCommitments', commitmentId, {
+        dailyProgress: updatedProgress,
         updatedAt: new Date().toISOString()
       })
+      
       loadCommitments()
     } catch (error) {
       console.error('Error updating progress:', error)
@@ -241,7 +256,8 @@ export default function PrayerCommitmentScreen({ navigation }) {
 
   const getDaysRemaining = (endDate) => {
     if (!endDate) return 0
-    const end = endDate.toDate()
+    // Handle both Date objects and ISO strings
+    const end = endDate instanceof Date ? endDate : new Date(endDate)
     const now = new Date()
     const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24))
     return Math.max(0, diff)

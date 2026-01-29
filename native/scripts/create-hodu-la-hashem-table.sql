@@ -44,3 +44,4 @@ WITH CHECK (auth.role() = 'authenticated');
 
 SELECT 'hodu_la_hashem table created successfully! ✨' as status;
 
+

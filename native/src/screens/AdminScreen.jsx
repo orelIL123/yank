@@ -192,9 +192,15 @@ function FeaturedTopicForm() {
     setUploading(true)
     try {
       const path = `featured/featured-topic-${Date.now()}.jpg`
-      const url = await uploadImageToStorage(imageUri, path, (progress) => {
-        console.log(`Upload progress: ${progress}%`)
-      })
+      let url
+      try {
+        url = await uploadImageToStorage(imageUri, path, (progress) => {
+          console.log(`Upload progress: ${progress}%`)
+        })
+      } catch (firebaseError) {
+        console.warn('Firebase upload failed, trying Supabase:', firebaseError?.message)
+        url = await uploadFileToSupabaseStorage(imageUri, 'newsletters', path, () => {})
+      }
       setConfig({ ...config, featured_topic_image_url: url })
       setImageUri(null)
       Alert.alert('הצלחה!', 'התמונה הועלתה בהצלחה')
@@ -2390,6 +2396,7 @@ function NotificationsForm() {
     title: '',
     message: '',
     icon: 'notifications',
+    link: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -2423,6 +2430,7 @@ function NotificationsForm() {
         title: form.title,
         message: form.message,
         icon: form.icon,
+        link: form.link?.trim() || null,
         isActive: true,
         readBy: [],
         createdAt: new Date().toISOString(),
@@ -2473,6 +2481,7 @@ function NotificationsForm() {
                   title: '',
                   message: '',
                   icon: 'notifications',
+                  link: '',
                 })
               }
             }
@@ -2491,6 +2500,7 @@ function NotificationsForm() {
                   title: '',
                   message: '',
                   icon: 'notifications',
+                  link: '',
                 })
               }
             }
@@ -2533,6 +2543,20 @@ function NotificationsForm() {
           maxLength={500}
         />
         <Text style={styles.charCount}>{form.message.length}/500</Text>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>קישור (אופציונלי)</Text>
+        <TextInput
+          style={styles.input}
+          value={form.link}
+          onChangeText={text => setForm({ ...form, link: text })}
+          placeholder="https://..."
+          placeholderTextColor="#9ca3af"
+          autoCapitalize="none"
+          keyboardType="url"
+          textAlign="right"
+        />
       </View>
 
       <View style={styles.formGroup}>

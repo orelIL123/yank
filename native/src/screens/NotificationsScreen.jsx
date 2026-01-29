@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { auth } from '../config/firebase'
 import db from '../services/database'
 import AppHeader from '../components/AppHeader'
+import NotificationModal from '../components/NotificationModal'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -27,6 +28,8 @@ export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false)
+  const [selectedNotification, setSelectedNotification] = useState(null)
 
   useEffect(() => {
     loadNotifications()
@@ -85,25 +88,10 @@ export default function NotificationsScreen({ navigation }) {
 
   const handleNotificationPress = (notification) => {
     markAsRead(notification.id)
-
-    // If notification has a link, open it
-    if (notification.link) {
-      // If it's a YouTube link (live stream), open in browser
-      if (notification.link.includes('youtube.com') || notification.link.includes('youtu.be')) {
-        import('react-native').then(({ Linking }) => {
-          Linking.openURL(notification.link).catch(() => {
-            Alert.alert('שגיאה', 'לא ניתן לפתוח את הקישור')
-          })
-        })
-      } else {
-        // Handle other link types if needed
-        import('react-native').then(({ Linking }) => {
-          Linking.openURL(notification.link).catch(() => {
-            Alert.alert('שגיאה', 'לא ניתן לפתוח את הקישור')
-          })
-        })
-      }
-    }
+    
+    // Show modal with notification
+    setSelectedNotification(notification)
+    setNotificationModalVisible(true)
   }
 
   const formatDate = (timestamp) => {
@@ -218,6 +206,15 @@ export default function NotificationsScreen({ navigation }) {
           }
         />
       )}
+
+      <NotificationModal
+        visible={notificationModalVisible}
+        notification={selectedNotification}
+        onClose={() => {
+          setNotificationModalVisible(false)
+          setSelectedNotification(null)
+        }}
+      />
     </SafeAreaView>
   )
 }

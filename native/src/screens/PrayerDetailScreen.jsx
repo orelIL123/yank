@@ -1,8 +1,13 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Share, ActivityIndicator, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Share, ActivityIndicator, Dimensions, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import * as FileSystem from 'expo-file-system'
+import * as Sharing from 'expo-sharing'
+
+import AppHeader from '../components/AppHeader'
+import { scheduleNotification } from '../utils/notifications'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -10,15 +15,17 @@ const DEEP_BLUE = '#0b1b3a'
 const { width } = Dimensions.get('window')
 
 export default function PrayerDetailScreen({ route, navigation }) {
-  const { prayer } = route.params || {}
+  const { prayer, language = 'he' } = route.params || {}
   const [imageLoading, setImageLoading] = useState(true)
   const [imageError, setImageError] = useState(false)
-  
+  const [sharingPDF, setSharingPDF] = useState(false)
+  const [reminderScheduled, setReminderScheduled] = useState(false)
+
   // Get all images - support both single imageUrl and multiple imageUrls
   const getImages = () => {
     const images = []
-    
-    // Check for imageUrls array (multiple images)
+
+    // Check for imageUrls array (multiple images) - this is the main field
     if (prayer?.imageUrls && Array.isArray(prayer.imageUrls)) {
       prayer.imageUrls.forEach(url => {
         if (typeof url === 'string' && url.trim() !== '' && url.startsWith('http')) {
@@ -26,7 +33,16 @@ export default function PrayerDetailScreen({ route, navigation }) {
         }
       })
     }
-    
+
+    // Check for language-specific images if no default images
+    if (images.length === 0 && prayer?.imageUrls?.[language] && Array.isArray(prayer.imageUrls[language])) {
+      prayer.imageUrls[language].forEach(url => {
+        if (typeof url === 'string' && url.trim() !== '' && url.startsWith('http')) {
+          images.push({ uri: url })
+        }
+      })
+    }
+
     // Also check for single imageUrl (backward compatibility)
     if (images.length === 0 && prayer?.imageUrl) {
       if (typeof prayer.imageUrl === 'string' && prayer.imageUrl.trim() !== '') {
@@ -35,52 +51,131 @@ export default function PrayerDetailScreen({ route, navigation }) {
         }
       }
     }
-    
+
     return images
   }
-  
+
   const images = getImages()
-  const imageSource = images.length > 0 ? images[0] : null
-  
+
+  // Get PDF URL for selected language
+  const getPDFUrl = () => {
+    // Check for language-specific PDF
+    if (prayer?.pdfUrls?.[language]) {
+      return prayer.pdfUrls[language]
+    }
+    // Fallback to default PDF
+    return prayer?.pdfUrl || null
+  }
+
+  const pdfUrl = getPDFUrl()
+
   // Debug logging
   React.useEffect(() => {
     if (prayer) {
       console.log('Prayer data:', {
         id: prayer.id,
         title: prayer.title,
-        imageUrl: prayer.imageUrl,
-        pdfUrl: prayer.pdfUrl,
-        hasImageSource: !!imageSource
+        language: language,
+        hasImages: images.length > 0,
+        hasPDF: !!pdfUrl
       })
     }
-  }, [prayer, imageSource])
+  }, [prayer, language, images, pdfUrl])
+
+  const handleSharePDF = async () => {
+    if (!pdfUrl) {
+      Alert.alert('שגיאה', 'אין PDF זמין')
+      return
+    }
+
+    setSharingPDF(true)
+    try {
+      // Download PDF to cache
+      const fileUri = FileSystem.cacheDirectory + `prayer_${prayer.id}_${language}.pdf`
+      const downloadResumable = FileSystem.createDownloadResumable(
+        pdfUrl,
+        fileUri
+      )
+
+      const { uri } = await downloadResumable.downloadAsync()
+
+      // Check if sharing is available
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: prayer.title
+        })
+      } else {
+        // Fallback to basic share
+        await Share.share({
+          message: `${prayer.title}\n\n${prayer.description || ''}`,
+          url: pdfUrl
+        })
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error)
+      Alert.alert('שגיאה', 'לא ניתן לשתף את ה-PDF')
+    } finally {
+      setSharingPDF(false)
+    }
+  }
 
   const handleShare = async () => {
+    if (pdfUrl) {
+      await handleSharePDF()
+    } else {
+      // Share text/images if no PDF
+      try {
+        await Share.share({
+          message: `${prayer.title}\n\n${prayer.description || ''}`
+        })
+      } catch (error) {
+        console.error('Error sharing:', error)
+      }
+    }
+  }
+
+  const handleRemindLater = () => {
+    if (reminderScheduled) {
+      Alert.alert('נקבע', 'ההתראה להזכיר כבר נקבעה')
+      return
+    }
+    const options = [
+      { text: 'ביטול', style: 'cancel' },
+      { text: 'בעוד 30 דקות', onPress: () => scheduleReminder(30) },
+      { text: 'בעוד שעה', onPress: () => scheduleReminder(60) },
+      { text: 'בעוד 3 שעות', onPress: () => scheduleReminder(180) },
+    ]
+    Alert.alert('הזכר לי לקרוא בהמשך', 'מתי להזכיר?', options)
+  }
+
+  const scheduleReminder = async (minutesFromNow) => {
     try {
-      const message = `${prayer.title}\n\n${prayer.description || ''}\n\n${prayer.content || ''}`
-      await Share.share({
-        message: message
+      const triggerDate = new Date(Date.now() + minutesFromNow * 60 * 1000)
+      await scheduleNotification({
+        title: 'הזכרה לתפילה',
+        body: `${prayer.title} – הזמן לקרוא בהמשך`,
+        data: { screen: 'Prayers', prayerId: prayer.id },
+        triggerDate,
       })
+      setReminderScheduled(true)
+      Alert.alert('נקבע', `תזכורת נקבעה ל־${minutesFromNow} דקות מעכשיו`)
     } catch (error) {
-      console.error('Error sharing:', error)
+      console.error('Error scheduling reminder:', error)
+      Alert.alert('שגיאה', 'לא ניתן לקבוע תזכורת. בדוק הרשאות התראות.')
     }
   }
 
   if (!prayer) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Pressable
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-            accessibilityRole="button"
-          >
-            <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-          </Pressable>
-          <Text style={styles.headerTitle}>תפילה</Text>
-          <View style={{ width: 24 }} />
-        </View>
+        <AppHeader
+          title="תפילה"
+          showBackButton={true}
+          onBackPress={() => navigation.goBack()}
+        />
         <View style={styles.errorContainer}>
+          <Ionicons name="document-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
           <Text style={styles.errorText}>לא נמצאה תפילה</Text>
         </View>
       </SafeAreaView>
@@ -90,31 +185,56 @@ export default function PrayerDetailScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-        >
-          <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
-        </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>{prayer.title}</Text>
-        <Pressable
-          style={styles.shareBtn}
-          onPress={handleShare}
-          accessibilityRole="button"
-        >
-          <Ionicons name="share-social-outline" size={20} color={PRIMARY_BLUE} />
-        </Pressable>
-      </View>
 
-      <ScrollView 
+      <AppHeader
+        title={prayer.title}
+        showBackButton={true}
+        onBackPress={() => navigation.goBack()}
+        rightIcon="share-social-outline"
+        onRightIconPress={handleShare}
+      />
+
+      <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Prayer Images */}
+        {/* Prayer Title */}
+        <Text style={styles.title}>{prayer.title}</Text>
+
+        {/* Prayer Description */}
+        {prayer.description && (
+          <Text style={styles.description}>{prayer.description}</Text>
+        )}
+
+        {/* Prayer Category */}
+        {prayer.category && (
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryText}>{prayer.category}</Text>
+          </View>
+        )}
+
+        {/* PDF View Button */}
+        {pdfUrl ? (
+          <Pressable
+            style={styles.pdfButton}
+            onPress={() => {
+              console.log('Opening PDF:', pdfUrl)
+              navigation.navigate('PdfViewer', {
+                pdf: { uri: pdfUrl },
+                title: prayer.title
+              })
+            }}
+            accessibilityRole="button"
+          >
+            <Ionicons name="document-text-outline" size={24} color="#fff" />
+            <Text style={styles.pdfButtonText}>פתח תפילה ב-PDF</Text>
+          </Pressable>
+        ) : null}
+
+        {/* Prayer Images Gallery */}
         {images.length > 0 ? (
           <View style={styles.imagesContainer}>
+            <Text style={styles.sectionTitle}>תצוגת תפילה</Text>
             {images.length === 1 ? (
               // Single image - full width
               <View style={styles.imageContainer}>
@@ -126,7 +246,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
                 <Image
                   source={images[0]}
                   style={styles.prayerImage}
-                  resizeMode="cover"
+                  resizeMode="contain"
                   onLoadStart={() => setImageLoading(true)}
                   onLoadEnd={() => setImageLoading(false)}
                   onError={(error) => {
@@ -144,9 +264,9 @@ export default function PrayerDetailScreen({ route, navigation }) {
               </View>
             ) : (
               // Multiple images - scrollable horizontal gallery
-              <ScrollView 
-                horizontal 
-                pagingEnabled 
+              <ScrollView
+                horizontal
+                pagingEnabled
                 showsHorizontalScrollIndicator={true}
                 contentContainerStyle={styles.imagesGallery}
               >
@@ -155,7 +275,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
                     <Image
                       source={img}
                       style={styles.prayerImage}
-                      resizeMode="cover"
+                      resizeMode="contain"
                       onLoadStart={() => setImageLoading(true)}
                       onLoadEnd={() => setImageLoading(false)}
                       onError={(error) => {
@@ -176,52 +296,80 @@ export default function PrayerDetailScreen({ route, navigation }) {
               </ScrollView>
             )}
           </View>
+        ) : pdfUrl ? (
+          // If no images but has PDF, show a placeholder
+          <View style={styles.pdfPlaceholder}>
+            <Ionicons name="document-text" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+            <Text style={styles.pdfPlaceholderText}>
+              התפילה זמינה בפורמט PDF
+            </Text>
+            <Text style={styles.pdfPlaceholderSubtext}>
+              לחץ על הכפתור למעלה לצפייה
+            </Text>
+          </View>
         ) : (
+          // No content available
           <View style={styles.imagePlaceholder}>
             <Ionicons name="image-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.2 }} />
+            <Text style={styles.placeholderText}>אין תוכן זמין</Text>
           </View>
         )}
 
-        {/* Prayer Category */}
-        {prayer.category && (
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{prayer.category}</Text>
-          </View>
-        )}
+        {/* Remind me later */}
+        <Pressable
+          style={styles.remindButton}
+          onPress={handleRemindLater}
+          disabled={reminderScheduled}
+          accessibilityRole="button"
+        >
+          <Ionicons name="notifications-outline" size={22} color={PRIMARY_BLUE} />
+          <Text style={styles.remindButtonText}>
+            {reminderScheduled ? 'תזכורת נקבעה' : 'הזכר לי לקרוא בהמשך'}
+          </Text>
+        </Pressable>
 
-        {/* Prayer Title */}
-        <Text style={styles.title}>{prayer.title}</Text>
-
-        {/* Prayer Description */}
-        {prayer.description && (
-          <Text style={styles.description}>{prayer.description}</Text>
-        )}
-
-        {/* Prayer Content */}
-        {prayer.content && (
-          <View style={styles.contentContainer}>
-            <Text style={styles.contentText}>{prayer.content}</Text>
-          </View>
-        )}
-
-        {/* PDF Download Button */}
-        {prayer.pdfUrl && prayer.pdfUrl.trim() !== '' && prayer.pdfUrl.startsWith('http') ? (
+        {/* Share Buttons */}
+        <View style={styles.shareButtons}>
           <Pressable
-            style={styles.pdfButton}
-            onPress={() => {
-              console.log('Opening PDF:', prayer.pdfUrl)
-              // Only use URL from Firestore - no local files
-              navigation.navigate('PdfViewer', { 
-                pdf: { uri: prayer.pdfUrl }, 
-                title: prayer.title 
-              })
-            }}
+            style={styles.shareButton}
+            onPress={handleShare}
+            disabled={sharingPDF}
             accessibilityRole="button"
           >
-            <Ionicons name="document-text-outline" size={24} color="#fff" />
-            <Text style={styles.pdfButtonText}>פתיחת PDF</Text>
+            {sharingPDF ? (
+              <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+            ) : (
+              <>
+                <Ionicons name="share-social" size={22} color={PRIMARY_BLUE} />
+                <Text style={styles.shareButtonText}>שתף תפילה</Text>
+              </>
+            )}
           </Pressable>
-        ) : null}
+
+          {pdfUrl && (
+            <Pressable
+              style={[styles.shareButton, styles.shareButtonWhatsApp]}
+              onPress={async () => {
+                // Share specifically to WhatsApp
+                try {
+                  await Sharing.shareAsync(pdfUrl, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: prayer.title,
+                    UTI: 'com.adobe.pdf'
+                  })
+                } catch (error) {
+                  console.error('Error sharing to WhatsApp:', error)
+                  await handleShare()
+                }
+              }}
+              disabled={sharingPDF}
+              accessibilityRole="button"
+            >
+              <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
+              <Text style={[styles.shareButtonText, { color: '#25D366' }]}>WhatsApp</Text>
+            </Pressable>
+          )}
+        </View>
 
         {/* Footer */}
         <View style={styles.footer}>
@@ -238,53 +386,77 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: BG,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(11,27,58,0.1)',
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(30,58,138,0.12)',
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
-    color: PRIMARY_BLUE,
-    textAlign: 'center',
-    marginHorizontal: 8,
-  },
-  shareBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(30,58,138,0.12)',
-  },
   content: {
     padding: 20,
     paddingBottom: 40,
   },
-  imagesContainer: {
+  title: {
+    fontSize: 28,
+    fontFamily: 'Heebo_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 12,
+    lineHeight: 38,
+  },
+  description: {
+    fontSize: 16,
+    fontFamily: 'Poppins_500Medium',
+    color: '#6b7280',
+    textAlign: 'right',
     marginBottom: 20,
+    lineHeight: 24,
+  },
+  categoryBadge: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(30,58,138,0.14)',
+    marginBottom: 20,
+  },
+  categoryText: {
+    color: PRIMARY_BLUE,
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    letterSpacing: 0.5,
+  },
+  pdfButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: PRIMARY_BLUE,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    marginBottom: 24,
+    shadowColor: PRIMARY_BLUE,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  pdfButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 16,
+  },
+  imagesContainer: {
+    marginBottom: 24,
   },
   imagesGallery: {
     gap: 0,
   },
   imageContainer: {
     width: width - 40,
-    height: 250,
+    height: 400,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -293,6 +465,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
     position: 'relative',
+    backgroundColor: '#f5f5f5',
   },
   imageCounter: {
     position: 'absolute',
@@ -321,6 +494,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.8)',
+    zIndex: 10,
   },
   imageErrorContainer: {
     position: 'absolute',
@@ -340,83 +514,87 @@ const styles = StyleSheet.create({
   },
   imagePlaceholder: {
     width: '100%',
-    height: 200,
+    height: 300,
     borderRadius: 20,
     backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  categoryBadge: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: 'rgba(30,58,138,0.14)',
-    marginBottom: 16,
-  },
-  categoryText: {
-    color: PRIMARY_BLUE,
-    fontSize: 13,
-    fontFamily: 'Poppins_600SemiBold',
-    letterSpacing: 0.5,
-  },
-  title: {
-    fontSize: 28,
-    fontFamily: 'Heebo_700Bold',
-    color: DEEP_BLUE,
-    textAlign: 'right',
-    marginBottom: 12,
-    lineHeight: 38,
-  },
-  description: {
+  placeholderText: {
+    marginTop: 12,
     fontSize: 16,
     fontFamily: 'Poppins_500Medium',
     color: '#6b7280',
-    textAlign: 'right',
-    marginBottom: 24,
-    lineHeight: 24,
   },
-  contentContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
+  pdfPlaceholder: {
+    width: '100%',
+    paddingVertical: 60,
+    borderRadius: 20,
+    backgroundColor: 'rgba(30,58,138,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(11,27,58,0.08)',
+    borderWidth: 2,
+    borderColor: 'rgba(30,58,138,0.1)',
+    borderStyle: 'dashed',
   },
-  contentText: {
+  pdfPlaceholderText: {
+    marginTop: 16,
     fontSize: 18,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Poppins_600SemiBold',
     color: DEEP_BLUE,
-    textAlign: 'right',
-    lineHeight: 32,
   },
-  pdfButton: {
+  pdfPlaceholderSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+  },
+  remindButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    backgroundColor: PRIMARY_BLUE,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    marginBottom: 24,
-    shadowColor: PRIMARY_BLUE,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    backgroundColor: 'rgba(30,58,138,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.2)',
+    marginBottom: 16,
   },
-  pdfButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  remindButtonText: {
+    fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
+    color: PRIMARY_BLUE,
+  },
+  shareButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  shareButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    borderWidth: 1.5,
+    borderColor: PRIMARY_BLUE,
+  },
+  shareButtonWhatsApp: {
+    backgroundColor: 'rgba(37,211,102,0.1)',
+    borderColor: '#25D366',
+  },
+  shareButtonText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: PRIMARY_BLUE,
   },
   footer: {
     alignItems: 'center',
@@ -436,9 +614,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
+    marginTop: 16,
     fontSize: 16,
     fontFamily: 'Poppins_500Medium',
     color: '#6b7280',
   },
 })
-

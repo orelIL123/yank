@@ -88,3 +88,4 @@ npm install
 cd ios && pod install && cd .. # רק ל-iOS
 ```
 
+
