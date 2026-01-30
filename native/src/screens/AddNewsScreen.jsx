@@ -1,15 +1,29 @@
 import React, { useMemo, useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Image, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
 import db from '../services/database'
-import { pickImage, uploadFileToSupabaseStorage } from '../utils/storage'
+import { pickImage, uploadFileToSupabaseStorage, pickVideo } from '../utils/storage'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
+
+// Helper function to extract YouTube video ID from URL
+function extractYouTubeId(url) {
+  if (!url) return null
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^&\n?#]+)/,
+    /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+  ]
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match && match[1]) return match[1]
+  }
+  return null
+}
 
 function normalizeFilenameFromUri(uri) {
   const raw = (uri || '').split('/').pop() || 'image.jpg'
@@ -27,14 +41,24 @@ export default function AddNewsScreen({ navigation, route, userRole }) {
   const [summary, setSummary] = useState(article?.summary || '')
   const [content, setContent] = useState(article?.content || '')
   const [selectedImage, setSelectedImage] = useState(null)
+  const [selectedVideo, setSelectedVideo] = useState(null)
+  const [youtubeUrl, setYouTubeUrl] = useState(article?.youtubeUrl || '')
+  const [videoType, setVideoType] = useState(article?.youtubeId ? 'youtube' : (article?.videoUrl ? 'upload' : 'none'))
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
-  const headerTitle = useMemo(() => (isEditing ? 'עריכת כתבה' : 'הוספת כתבה'), [isEditing])
+  const headerTitle = useMemo(() => (isEditing ? 'עריכת תיעוד' : 'הוספת תיעוד'), [isEditing])
 
   const handlePickImage = async () => {
     const image = await pickImage({ aspect: [16, 9], quality: 0.85 })
     if (!image?.uri) return
     setSelectedImage(image)
+  }
+
+  const handlePickVideo = async () => {
+    const video = await pickVideo()
+    if (!video?.uri) return
+    setSelectedVideo(video)
   }
 
   const handleSubmit = async () => {
@@ -54,14 +78,20 @@ export default function AddNewsScreen({ navigation, route, userRole }) {
 
     try {
       setSaving(true)
+      setUploadProgress(0)
 
       const nowIso = new Date().toISOString()
+      const youtubeId = videoType === 'youtube' ? extractYouTubeId(youtubeUrl) : null
+      
       const baseData = {
         title: title.trim(),
         summary: summary.trim(),
         content: content.trim(),
         date: article?.date || nowIso,
         updatedAt: nowIso,
+        youtubeUrl: videoType === 'youtube' ? youtubeUrl.trim() : '',
+        youtubeId: youtubeId,
+        videoUrl: videoType === 'upload' ? (article?.videoUrl || '') : '',
       }
 
       let saved = null
@@ -74,6 +104,19 @@ export default function AddNewsScreen({ navigation, route, userRole }) {
           createdAt: nowIso,
           imageUrl: '',
         })
+      }
+
+      // Upload video if selected
+      if (videoType === 'upload' && selectedVideo?.uri) {
+        const filename = normalizeFilenameFromUri(selectedVideo.uri)
+        const safeName = filename.replace(/[^a-zA-Z0-9.-]/g, '_')
+        const path = `${saved.id}/video_${Date.now()}_${safeName}`
+
+        const videoUrl = await uploadFileToSupabaseStorage(selectedVideo.uri, 'news', path, (p) => {
+          setUploadProgress(p)
+        })
+
+        await db.updateDocument('news', saved.id, { videoUrl, updatedAt: new Date().toISOString() })
       }
 
       // Upload image (optional)
@@ -115,7 +158,17 @@ export default function AddNewsScreen({ navigation, route, userRole }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
         <View style={styles.formCard}>
           <Text style={styles.label}>כותרת *</Text>
           <TextInput
@@ -164,6 +217,60 @@ export default function AddNewsScreen({ navigation, route, userRole }) {
               resizeMode="cover"
             />
           )}
+
+          <Text style={styles.label}>וידאו (אופציונלי)</Text>
+          <View style={styles.videoTypeRow}>
+            <Pressable 
+              style={[styles.videoTypeBtn, videoType === 'none' && styles.videoTypeBtnActive]} 
+              onPress={() => setVideoType('none')}
+            >
+              <Text style={[styles.videoTypeBtnText, videoType === 'none' && styles.videoTypeBtnTextActive]}>ללא</Text>
+            </Pressable>
+            <Pressable 
+              style={[styles.videoTypeBtn, videoType === 'youtube' && styles.videoTypeBtnActive]} 
+              onPress={() => setVideoType('youtube')}
+            >
+              <Text style={[styles.videoTypeBtnText, videoType === 'youtube' && styles.videoTypeBtnTextActive]}>YouTube</Text>
+            </Pressable>
+            <Pressable 
+              style={[styles.videoTypeBtn, videoType === 'upload' && styles.videoTypeBtnActive]} 
+              onPress={() => setVideoType('upload')}
+            >
+              <Text style={[styles.videoTypeBtnText, videoType === 'upload' && styles.videoTypeBtnTextActive]}>העלאה</Text>
+            </Pressable>
+          </View>
+
+          {videoType === 'youtube' && (
+            <TextInput
+              style={styles.input}
+              value={youtubeUrl}
+              onChangeText={setYouTubeUrl}
+              placeholder="קישור ליוטיוב"
+              placeholderTextColor="#9ca3af"
+              textAlign="right"
+              autoCapitalize="none"
+            />
+          )}
+
+          {videoType === 'upload' && (
+            <View>
+              <Pressable style={styles.imageBtn} onPress={handlePickVideo} accessibilityRole="button">
+                <Ionicons name="videocam-outline" size={22} color={PRIMARY_BLUE} />
+                <Text style={styles.imageBtnText}>{selectedVideo ? 'החלף סרטון' : 'בחר סרטון'}</Text>
+              </Pressable>
+              {selectedVideo && (
+                <Text style={styles.videoSelectedText}>סרטון נבחר: {selectedVideo.uri.split('/').pop()}</Text>
+              )}
+              {saving && videoType === 'upload' && selectedVideo && (
+                <View style={styles.progressContainer}>
+                  <Text style={styles.progressText}>מעלה וידאו: {Math.round(uploadProgress)}%</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         <Pressable
@@ -187,7 +294,8 @@ export default function AddNewsScreen({ navigation, route, userRole }) {
         {!canManage && (
           <Text style={styles.noPermText}>רק אדמין יכול להוסיף/לערוך כתבות.</Text>
         )}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
@@ -220,7 +328,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingBottom: 36,
+    paddingBottom: 120,
     gap: 16,
   },
   formCard: {
@@ -278,6 +386,57 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#e5e7eb',
     marginTop: 6,
+  },
+  videoTypeRow: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+    marginTop: 4,
+  },
+  videoTypeBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  videoTypeBtnActive: {
+    backgroundColor: PRIMARY_BLUE,
+    borderColor: PRIMARY_BLUE,
+  },
+  videoTypeBtnText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#64748b',
+  },
+  videoTypeBtnTextActive: {
+    color: '#fff',
+  },
+  videoSelectedText: {
+    fontSize: 12,
+    color: PRIMARY_BLUE,
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  progressContainer: {
+    marginTop: 10,
+  },
+  progressText: {
+    fontSize: 12,
+    color: PRIMARY_BLUE,
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: PRIMARY_BLUE,
   },
   submitButton: {
     borderRadius: 16,

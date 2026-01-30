@@ -13,6 +13,8 @@ import {
   TextInput,
   Modal,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -118,6 +120,15 @@ const LEARNING_CATEGORIES = [
     icon: 'flame-outline',
     color: '#EF4444',
     navigateTo: 'SeferHaMidot',
+  },
+  {
+    id: 'bst-stories',
+    title: 'סיפורי הבעל שם טוב',
+    description: 'סיפורים מופלאים - סרטון חדש כל מוצש',
+    icon: 'book-outline',
+    color: '#F59E0B',
+    navigateTo: 'BaalShemTovStories',
+    badge: 'כל מוצש',
   },
 ];
 
@@ -471,6 +482,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           transparent={true}
           onRequestClose={() => setEditModalVisible(false)}
         >
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
@@ -480,7 +492,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                 <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
               </View>
 
-              <ScrollView style={styles.modalBody}>
+              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>כותרת</Text>
                   <TextInput
@@ -556,6 +568,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
               </View>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
       </SafeAreaView>
     );
@@ -628,6 +641,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           transparent={true}
           onRequestClose={() => setEditModalVisible(false)}
         >
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
@@ -637,7 +651,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                 <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
               </View>
 
-              <ScrollView style={styles.modalBody}>
+              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>כותרת</Text>
                   <TextInput
@@ -713,6 +727,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
               </View>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
       </SafeAreaView>
     );
@@ -772,6 +787,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           transparent={true}
           onRequestClose={() => setEditModalVisible(false)}
         >
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
@@ -781,7 +797,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                 <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
               </View>
 
-              <ScrollView style={styles.modalBody}>
+              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>כותרת</Text>
                   <TextInput
@@ -857,6 +873,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
               </View>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
       </SafeAreaView>
     );
@@ -901,7 +918,14 @@ export default function DailyLearningScreen({ navigation, userRole }) {
             >
               <View style={styles.cardContent}>
                 <View style={styles.cardTextContainer}>
-                  <Text style={styles.categoryTitle}>{category.title}</Text>
+                  <View style={styles.categoryTitleRow}>
+                    <Text style={styles.categoryTitle}>{category.title}</Text>
+                    {category.badge ? (
+                      <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryBadgeText}>{category.badge}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                   {category.description ? (
                     <Text style={styles.categoryDescription}>{category.description}</Text>
                   ) : null}
@@ -926,6 +950,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         transparent={true}
         onRequestClose={() => setEditModalVisible(false)}
       >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -935,7 +960,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
               <Text style={styles.modalTitle}>עריכת תוכן - {editingCategory?.title}</Text>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
               <View style={styles.formGroup}>
                 <Text style={styles.label}>כותרת</Text>
                 <TextInput
@@ -1011,6 +1036,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1030,12 +1056,12 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   mainTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: FONTS.bold,
     color: COLORS.deepBlue,
     textAlign: 'right',
     marginBottom: 12,
-    lineHeight: 32,
+    lineHeight: 28,
   },
   subtitleRow: {
     flexDirection: 'row',
@@ -1101,13 +1127,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
   },
+  categoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    alignSelf: 'flex-end',
+  },
+  categoryBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.semiBold,
+    color: '#F59E0B',
+  },
   categoryTitle: {
     fontSize: 18,
     fontFamily: 'Heebo_600SemiBold',
     color: COLORS.deepBlue,
     textAlign: 'right',
     letterSpacing: 0.3,
-    marginBottom: 6,
   },
   categoryDescription: {
     fontSize: 14,

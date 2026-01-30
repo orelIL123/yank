@@ -9,10 +9,11 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { PERMISSIONS, PERMISSION_LABELS } from '../utils/permissions';
 
@@ -34,7 +35,7 @@ export default function ManagePermissionsScreen({ navigation }) {
       const usersData = usersSnapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(user => user.role !== 'admin'); // Don't show admins
-      
+
       setUsers(usersData);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -55,7 +56,7 @@ export default function ManagePermissionsScreen({ navigation }) {
     try {
       const currentPermissions = selectedUser.permissions || [];
       const hasPermission = currentPermissions.includes(permission);
-      
+
       const newPermissions = hasPermission
         ? currentPermissions.filter(p => p !== permission)
         : [...currentPermissions, permission];
@@ -67,8 +68,8 @@ export default function ManagePermissionsScreen({ navigation }) {
 
       // Update local state
       setSelectedUser({ ...selectedUser, permissions: newPermissions });
-      setUsers(users.map(u => 
-        u.id === selectedUser.id 
+      setUsers(users.map(u =>
+        u.id === selectedUser.id
           ? { ...u, permissions: newPermissions }
           : u
       ));
@@ -214,14 +215,23 @@ export default function ManagePermissionsScreen({ navigation }) {
 
             <Text style={styles.modalSubtitle}>{selectedUser?.email}</Text>
 
-            <View style={styles.permissionsContainer}>
-              <Text style={styles.sectionTitle}>הרשאות זמינות:</Text>
-              {renderPermissionItem(PERMISSIONS.PRAYERS, PERMISSION_LABELS[PERMISSIONS.PRAYERS])}
-              {renderPermissionItem(PERMISSIONS.VIDEOS, PERMISSION_LABELS[PERMISSIONS.VIDEOS])}
-              {renderPermissionItem(PERMISSIONS.MUSIC, PERMISSION_LABELS[PERMISSIONS.MUSIC])}
-              {renderPermissionItem(PERMISSIONS.BOOKS, PERMISSION_LABELS[PERMISSIONS.BOOKS])}
-              {renderPermissionItem(PERMISSIONS.LEARNING, PERMISSION_LABELS[PERMISSIONS.LEARNING])}
-            </View>
+            <ScrollView style={styles.permissionsScrollView}>
+              <View style={styles.permissionsContainer}>
+                <Text style={styles.sectionTitle}>הרשאות זמינות:</Text>
+
+                {/* Content Management Permissions */}
+                {renderPermissionItem(PERMISSIONS.PRAYERS, PERMISSION_LABELS[PERMISSIONS.PRAYERS])}
+                {renderPermissionItem(PERMISSIONS.VIDEOS, PERMISSION_LABELS[PERMISSIONS.VIDEOS])}
+                {renderPermissionItem(PERMISSIONS.MUSIC, PERMISSION_LABELS[PERMISSIONS.MUSIC])}
+                {renderPermissionItem(PERMISSIONS.BOOKS, PERMISSION_LABELS[PERMISSIONS.BOOKS])}
+                {renderPermissionItem(PERMISSIONS.LEARNING, PERMISSION_LABELS[PERMISSIONS.LEARNING])}
+                {renderPermissionItem(PERMISSIONS.NEWS, PERMISSION_LABELS[PERMISSIONS.NEWS])}
+                {renderPermissionItem(PERMISSIONS.DAILY_LEARNING, PERMISSION_LABELS[PERMISSIONS.DAILY_LEARNING])}
+                {renderPermissionItem(PERMISSIONS.NEWSLETTERS, PERMISSION_LABELS[PERMISSIONS.NEWSLETTERS])}
+                {renderPermissionItem(PERMISSIONS.TZADIKIM, PERMISSION_LABELS[PERMISSIONS.TZADIKIM])}
+                {renderPermissionItem(PERMISSIONS.NOTIFICATIONS, PERMISSION_LABELS[PERMISSIONS.NOTIFICATIONS])}
+              </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={styles.doneButton}
@@ -395,6 +405,9 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'right',
     fontFamily: 'Heebo_700Bold',
+  },
+  permissionsScrollView: {
+    maxHeight: 400,
   },
   permissionsContainer: {
     marginBottom: 20,

@@ -43,7 +43,16 @@ export default function NotificationModal({ visible, notification, onClose }) {
         <View style={styles.modalContainer}>
           {/* Gold line at top */}
           <View style={styles.goldLine} />
-          
+          {/* Close X button */}
+          <TouchableOpacity
+            style={styles.closeXButton}
+            onPress={onClose}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="סגור"
+            accessibilityRole="button"
+          >
+            <Ionicons name="close" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
           {/* Modal content */}
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{notification.title}</Text>
@@ -113,6 +122,18 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: GOLD,
     width: '100%',
+  },
+  closeXButton: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalContent: {
     padding: 24,

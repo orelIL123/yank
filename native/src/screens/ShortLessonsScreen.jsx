@@ -250,6 +250,7 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
 
   const renderLesson = ({ item }) => {
     const thumbnailUrl = getYouTubeThumbnail(item.youtubeId, 'hqdefault');
+    const isNew = item.createdAt && (new Date() - new Date(item.createdAt)) < 72 * 60 * 60 * 1000;
 
     return (
       <TouchableOpacity
@@ -259,6 +260,11 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
       >
         <View style={styles.lessonContent}>
           <View style={styles.lessonThumbnailContainer}>
+            {isNew && (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>חדש</Text>
+              </View>
+            )}
             {thumbnailUrl ? (
               <Image
                 source={{ uri: thumbnailUrl }}
@@ -1031,6 +1037,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Heebo_600SemiBold',
     color: '#fff',
+  },
+  newBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 10,
+  },
+  newBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontFamily: 'Heebo_700Bold',
   },
 });
 

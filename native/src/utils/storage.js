@@ -66,121 +66,71 @@ function base64ToUint8Array(base64) {
  */
 export async function uploadImageToStorage(uri, path, onProgress) {
   try {
-    // Wait for auth to be ready
-    const { onAuthStateChanged } = await import('firebase/auth');
-    let currentUser = auth.currentUser;
-    
-    // If no current user, wait a bit for auth to initialize
+    const currentUser = auth.currentUser;
+
     if (!currentUser) {
-      console.log('No current user, waiting for auth state...');
-      await new Promise((resolve) => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-          currentUser = user;
-          unsubscribe();
-          resolve();
-        });
-        // Timeout after 2 seconds
-        setTimeout(() => {
-          unsubscribe();
-          resolve();
-        }, 2000);
-      });
+      throw new Error('יש להתחבר כדי להעלות קבצים');
     }
-    
-    console.log('=== UPLOAD DEBUG ===');
-    console.log('Starting upload:', { uri, path });
-    console.log('Current user:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'NOT LOGGED IN');
-    
-    if (!currentUser) {
-      throw new Error('User not authenticated. Please log in again.');
-    }
-    
-    // Get fresh auth token - this is important for Storage rules
-    try {
-      const token = await currentUser.getIdToken(true); // Force refresh
-      console.log('Auth token obtained, length:', token.length);
-    } catch (tokenError) {
-      console.error('Error getting auth token:', tokenError);
-      // Don't throw here, but log it
-    }
-    
-    // Verify user role in Firestore
-    try {
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        console.log('User document found:', { uid: currentUser.uid, role: userData.role, email: userData.email });
-        if (userData.role !== 'admin') {
-          console.warn('WARNING: User is not admin! Role:', userData.role);
-          throw new Error('User is not an admin. Only admins can upload images.');
-        }
-      } else {
-        console.error('ERROR: User document NOT found in Firestore for UID:', currentUser.uid);
-        throw new Error('User document not found in Firestore. Please contact support.');
-      }
-    } catch (error) {
-      console.error('Error checking user role:', error);
-      throw error;
-    }
-    
+
+    console.log('Starting upload:', path);
+
+    // Report 5% progress - starting
+    if (onProgress) onProgress(5);
+
     // Read the file as base64 using legacy API
     const base64 = await FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.Base64,
     })
-    
-    console.log('File read, base64 length:', base64.length);
-    
+
+    // Report 15% progress - file read
+    if (onProgress) onProgress(15);
+
     // Convert base64 to Blob for React Native compatibility
-    // Create a data URI and fetch it to get a blob
     const dataUri = `data:image/jpeg;base64,${base64}`;
     const response = await fetch(dataUri);
     const blob = await response.blob();
-    
-    console.log('Converted to Blob, size:', blob.size);
+
+    // Report 25% progress - blob created
+    if (onProgress) onProgress(25);
     
     // Create a reference to the file location in Storage
     const storageRef = ref(storage, path)
-    
+
     // Upload using uploadBytesResumable for better React Native support
     const uploadTask = uploadBytesResumable(storageRef, blob);
-    
+
     // Return a promise that resolves when upload completes
     return new Promise((resolve, reject) => {
       uploadTask.on(
         'state_changed',
         (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log('Upload progress:', progress.toFixed(0) + '%');
+          // Calculate progress: 25% already reported, so map 0-100% upload to 25-100%
+          const uploadProgress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          const totalProgress = 25 + (uploadProgress * 0.75);
           if (onProgress) {
-            onProgress(progress);
+            onProgress(Math.round(totalProgress));
           }
         },
         (error) => {
           console.error('Upload error:', error);
-          reject(error);
+          reject(new Error(`שגיאה בהעלאה: ${error.message}`));
         },
         async () => {
           try {
-            console.log('Upload completed, getting download URL...');
             // Get the download URL
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            console.log('Upload complete. Download URL:', downloadURL);
+            if (onProgress) onProgress(100);
             resolve(downloadURL);
           } catch (error) {
             console.error('Error getting download URL:', error);
-            reject(error);
+            reject(new Error('שגיאה בקבלת כתובת הקובץ'));
           }
         }
       );
     });
   } catch (error) {
     console.error('Error uploading image:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    throw error;
+    throw new Error(error.message || 'שגיאה בהעלאת תמונה');
   }
 }
 
@@ -272,81 +222,32 @@ export async function pickVideo() {
  */
 export async function uploadPDFToStorage(uri, path, onProgress) {
   try {
-    // Wait for auth to be ready
-    const { onAuthStateChanged } = await import('firebase/auth');
-    let currentUser = auth.currentUser;
-    
-    // If no current user, wait a bit for auth to initialize
+    const currentUser = auth.currentUser;
+
     if (!currentUser) {
-      console.log('No current user, waiting for auth state...');
-      await new Promise((resolve) => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-          currentUser = user;
-          unsubscribe();
-          resolve();
-        });
-        // Timeout after 2 seconds
-        setTimeout(() => {
-          unsubscribe();
-          resolve();
-        }, 2000);
-      });
+      throw new Error('יש להתחבר כדי להעלות קבצים');
     }
-    
-    console.log('=== PDF UPLOAD DEBUG ===');
-    console.log('Starting PDF upload:', { uri, path });
-    console.log('Current user:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'NOT LOGGED IN');
-    
-    if (!currentUser) {
-      throw new Error('User not authenticated. Please log in again.');
-    }
-    
-    // Verify user role in Firestore FIRST (before getting token)
-    let userRole = null
-    try {
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        userRole = userData.role
-        console.log('User document found:', { uid: currentUser.uid, role: userData.role, email: userData.email });
-        if (userData.role !== 'admin') {
-          console.warn('WARNING: User is not admin! Role:', userData.role);
-          throw new Error('User is not an admin. Only admins can upload PDFs.');
-        }
-      } else {
-        console.error('ERROR: User document NOT found in Firestore for UID:', currentUser.uid);
-        throw new Error('User document not found in Firestore. Please contact support.');
-      }
-    } catch (error) {
-      console.error('Error checking user role:', error);
-      throw error;
-    }
-    
-    // Get fresh auth token AFTER verifying role - this is important for Storage rules
-    // The token needs to be fresh so Storage rules can verify the user is admin
-    let authToken = null
-    try {
-      authToken = await currentUser.getIdToken(true); // Force refresh
-      console.log('Auth token obtained, length:', authToken.length);
-      console.log('Token will be used for Storage upload with admin role:', userRole);
-    } catch (tokenError) {
-      console.error('Error getting auth token:', tokenError);
-      throw new Error('Failed to get authentication token. Please try again.');
-    }
-    
+
+    console.log('Starting PDF upload:', path);
+
+    // Report 5% progress - starting
+    if (onProgress) onProgress(5);
+
     // Read the file as base64 using legacy API
     const base64 = await FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.Base64,
     })
-    
-    console.log('PDF file read, base64 length:', base64.length);
-    
+
+    // Report 15% progress - file read
+    if (onProgress) onProgress(15);
+
     // Convert base64 to Blob for React Native compatibility
     const dataUri = `data:application/pdf;base64,${base64}`;
     const response = await fetch(dataUri);
     const blob = await response.blob();
-    
-    console.log('Converted to Blob, size:', blob.size);
+
+    // Report 25% progress - blob created
+    if (onProgress) onProgress(25);
     console.log('About to upload to path:', path);
     console.log('Storage bucket:', storage.app.options.storageBucket);
     
@@ -364,43 +265,33 @@ export async function uploadPDFToStorage(uri, path, onProgress) {
       uploadTask.on(
         'state_changed',
         (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log('PDF upload progress:', progress.toFixed(0) + '%');
+          // Calculate progress: 25% already reported, so map 0-100% upload to 25-100%
+          const uploadProgress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          const totalProgress = 25 + (uploadProgress * 0.75);
           if (onProgress) {
-            onProgress(progress);
+            onProgress(Math.round(totalProgress));
           }
         },
         (error) => {
           console.error('PDF upload error:', error);
-          console.error('Error code:', error.code);
-          console.error('Error message:', error.message);
-          console.error('Storage path:', path);
-          console.error('User UID:', currentUser?.uid);
-          console.error('User email:', currentUser?.email);
-          reject(error);
+          reject(new Error(`שגיאה בהעלאת PDF: ${error.message}`));
         },
         async () => {
           try {
-            console.log('PDF upload completed, getting download URL...');
             // Get the download URL
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            console.log('PDF upload complete. Download URL:', downloadURL);
+            if (onProgress) onProgress(100);
             resolve(downloadURL);
           } catch (error) {
             console.error('Error getting download URL:', error);
-            reject(error);
+            reject(new Error('שגיאה בקבלת כתובת הקובץ'));
           }
         }
       );
     });
   } catch (error) {
     console.error('Error uploading PDF:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    throw error;
+    throw new Error(error.message || 'שגיאה בהעלאת PDF');
   }
 }
 
@@ -445,13 +336,13 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
       return (byName || knownBuckets[0])?.name || null
     }
     
-    // Determine folder prefix based on bucket type
+      // Determine folder prefix based on bucket type
     const getFolderPrefix = (bucketName) => {
       if (bucketName === 'daily-videos' || bucketName === 'videos') {
         return 'daily-videos/'
       }
       if (bucketName.includes('newsletter')) {
-        return 'daily-videos/' // Use daily-videos folder inside newsletters bucket
+        return '' // Don't add prefix for newsletters bucket
       }
       return ''
     }

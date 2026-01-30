@@ -17,6 +17,7 @@ const DEEP_BLUE = '#0b1b3a'
 export default function NewsScreen({ navigation, userRole, userPermissions }) {
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
+  const screenTitle = 'תיעודים ועדכונים'
 
   useEffect(() => {
     loadNews()
@@ -66,7 +67,7 @@ export default function NewsScreen({ navigation, userRole, userPermissions }) {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title={t('חדשות')}
+          title={screenTitle}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
           rightIcon={canManage ? 'add-circle-outline' : undefined}
@@ -74,7 +75,7 @@ export default function NewsScreen({ navigation, userRole, userPermissions }) {
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY_BLUE} />
-          <Text style={styles.loadingText}>טוען חדשות...</Text>
+          <Text style={styles.loadingText}>טוען...</Text>
         </View>
       </SafeAreaView>
     )
@@ -84,7 +85,7 @@ export default function NewsScreen({ navigation, userRole, userPermissions }) {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title={t('חדשות')}
+        title={screenTitle}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
         rightIcon={canManage ? 'add-circle-outline' : undefined}
@@ -92,16 +93,16 @@ export default function NewsScreen({ navigation, userRole, userPermissions }) {
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.subtitle}>עדכונים על העמותה</Text>
+        <Text style={styles.subtitle}>תיעודים ועדכונים מהעמותה</Text>
 
         {articles.length === 0 ? (
-          <View style={styles.emptyState}>
+            <View style={styles.emptyState}>
             <Ionicons name="newspaper-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-            <Text style={styles.emptyText}>אין חדשות זמינות כרגע</Text>
+            <Text style={styles.emptyText}>אין עדכונים זמינים כרגע</Text>
             {canManage ? (
-              <Text style={styles.emptySubtext}>אפשר להוסיף כתבה חדשה באמצעות כפתור ה- (+)</Text>
+              <Text style={styles.emptySubtext}>אפשר להוסיף תיעוד חדש באמצעות כפתור ה- (+)</Text>
             ) : (
-              <Text style={styles.emptySubtext}>החדשות יתווספו בקרוב</Text>
+              <Text style={styles.emptySubtext}>העדכונים יתווספו בקרוב</Text>
             )}
           </View>
         ) : (
@@ -140,6 +141,12 @@ export default function NewsScreen({ navigation, userRole, userPermissions }) {
                   </Pressable>
                 </View>
                 <View style={styles.articleBottom} pointerEvents="none">
+                  {article.videoUrl || article.youtubeId ? (
+                    <View style={styles.videoIndicator}>
+                      <Ionicons name="play-circle" size={20} color="#fff" />
+                      <Text style={styles.videoIndicatorText}>וידאו</Text>
+                    </View>
+                  ) : null}
                   <Text style={styles.articleTitle}>{article.title}</Text>
                   <Text style={styles.articleSummary} numberOfLines={2}>{article.summary || article.content}</Text>
                 </View>
@@ -281,5 +288,21 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: 'Poppins_400Regular',
     textAlign: 'right',
+  },
+  videoIndicator: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(220,38,38,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-end',
+    marginBottom: 4,
+  },
+  videoIndicatorText: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
   },
 })

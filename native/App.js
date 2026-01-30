@@ -41,6 +41,7 @@ import ShortLessonsScreen from './src/screens/ShortLessonsScreen'
 import LongLessonsScreen from './src/screens/LongLessonsScreen'
 import LearningLibraryScreen from './src/screens/LearningLibraryScreen'
 import HoduLaHashemScreen from './src/screens/HoduLaHashemScreen'
+import BaalShemTovStoriesScreen from './src/screens/BaalShemTovStoriesScreen'
 import NotificationsScreen from './src/screens/NotificationsScreen'
 import PidyonNefeshScreen from './src/screens/PidyonNefeshScreen'
 import MiBeitRabeinuScreen from './src/screens/MiBeitRabeinuScreen'
@@ -484,6 +485,9 @@ export default function App() {
           </Stack.Screen>
           <Stack.Screen name="HoduLaHashem">
             {(props) => <HoduLaHashemScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
+          <Stack.Screen name="BaalShemTovStories">
+            {(props) => <BaalShemTovStoriesScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />

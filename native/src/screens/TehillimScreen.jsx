@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Modal, TextInput, Image } from 'react-native'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Modal, TextInput, Image, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -7,43 +8,94 @@ import { Ionicons } from '@expo/vector-icons'
 import AppHeader from '../components/AppHeader'
 import db from '../services/database'
 import { auth } from '../config/firebase'
+import { tehillimData, tehillimDays } from '../data/tehillim'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-// Get Hebrew date (simplified - you can use a library like moment-hebrew)
-function getHebrewDate() {
+// Hebrew year number to letters (e.g. 5786 -> תשפ"ו)
+function yearToHebrew(yearNum) {
+  const y = parseInt(yearNum, 10)
+  if (!y || y < 5000) return String(yearNum)
+  let n = y - 5000 // 5786 -> 786
+  const values = [
+    [400, 'ת'], [300, 'ש'], [200, 'ר'], [100, 'ק'], [90, 'צ'], [80, 'פ'], [70, 'ע'], [60, 'ס'], [50, 'נ'],
+    [40, 'מ'], [30, 'ל'], [20, 'כ'], [10, 'י'], [9, 'ט'], [8, 'ח'], [7, 'ז'], [6, 'ו'], [5, 'ה'], [4, 'ד'], [3, 'ג'], [2, 'ב'], [1, 'א']
+  ]
+  let s = ''
+  for (const [val, letter] of values) {
+    while (n >= val) {
+      s += letter
+      n -= val
+    }
+  }
+  if (s.length > 1) {
+    s = s.slice(0, -1) + '"' + s.slice(-1)
+  }
+  return s || 'א'
+}
+
+// Get Hebrew date: day of month (1–30) and formatted string with year in Hebrew letters
+function getHebrewDateInfo() {
   const date = new Date()
-  return date.toLocaleDateString('he-IL', {
+  const options = {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     calendar: 'hebrew'
-  })
+  }
+  const formatter = new Intl.DateTimeFormat('he-IL', options)
+  const parts = formatter.formatToParts(date)
+  
+  const dayPart = parts.find(p => p.type === 'day')?.value
+  const monthPart = parts.find(p => p.type === 'month')?.value
+  const yearPart = parts.find(p => p.type === 'year')?.value
+  
+  let day = parseInt(String(dayPart).replace(/\D/g, ''), 10) || 1
+  if (day < 1) day = 1
+  if (day > 30) day = 30
+  
+  const yearHebrew = yearPart ? yearToHebrew(yearPart) : ''
+  const fullDate = [day, monthPart, yearHebrew].filter(Boolean).join(' ')
+  
+  return { day, fullDate }
 }
 
 const TEHILLIM_CHAPTERS = 150
-const SEFARIA_BASE = 'https://www.sefaria.org/api/texts'
 
-function flattenVerses(he) {
-  if (!he) return []
-  if (!Array.isArray(he)) return [String(he)]
-  const result = []
-  for (const item of he) {
-    if (Array.isArray(item)) result.push(item.join(' '))
-    else if (item != null && item !== '') result.push(String(item))
-  }
-  return result
+// Convert number to Hebrew letters (e.g., 6 -> ו׳, 118 -> קי״ח)
+function numberToHebrew(num) {
+  if (num < 1 || num > 150) return String(num)
+  
+  const hebrewLetters = [
+    '', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט', // 0-9
+    'י', 'יא', 'יב', 'יג', 'יד', 'טו', 'טז', 'יז', 'יח', 'יט', // 10-19
+    'כ', 'כא', 'כב', 'כג', 'כד', 'כה', 'כו', 'כז', 'כח', 'כט', // 20-29
+    'ל', 'לא', 'לב', 'לג', 'לד', 'לה', 'לו', 'לז', 'לח', 'לט', // 30-39
+    'מ', 'מא', 'מב', 'מג', 'מד', 'מה', 'מו', 'מז', 'מח', 'מט', // 40-49
+    'נ', 'נא', 'נב', 'נג', 'נד', 'נה', 'נו', 'נז', 'נח', 'נט', // 50-59
+    'ס', 'סא', 'סב', 'סג', 'סד', 'סה', 'סו', 'סז', 'סח', 'סט', // 60-69
+    'ע', 'עא', 'עב', 'עג', 'עד', 'עה', 'עו', 'עז', 'עח', 'עט', // 70-79
+    'פ', 'פא', 'פב', 'פג', 'פד', 'פה', 'פו', 'פז', 'פח', 'פט', // 80-89
+    'צ', 'צא', 'צב', 'צג', 'צד', 'צה', 'צו', 'צז', 'צח', 'צט', // 90-99
+    'ק', 'קא', 'קב', 'קג', 'קד', 'קה', 'קו', 'קז', 'קח', 'קט', // 100-109
+    'קי', 'קיא', 'קיב', 'קיג', 'קיד', 'קטו', 'קטז', 'קיז', 'קיח', 'קיט', // 110-119
+    'קכ', 'קכא', 'קכב', 'קכג', 'קכד', 'קכה', 'קכו', 'קכז', 'קכח', 'קכט', // 120-129
+    'קל', 'קלא', 'קלב', 'קלג', 'קלד', 'קלה', 'קלו', 'קלז', 'קלח', 'קלט', // 130-139
+    'קמ', 'קמא', 'קמב', 'קמג', 'קמד', 'קמה', 'קמו', 'קמז', 'קמח', 'קמט', 'קנ' // 140-150
+  ]
+  
+  return hebrewLetters[num] || String(num)
 }
 
-async function fetchTehillimChapter(chapterNum) {
-  const url = `${SEFARIA_BASE}/Psalms.${chapterNum}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('לא נמצא')
-  const data = await res.json()
-  const he = data.he ?? data.text?.[0] ?? []
-  return flattenVerses(he)
+function getLocalChapter(chapterNum) {
+  const chapter = tehillimData.find(c => c.chapter === chapterNum)
+  if (!chapter) {
+    console.error(`Chapter ${chapterNum} not found in tehillimData`)
+    return null
+  }
+  return chapter.verses
 }
 
 export default function TehillimScreen({ navigation, userRole }) {
@@ -60,11 +112,18 @@ export default function TehillimScreen({ navigation, userRole }) {
   const [loadingChapter, setLoadingChapter] = useState(false)
   const [chapterError, setChapterError] = useState(null)
   const [chapterInput, setChapterInput] = useState('')
+  const [dailyChaptersList, setDailyChapters] = useState([])
 
   useEffect(() => {
     checkAdmin()
-    loadDailyContent()
   }, [userRole])
+
+  // Refresh date and daily chapters when screen is focused (so it updates each time you open the screen)
+  useFocusEffect(
+    useCallback(() => {
+      loadDailyContent()
+    }, [])
+  )
 
   const checkAdmin = () => {
     setIsAdmin(userRole === 'admin' || userRole === 'superadmin')
@@ -73,37 +132,57 @@ export default function TehillimScreen({ navigation, userRole }) {
   const loadDailyContent = async () => {
     try {
       setLoading(true)
-      // Load today's Tehillim content from database
-      const today = new Date().toISOString().split('T')[0]
-      const content = await db.getDocument('dailyTehillim', 'current')
+      const { day, fullDate } = getHebrewDateInfo()
+      
+      // Get chapters for today from local data
+      const dayInfo = tehillimDays.find(d => d.day === day) || tehillimDays[0]
+      setDailyChapters(dayInfo.chapters)
 
-      if (content) {
-        setDailyContent(content)
-        setEditTitle(content.title || '')
-        setEditChapters(content.chapters || '')
-        setEditImageUrl(content.imageUrl || '')
-      } else {
-        // Initialize with default
-        const hebrewDate = getHebrewDate()
-        setDailyContent({
-          title: `תהילים יומי - ${hebrewDate}`,
-          chapters: '',
-          imageUrl: '',
-          updatedAt: new Date().toISOString()
-        })
-        setEditTitle(`תהילים יומי - ${hebrewDate}`)
+      const defaultChapters = dayInfo.chapters.length
+        ? `פרקים מ${numberToHebrew(dayInfo.chapters[0])}־${numberToHebrew(dayInfo.chapters[dayInfo.chapters.length - 1])}`
+        : ''
+      const defaultContent = {
+        title: `תהילים יומי - ${fullDate}`,
+        chapters: defaultChapters,
+        imageUrl: '',
+        updatedAt: new Date().toISOString()
+      }
+
+      // Load from DB only if table exists (daily_tehillim may not be in schema)
+      try {
+        const content = await db.getDocument('dailyTehillim', 'current')
+        if (content && (content.title || content.chapters || content.imageUrl)) {
+          setDailyContent(content)
+          setEditTitle(content.title || defaultContent.title)
+          setEditChapters(content.chapters || defaultChapters)
+          setEditImageUrl(content.imageUrl || '')
+        } else {
+          setDailyContent(defaultContent)
+          setEditTitle(defaultContent.title)
+          setEditChapters(defaultChapters)
+          setEditImageUrl('')
+        }
+      } catch (_) {
+        // Table daily_tehillim doesn't exist – use local data only
+        setDailyContent(defaultContent)
+        setEditTitle(defaultContent.title)
+        setEditChapters(defaultChapters)
+        setEditImageUrl('')
       }
     } catch (error) {
-      console.error('Error loading daily Tehillim:', error)
-      // Initialize with default
-      const hebrewDate = getHebrewDate()
+      const { day, fullDate } = getHebrewDateInfo()
+      const dayInfo = tehillimDays.find(d => d.day === day) || tehillimDays[0]
+      const defaultChapters = dayInfo.chapters.length
+        ? `פרקים מ${numberToHebrew(dayInfo.chapters[0])}־${numberToHebrew(dayInfo.chapters[dayInfo.chapters.length - 1])}`
+        : ''
       setDailyContent({
-        title: `תהילים יומי - ${hebrewDate}`,
-        chapters: '',
+        title: `תהילים יומי - ${fullDate}`,
+        chapters: defaultChapters,
         imageUrl: '',
         updatedAt: new Date().toISOString()
       })
-      setEditTitle(`תהילים יומי - ${hebrewDate}`)
+      setEditTitle(`תהילים יומי - ${fullDate}`)
+      setEditChapters(defaultChapters)
     } finally {
       setLoading(false)
     }
@@ -126,31 +205,48 @@ export default function TehillimScreen({ navigation, userRole }) {
       }
 
       await db.updateDocument('dailyTehillim', 'current', updatedContent)
-
       setDailyContent(updatedContent)
       setEditModalVisible(false)
       Alert.alert('הצלחה', 'תהילים יומי עודכן בהצלחה')
     } catch (error) {
-      console.error('Error saving daily Tehillim:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את התוכן')
+      const code = error?.code || error?.message || ''
+      if (String(code).includes('PGRST205') || String(code).includes('daily_tehillim')) {
+        Alert.alert('לא זמין', 'שמירת תוכן יומי אינה זמינה כרגע (טבלה לא קיימת במערכת). התוכן המקומי יוצג.')
+      } else {
+        Alert.alert('שגיאה', 'לא ניתן לשמור את התוכן')
+      }
     } finally {
       setSaving(false)
     }
   }
 
-  const loadChapter = async (num) => {
-    if (num < 1 || num > TEHILLIM_CHAPTERS) return
+  const loadChapter = (num) => {
+    if (num < 1 || num > TEHILLIM_CHAPTERS) {
+      Alert.alert('שגיאה', `מספר פרק לא תקין. יש להזין מספר בין 1 ל־${TEHILLIM_CHAPTERS}`)
+      return
+    }
+    
     setSelectedChapter(num)
     setLoadingChapter(true)
     setChapterError(null)
-    try {
-      const verses = await fetchTehillimChapter(num)
-      setChapterVerses(verses)
-    } catch (err) {
-      console.error('Error loading Tehillim chapter:', err)
-      setChapterError('לא ניתן לטעון את הפרק')
+    
+    // Verify the chapter exists in data
+    const chapter = tehillimData.find(c => c.chapter === num)
+    if (!chapter) {
+      console.error(`Chapter ${num} not found in tehillimData`)
+      setChapterError(`פרק ${numberToHebrew(num)} לא נמצא במערכת`)
       setChapterVerses([])
-    } finally {
+      setLoadingChapter(false)
+      return
+    }
+    
+    const verses = chapter.verses
+    if (verses && verses.length > 0) {
+      setChapterVerses(verses)
+      setLoadingChapter(false)
+    } else {
+      setChapterError(`פרק ${numberToHebrew(num)} נמצא אבל אין בו פסוקים`)
+      setChapterVerses([])
       setLoadingChapter(false)
     }
   }
@@ -172,20 +268,24 @@ export default function TehillimScreen({ navigation, userRole }) {
                 imageUrl: '',
                 updatedAt: new Date().toISOString(),
               })
-
-              setDailyContent({
-                title: '',
-                chapters: '',
-                imageUrl: '',
-                updatedAt: new Date().toISOString()
-              })
+              setDailyContent({ title: '', chapters: '', imageUrl: '', updatedAt: new Date().toISOString() })
               setEditTitle('')
               setEditChapters('')
               setEditImageUrl('')
               setEditModalVisible(false)
               Alert.alert('הצלחה', 'התוכן נמחק')
             } catch (error) {
-              Alert.alert('שגיאה', 'לא ניתן למחוק')
+              const code = error?.code || error?.message || ''
+              if (String(code).includes('PGRST205') || String(code).includes('daily_tehillim')) {
+                setDailyContent({ title: '', chapters: '', imageUrl: '', updatedAt: new Date().toISOString() })
+                setEditTitle('')
+                setEditChapters('')
+                setEditImageUrl('')
+                setEditModalVisible(false)
+                Alert.alert('הערה', 'טבלת תהילים יומי אינה קיימת במערכת. התוכן המקומי נוקה.')
+              } else {
+                Alert.alert('שגיאה', 'לא ניתן למחוק')
+              }
             }
           }
         }
@@ -231,8 +331,26 @@ export default function TehillimScreen({ navigation, userRole }) {
             <Ionicons name="book" size={48} color={PRIMARY_BLUE} />
           </View>
           <Text style={styles.mainTitle}>תהילים יומי</Text>
-          <Text style={styles.hebrewDate}>{getHebrewDate()}</Text>
+          <Text style={styles.hebrewDate}>{getHebrewDateInfo().fullDate}</Text>
         </View>
+
+        {/* Daily Chapters Quick Access */}
+        {dailyChaptersList.length > 0 && (
+          <View style={styles.dailyChaptersRow}>
+            <Text style={styles.dailyChaptersLabel}>פרקי היום:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {dailyChaptersList.map(num => (
+                <Pressable
+                  key={num}
+                  style={[styles.miniChapterChip, selectedChapter === num && styles.chapterChipActive]}
+                  onPress={() => loadChapter(num)}
+                >
+                  <Text style={[styles.miniChapterChipText, selectedChapter === num && styles.chapterChipTextActive]}>{numberToHebrew(num)}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Daily Content Card */}
         {dailyContent && (dailyContent.title || dailyContent.chapters || dailyContent.imageUrl) ? (
@@ -251,12 +369,19 @@ export default function TehillimScreen({ navigation, userRole }) {
               </View>
             )}
 
-            {dailyContent.chapters && (
-              <View style={styles.chaptersContainer}>
-                <Text style={styles.chaptersTitle}>פרקים להיום:</Text>
-                <Text style={styles.chaptersText}>{dailyContent.chapters}</Text>
-              </View>
-            )}
+            {(() => {
+              const { day } = getHebrewDateInfo()
+              const dayInfo = tehillimDays.find(d => d.day === day) || tehillimDays[0]
+              const chaptersLabel = dayInfo.chapters.length
+                ? `פרקים מ${numberToHebrew(dayInfo.chapters[0])}־${numberToHebrew(dayInfo.chapters[dayInfo.chapters.length - 1])}`
+                : ''
+              return chaptersLabel ? (
+                <View style={styles.chaptersContainer}>
+                  <Text style={styles.chaptersTitle}>פרקים להיום:</Text>
+                  <Text style={styles.chaptersText}>{chaptersLabel}</Text>
+                </View>
+              ) : null
+            })()}
 
             {dailyContent.updatedAt && (
               <Text style={styles.updateTime}>
@@ -282,20 +407,20 @@ export default function TehillimScreen({ navigation, userRole }) {
         {/* Read full chapter */}
         <View style={styles.readChapterCard}>
           <Text style={styles.readChapterTitle}>קרא פרק מלא</Text>
-          <Text style={styles.readChapterSubtitle}>בחר פרק (1–150) לצפייה בטקסט</Text>
+          <Text style={styles.readChapterSubtitle}>לחיצה: פרקים א–ל. להצגת פרק 31–150 הקלד מספר ולחץ הצג</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chapterChipsRow}
           >
-            {Array.from({ length: Math.min(30, TEHILLIM_CHAPTERS) }, (_, i) => i + 1).map((num) => (
+            {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => (
               <Pressable
                 key={num}
                 style={[styles.chapterChip, selectedChapter === num && styles.chapterChipActive]}
                 onPress={() => loadChapter(num)}
                 disabled={loadingChapter}
               >
-                <Text style={[styles.chapterChipText, selectedChapter === num && styles.chapterChipTextActive]}>{num}</Text>
+                <Text style={[styles.chapterChipText, selectedChapter === num && styles.chapterChipTextActive]}>{numberToHebrew(num)}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -315,7 +440,7 @@ export default function TehillimScreen({ navigation, userRole }) {
               style={styles.chapterInput}
               value={chapterInput}
               onChangeText={setChapterInput}
-              placeholder="מספר פרק (1–150)"
+              placeholder="הקלד פרק 1–150"
               placeholderTextColor="#9ca3af"
               keyboardType="number-pad"
               maxLength={3}
@@ -332,10 +457,10 @@ export default function TehillimScreen({ navigation, userRole }) {
           )}
           {!loadingChapter && chapterVerses.length > 0 && (
             <View style={styles.versesContainer}>
-              <Text style={styles.versesTitle}>תהלים פרק {selectedChapter}</Text>
+              <Text style={styles.versesTitle}>תהלים פרק {numberToHebrew(selectedChapter)}</Text>
               {chapterVerses.map((verse, idx) => (
                 <View key={idx} style={styles.verseRow}>
-                  <Text style={styles.verseNum}>{idx + 1}</Text>
+                  <Text style={styles.verseNum}>{numberToHebrew(idx + 1)}</Text>
                   <Text style={styles.verseText}>{verse}</Text>
                 </View>
               ))}
@@ -359,16 +484,25 @@ export default function TehillimScreen({ navigation, userRole }) {
         transparent={true}
         onRequestClose={() => setEditModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Pressable onPress={() => setEditModalVisible(false)}>
-                <Ionicons name="close" size={24} color={DEEP_BLUE} />
-              </Pressable>
-              <Text style={styles.modalTitle}>עריכת תהילים יומי</Text>
-            </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 })}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Pressable onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={DEEP_BLUE} />
+                </Pressable>
+                <Text style={styles.modalTitle}>עריכת תהילים יומי</Text>
+              </View>
 
-            <ScrollView style={styles.modalBody}>
+              <ScrollView
+                style={styles.modalBody}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+              >
               <View style={styles.formGroup}>
                 <Text style={styles.label}>כותרת (תאריך עברי)</Text>
                 <TextInput
@@ -449,6 +583,7 @@ export default function TehillimScreen({ navigation, userRole }) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   )
@@ -489,6 +624,32 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: '#6b7280',
     textAlign: 'center',
+  },
+  dailyChaptersRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  dailyChaptersLabel: {
+    fontSize: 16,
+    fontFamily: 'Heebo_700Bold',
+    color: DEEP_BLUE,
+    marginLeft: 12,
+  },
+  miniChapterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: 'rgba(30,58,138,0.08)',
+    marginHorizontal: 4,
+    minWidth: 36,
+    alignItems: 'center',
+  },
+  miniChapterChipText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: PRIMARY_BLUE,
   },
   contentCard: {
     backgroundColor: '#ffffff',
@@ -690,17 +851,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   verseRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'flex-start',
     marginBottom: 12,
     gap: 12,
+    direction: 'rtl',
   },
   verseNum: {
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
     color: PRIMARY_BLUE,
     width: 28,
-    textAlign: 'left',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   verseText: {
     flex: 1,
@@ -708,6 +871,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_400Regular',
     color: DEEP_BLUE,
     textAlign: 'right',
+    writingDirection: 'rtl',
     lineHeight: 32,
   },
   infoCard: {

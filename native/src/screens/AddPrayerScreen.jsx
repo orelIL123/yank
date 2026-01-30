@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Image, ActivityIndicator, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Image, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '../config/firebase'
-import { pickImage, uploadImageToStorage, pickPDF, uploadPDFToStorage, generatePrayerPDFPath } from '../utils/storage'
+import db from '../services/database'
+import { pickImage, uploadImageToStorage, pickPDF, uploadPDFToStorage, generatePrayerPDFPath, uploadFileToSupabaseStorage } from '../utils/storage'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -40,9 +39,14 @@ export default function AddPrayerScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false)
 
   const handlePickImage = async () => {
-    const image = await pickImage({ aspect: [16, 9] })
-    if (image) {
-      setImages([...images, { uri: image.uri, url: null, uploading: false }])
+    try {
+      const image = await pickImage({ aspect: [16, 9] })
+      if (image) {
+        setImages([...images, { uri: image.uri, url: null, uploading: false, progress: 0 }])
+      }
+    } catch (error) {
+      console.error('Error picking image:', error)
+      Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${error.message}`)
     }
   }
 
@@ -61,25 +65,44 @@ export default function AddPrayerScreen({ navigation, route }) {
     // Mark as uploading
     const newImages = [...images]
     newImages[index].uploading = true
+    newImages[index].progress = 0
     setImages(newImages)
 
     try {
       const timestamp = Date.now()
       const imageIndex = index + 1
       const path = `prayers/${timestamp}/image_${imageIndex}.jpg`
-      const url = await uploadImageToStorage(image.uri, path, (progress) => {
-        console.log(`Upload progress for image ${imageIndex}: ${progress}%`)
-      })
-      
+
+      let url;
+      try {
+        url = await uploadImageToStorage(image.uri, path, (progress) => {
+          console.log(`Upload progress for image ${imageIndex}: ${progress}%`)
+          // Update progress in real-time
+          const updatedImages = [...images]
+          updatedImages[index].progress = Math.round(progress)
+          setImages(updatedImages)
+        })
+      } catch (firebaseErr) {
+        console.warn('Firebase upload failed, trying Supabase:', firebaseErr?.message)
+        url = await uploadFileToSupabaseStorage(image.uri, 'newsletters', path, (progress) => {
+          console.log(`Supabase upload progress for image ${imageIndex}: ${progress}%`)
+          // Update progress in real-time
+          const updatedImages = [...images]
+          updatedImages[index].progress = Math.round(progress)
+          setImages(updatedImages)
+        })
+      }
+
       newImages[index].url = url
       newImages[index].uploading = false
+      newImages[index].progress = 100
       setImages(newImages)
-      Alert.alert('הצלחה!', `תמונה ${imageIndex} הועלתה בהצלחה`)
     } catch (error) {
       console.error('Error uploading image:', error)
       newImages[index].uploading = false
+      newImages[index].progress = 0
       setImages(newImages)
-      Alert.alert('שגיאה', `לא ניתן להעלות תמונה ${index + 1}`)
+      Alert.alert('שגיאה', `לא ניתן להעלות תמונה ${index + 1}: ${error.message}`)
     }
   }
 
@@ -100,9 +123,14 @@ export default function AddPrayerScreen({ navigation, route }) {
   }
 
   const handlePickPDF = async () => {
-    const pdfFile = await pickPDF()
-    if (pdfFile) {
-      setPdf({ uri: pdfFile.uri, url: null, uploading: false, name: pdfFile.name })
+    try {
+      const pdfFile = await pickPDF()
+      if (pdfFile) {
+        setPdf({ uri: pdfFile.uri, url: null, uploading: false, name: pdfFile.name, progress: 0 })
+      }
+    } catch (error) {
+      console.error('Error picking PDF:', error)
+      Alert.alert('שגיאה', `לא ניתן לבחור PDF: ${error.message}`)
     }
   }
 
@@ -116,22 +144,32 @@ export default function AddPrayerScreen({ navigation, route }) {
       return
     }
 
-    setPdf({ ...pdf, uploading: true })
+    setPdf({ ...pdf, uploading: true, progress: 0 })
 
     try {
       const timestamp = Date.now()
       const filename = pdf.name || `prayer_${timestamp}.pdf`
       const path = generatePrayerPDFPath(timestamp.toString(), filename)
-      const url = await uploadPDFToStorage(pdf.uri, path, (progress) => {
-        console.log(`PDF upload progress: ${progress}%`)
-      })
-      
-      setPdf({ ...pdf, url, uploading: false })
-      Alert.alert('הצלחה!', 'קובץ ה-PDF הועלה בהצלחה')
+
+      let url;
+      try {
+        url = await uploadPDFToStorage(pdf.uri, path, (progress) => {
+          console.log(`PDF upload progress: ${progress}%`)
+          setPdf(prev => ({ ...prev, progress: Math.round(progress) }))
+        })
+      } catch (firebaseErr) {
+        console.warn('Firebase PDF upload failed, trying Supabase:', firebaseErr?.message)
+        url = await uploadFileToSupabaseStorage(pdf.uri, 'newsletters', path, (progress) => {
+          console.log(`Supabase PDF upload progress: ${progress}%`)
+          setPdf(prev => ({ ...prev, progress: Math.round(progress) }))
+        })
+      }
+
+      setPdf({ ...pdf, url, uploading: false, progress: 100 })
     } catch (error) {
       console.error('Error uploading PDF:', error)
-      setPdf({ ...pdf, uploading: false })
-      Alert.alert('שגיאה', 'לא ניתן להעלות את קובץ ה-PDF')
+      setPdf({ ...pdf, uploading: false, progress: 0 })
+      Alert.alert('שגיאה', `לא ניתן להעלות את קובץ ה-PDF: ${error.message}`)
     }
   }
 
@@ -177,7 +215,7 @@ export default function AddPrayerScreen({ navigation, route }) {
 
       if (isEditing) {
         // Update existing prayer
-        await updateDoc(doc(db, 'prayers', prayer.id), {
+        await db.updateDocument('prayers', prayer.id, {
           title: trimmedTitle,
           content: trimmedContent,
           description: form.description?.trim() || '',
@@ -185,7 +223,7 @@ export default function AddPrayerScreen({ navigation, route }) {
           imageUrl: imageUrls.length > 0 ? imageUrls[0] : '', // First image as main
           imageUrls: imageUrls, // All images array
           pdfUrl: pdf?.url || '', // PDF URL if exists
-          updatedAt: serverTimestamp(),
+          updatedAt: new Date().toISOString(),
         })
 
         Alert.alert(
@@ -202,7 +240,7 @@ export default function AddPrayerScreen({ navigation, route }) {
         )
       } else {
         // Create new prayer
-        await addDoc(collection(db, 'prayers'), {
+        await db.addDocument('prayers', {
           title: trimmedTitle,
           content: trimmedContent,
           description: form.description?.trim() || '',
@@ -210,7 +248,7 @@ export default function AddPrayerScreen({ navigation, route }) {
           imageUrl: imageUrls.length > 0 ? imageUrls[0] : '', // First image as main
           imageUrls: imageUrls, // All images array
           pdfUrl: pdf?.url || '', // PDF URL if exists
-          createdAt: serverTimestamp(),
+          createdAt: new Date().toISOString(),
         })
 
         Alert.alert(
@@ -250,10 +288,17 @@ export default function AddPrayerScreen({ navigation, route }) {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 })}
       >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
         {/* Info Box */}
         <View style={styles.infoBox}>
           <Ionicons name="information-circle" size={24} color={PRIMARY_BLUE} />
@@ -347,7 +392,9 @@ export default function AddPrayerScreen({ navigation, route }) {
                   ) : image.uploading ? (
                     <View style={styles.uploadingBadge}>
                       <ActivityIndicator size="small" color={PRIMARY_BLUE} />
-                      <Text style={styles.uploadingText}>מעלה...</Text>
+                      <Text style={styles.uploadingText}>
+                        {image.progress ? `${image.progress}%` : 'מעלה...'}
+                      </Text>
                     </View>
                   ) : (
                     <View style={styles.notUploadedBadge}>
@@ -408,7 +455,9 @@ export default function AddPrayerScreen({ navigation, route }) {
               ) : pdf.uploading ? (
                 <View style={styles.uploadingBadge}>
                   <ActivityIndicator size="small" color={PRIMARY_BLUE} />
-                  <Text style={styles.uploadingText}>מעלה...</Text>
+                  <Text style={styles.uploadingText}>
+                    {pdf.progress ? `${pdf.progress}%` : 'מעלה...'}
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.notUploadedBadge}>
@@ -469,7 +518,8 @@ export default function AddPrayerScreen({ navigation, route }) {
         <Text style={styles.note}>
           💡 התפילה תישמר ב-Firestore והתמונות יועלו ל-Firebase Storage בתיקיית prayers/.
         </Text>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
@@ -502,9 +552,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     color: PRIMARY_BLUE,
   },
+  keyboardView: {
+    flex: 1,
+  },
   content: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   infoBox: {
     flexDirection: 'row',

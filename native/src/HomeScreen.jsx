@@ -217,7 +217,8 @@ export default function HomeScreen({ navigation, userRole }) {
           finalImageUrl = await uploadImageToStorage(quoteImage, path)
         } catch (firebaseErr) {
           console.warn('Firebase upload failed, trying Supabase:', firebaseErr?.message)
-          finalImageUrl = await uploadFileToSupabaseStorage(quoteImage, 'newsletters', path, () => {})
+          // Fallback to Supabase Storage using 'newsletters' bucket as it exists and has RLS policies
+          finalImageUrl = await uploadFileToSupabaseStorage(quoteImage, 'newsletters', `quote-images/${path}`, () => {})
         }
       }
       
@@ -1178,7 +1179,7 @@ export default function HomeScreen({ navigation, userRole }) {
               color={activeTab === 'news' ? PRIMARY_BLUE : '#9CA3AF'} 
             />
           </View>
-          <Text style={[styles.navLabel, activeTab === 'news' && styles.navLabelActive]}>חדשות</Text>
+          <Text style={[styles.navLabel, activeTab === 'news' && styles.navLabelActive]}>תיעודים</Text>
         </Pressable>
 
         <Pressable
@@ -1574,8 +1575,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   quoteImageContainer: {
-    width: 80,
-    height: 80,
+    width: 120,
+    aspectRatio: 16 / 9,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 2,
@@ -1607,8 +1608,8 @@ const styles = StyleSheet.create({
   },
   imagePreviewContainer: {
     position: 'relative',
-    width: 100,
-    height: 100,
+    width: 160,
+    aspectRatio: 16 / 9,
     borderRadius: 12,
     overflow: 'hidden',
   },

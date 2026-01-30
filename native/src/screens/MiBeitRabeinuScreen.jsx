@@ -70,6 +70,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
   const [uploadProgress, setUploadProgress] = useState(0)
   const [formVideoTitle, setFormVideoTitle] = useState('')
   const [selectedVideoFile, setSelectedVideoFile] = useState(null)
+  const [selectedThumbnailFile, setSelectedThumbnailFile] = useState(null)
   const [videoPreviewUri, setVideoPreviewUri] = useState(null)
 
   // Daily summary state
@@ -179,6 +180,24 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
     }
   }
 
+  const handlePickThumbnail = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.7,
+      })
+
+      if (!result.canceled) {
+        setSelectedThumbnailFile(result.assets[0])
+      }
+    } catch (error) {
+      console.error('Error picking thumbnail:', error)
+      Alert.alert('שגיאה', 'לא ניתן לבחור תמונה')
+    }
+  }
+
   const handleUploadDailyVideo = async () => {
     if (!formVideoTitle.trim() || !selectedVideoFile) {
       Alert.alert('שגיאה', 'יש למלא כותרת ולבחור סרטון')
@@ -226,8 +245,25 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
         )
       }
 
-      // Create thumbnail (for now, we'll use a placeholder or extract first frame later)
-      const thumbnailUrl = videoUrl.replace(/\.(mp4|mov|avi)$/i, '.jpg')
+      // Upload thumbnail if selected
+      let thumbnailUrl = videoUrl.replace(/\.(mp4|mov|avi)$/i, '.jpg')
+      if (selectedThumbnailFile) {
+        try {
+          const thumbExt = selectedThumbnailFile.uri.split('.').pop() || 'jpg'
+          const thumbFileName = `daily-thumb-${timestamp}.${thumbExt}`
+          const thumbPath = `daily-videos/thumbnails/${thumbFileName}`
+          
+          thumbnailUrl = await uploadFileToSupabaseStorage(
+            selectedThumbnailFile.uri,
+            'newsletters',
+            thumbPath,
+            () => {}
+          )
+        } catch (thumbErr) {
+          console.error('Error uploading thumbnail:', thumbErr)
+          // Fallback to auto-generated name if upload fails
+        }
+      }
 
       // Calculate expiresAt (24 hours from now)
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
@@ -245,6 +281,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
       setShowUploadModal(false)
       setFormVideoTitle('')
       setSelectedVideoFile(null)
+      setSelectedThumbnailFile(null)
       setVideoPreviewUri(null)
       setUploadProgress(0)
       loadDailyVideos()
@@ -664,14 +701,14 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                       resizeMode="cover"
                     />
                   ) : (
-                    <Image
-                      source={require('../../assets/splash-icon.png')}
-                      style={styles.dailyVideoThumbnail}
-                      resizeMode="cover"
-                    />
+                    <View style={styles.dailyVideoPlaceholder}>
+                      <Ionicons name="film-outline" size={40} color={PRIMARY_BLUE} style={{ opacity: 0.4 }} />
+                    </View>
                   )}
                   <View style={styles.playIconOverlay}>
-                    <Ionicons name="play" size={24} color="#fff" />
+                    <View style={styles.playIconCircle}>
+                      <Ionicons name="play" size={32} color="#fff" />
+                    </View>
                   </View>
                   {video.title && (
                     <Text style={styles.dailyVideoTitle} numberOfLines={2}>
@@ -892,6 +929,62 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                     </Text>
                   )}
                   
+                  {/* Thumbnail Picker */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>תמונה מקדימה (אופציונלי)</Text>
+                    {selectedThumbnailFile ? (
+                      <View style={styles.thumbnailPreviewContainer}>
+                        <Image
+                          source={{ uri: selectedThumbnailFile.uri }}
+                          style={styles.thumbnailPreview}
+                          resizeMode="cover"
+                        />
+                        <TouchableOpacity
+                          style={styles.removeThumbnailButton}
+                          onPress={() => setSelectedThumbnailFile(null)}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.videoPickerButton}
+                        onPress={handlePickThumbnail}
+                      >
+                        <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
+                        <Text style={styles.videoPickerText}>בחר תמונה מקדימה</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Thumbnail Picker */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>תמונה מקדימה (אופציונלי)</Text>
+                    {selectedThumbnailFile ? (
+                      <View style={styles.thumbnailPreviewContainer}>
+                        <Image
+                          source={{ uri: selectedThumbnailFile.uri }}
+                          style={styles.thumbnailPreview}
+                          resizeMode="cover"
+                        />
+                        <TouchableOpacity
+                          style={styles.removeThumbnailButton}
+                          onPress={() => setSelectedThumbnailFile(null)}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.videoPickerButton}
+                        onPress={handlePickThumbnail}
+                      >
+                        <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
+                        <Text style={styles.videoPickerText}>בחר תמונה מקדימה</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
                   {/* Video Preview */}
                   {videoPreviewUri && !uploadingVideo && (
                     <View style={styles.videoPreviewContainer}>
@@ -1412,6 +1505,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
+  playIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(30,58,138,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
   dailyVideoTitle: {
     position: 'absolute',
     bottom: 0,
@@ -1564,6 +1672,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(30,58,138,0.1)',
+  },
+  thumbnailPreviewContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  thumbnailPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  removeThumbnailButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#fff',
+    borderRadius: 12,
   },
   uploadProgressText: {
     fontSize: 14,

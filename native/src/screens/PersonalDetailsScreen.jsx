@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert, TextInput, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { auth, db as firestoreDb } from '../config/firebase'
@@ -95,7 +95,14 @@ export default function PersonalDetailsScreen({ navigation, user }) {
         <View style={{ width: 28 }} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingBottom: 120 }}
+      >
         <View style={styles.form}>
           <View style={styles.formGroup}>
             <Text style={styles.label}>שם מלא</Text>
@@ -148,6 +155,7 @@ export default function PersonalDetailsScreen({ navigation, user }) {
           </Pressable>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }

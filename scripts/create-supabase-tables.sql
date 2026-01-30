@@ -110,6 +110,19 @@ CREATE INDEX IF NOT EXISTS idx_daily_videos_created_at ON daily_videos(created_a
 CREATE INDEX IF NOT EXISTS idx_daily_videos_data ON daily_videos USING GIN (data);
 
 -- ============================================
+-- 8.5. DAILY TEHILLIM (תהילים יומי)
+-- ============================================
+CREATE TABLE IF NOT EXISTS daily_tehillim (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_tehillim_created_at ON daily_tehillim(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_tehillim_data ON daily_tehillim USING GIN (data);
+
+-- ============================================
 -- 9. DAILY INSIGHTS
 -- ============================================
 CREATE TABLE IF NOT EXISTS daily_insights (
@@ -147,6 +160,20 @@ CREATE TABLE IF NOT EXISTS long_lessons (
 
 CREATE INDEX IF NOT EXISTS idx_long_lessons_created_at ON long_lessons(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_long_lessons_data ON long_lessons USING GIN (data);
+
+-- ============================================
+-- 11.4. BAAL SHEM TOV STORIES (סיפורי הבעל שם טוב - כל מוצש)
+-- ============================================
+CREATE TABLE IF NOT EXISTS baal_shem_tov_stories (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_baal_shem_tov_stories_created_at ON baal_shem_tov_stories(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_baal_shem_tov_stories_data ON baal_shem_tov_stories USING GIN (data);
+CREATE INDEX IF NOT EXISTS idx_baal_shem_tov_stories_is_active ON baal_shem_tov_stories((data->>'isActive'));
 
 -- ============================================
 -- 11.5. HODU LAHASHEM (סיפורי ניסים)
@@ -284,10 +311,12 @@ ALTER TABLE prayers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prayer_commitments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_learning ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_videos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_tehillim ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_insights ENABLE ROW LEVEL SECURITY;
 ALTER TABLE short_lessons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE long_lessons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hodu_la_hashem ENABLE ROW LEVEL SECURITY;
+ALTER TABLE baal_shem_tov_stories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tzadikim ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pidyon_nefesh ENABLE ROW LEVEL SECURITY;
@@ -306,10 +335,12 @@ CREATE POLICY "Enable read access for all users" ON prayers FOR SELECT USING (tr
 CREATE POLICY "Enable read access for all users" ON prayer_commitments FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON daily_learning FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON daily_videos FOR SELECT USING (true);
+CREATE POLICY "Enable read access for all users" ON daily_tehillim FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON daily_insights FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON short_lessons FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON long_lessons FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON hodu_la_hashem FOR SELECT USING (true);
+CREATE POLICY "Enable read access for all users" ON baal_shem_tov_stories FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON tzadikim FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON notifications FOR SELECT USING (true);
 CREATE POLICY "Enable read access for all users" ON pidyon_nefesh FOR SELECT USING (true);

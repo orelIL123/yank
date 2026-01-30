@@ -15,11 +15,13 @@ const COLLECTION_MAP = {
   prayerCommitments: 'prayer_commitments',
   dailyLearning: 'daily_learning',
   dailyVideos: 'daily_videos',
+  dailyTehillim: 'daily_tehillim',
   dailySummary: 'daily_summary',
   dailyInsights: 'daily_insights',
   shortLessons: 'short_lessons',
   longLessons: 'long_lessons',
   hoduLaHashem: 'hodu_la_hashem',
+  baalShemTovStories: 'baal_shem_tov_stories',
   tzadikim: 'tzadikim',
   notifications: 'notifications',
   pidyonNefesh: 'pidyon_nefesh',
@@ -32,6 +34,9 @@ const COLLECTION_MAP = {
 }
 
 const toSnakeCase = (str) => str.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`)
+
+// Don't spam console when a table doesn't exist yet (e.g. daily_tehillim)
+const isTableNotFound = (err) => err?.code === 'PGRST205'
 
 class DatabaseService {
   /**
@@ -136,7 +141,7 @@ class DatabaseService {
       .single()
 
     if (error) {
-      console.error('Database error:', error)
+      if (!isTableNotFound(error)) console.error('Database error:', error)
       throw error
     }
 
@@ -200,6 +205,9 @@ class DatabaseService {
       .select()
       .single()
 
+    // Table doesn't exist (e.g. daily_tehillim not created in Supabase yet) – don't log, just throw
+    if (updateError && isTableNotFound(updateError)) throw updateError
+
     // If update failed because document doesn't exist, create it
     if (updateError && updateError.code === 'PGRST116') {
       console.log(`Document ${docId} doesn't exist, creating new document`)
@@ -210,7 +218,7 @@ class DatabaseService {
         .single()
 
       if (insertError) {
-        console.error('Database error creating document:', insertError)
+        if (!isTableNotFound(insertError)) console.error('Database error creating document:', insertError)
         throw insertError
       }
 

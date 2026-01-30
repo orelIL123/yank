@@ -21,7 +21,7 @@ const MENU_ITEMS = [
     // Ionicons doesn't include "scroll-outline" (caused runtime warning). Use a valid icon.
     { id: 'parshiot', label: 'פרשת הנשיאים', icon: 'document-text-outline', screen: 'ParshiotHaNasiim' },
     { id: 'tools', label: 'כלי עזר', icon: 'construct-outline', screen: 'Tools' },
-    { id: 'news', label: 'חדשות', icon: 'newspaper-outline', screen: 'News' },
+    { id: 'news', label: 'תיעודים ועדכונים', icon: 'newspaper-outline', screen: 'News' },
     { id: 'about', label: 'אודות', icon: 'information-circle-outline', screen: 'About' },
     { id: 'contact', label: 'צור קשר', icon: 'mail-outline', screen: 'ContactRabbi' },
     // Admin panel (screen will guard access)

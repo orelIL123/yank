@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -27,33 +27,64 @@ function gematriaSum(str) {
   return sum
 }
 
-// Simple sunrise/sunset for a given date at Israel (approx Tel Aviv: 32.08, 34.78)
-// Based on NOAA algorithm - pure JS, no API
-function getSunTimes(lat, lon, date) {
-  const d = new Date(date)
-  const n = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000)
-  const lngHour = lon / 15
-  const tRise = n + (6 - lngHour) / 24
-  const tSet = n + (18 - lngHour) / 24
-  // Simplified: approximate sunrise/sunset in UTC, then we show in local
-  const rise = new Date(d)
-  rise.setUTCHours(0, 0, 0, 0)
-  rise.setUTCMinutes(Math.floor((tRise % 1) * 60))
-  rise.setUTCHours(Math.floor(tRise) + 3) // approx Israel UTC+3
-  const set = new Date(d)
-  set.setUTCHours(0, 0, 0, 0)
-  set.setUTCMinutes(Math.floor((tSet % 1) * 60))
-  set.setUTCHours(Math.floor(tSet) + 3)
-  return { sunrise: rise, sunset: set }
+// Fetch accurate zmanim from HebCal API
+async function fetchZmanim(lat, lon) {
+  try {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + 1
+    const day = today.getDate()
+
+    // HebCal API endpoint for accurate zmanim
+    const url = `https://www.hebcal.com/zmanim?cfg=json&latitude=${lat}&longitude=${lon}&date=${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+
+    const response = await fetch(url)
+    const data = await response.json()
+
+    if (data && data.times) {
+      return {
+        sunrise: data.times.sunrise ? new Date(data.times.sunrise) : null,
+        sunset: data.times.sunset ? new Date(data.times.sunset) : null,
+        alotHaShachar: data.times.alotHaShachar ? new Date(data.times.alotHaShachar) : null,
+        misheyakir: data.times.misheyakir ? new Date(data.times.misheyakir) : null,
+        sofZmanShma: data.times.sofZmanShma ? new Date(data.times.sofZmanShma) : null,
+        sofZmanTfilla: data.times.sofZmanTfilla ? new Date(data.times.sofZmanTfilla) : null,
+        chatzot: data.times.chatzot ? new Date(data.times.chatzot) : null,
+        minchaGedola: data.times.minchaGedola ? new Date(data.times.minchaGedola) : null,
+        minchaKetana: data.times.minchaKetana ? new Date(data.times.minchaKetana) : null,
+        plagHamincha: data.times.plagHamincha ? new Date(data.times.plagHamincha) : null,
+        tzeit: data.times.tzeit ? new Date(data.times.tzeit) : null,
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('Error fetching zmanim:', error)
+    return null
+  }
 }
 
-const ISRAEL_LAT = 32.08
-const ISRAEL_LON = 34.78
+const CITIES = [
+  { name: 'ירושלים', lat: 31.7683, lon: 35.2137 },
+  { name: 'תל אביב', lat: 32.0853, lon: 34.7818 },
+  { name: 'חיפה', lat: 32.7940, lon: 34.9896 },
+  { name: 'בני ברק', lat: 32.0840, lon: 34.8335 },
+  { name: 'אשדוד', lat: 31.8044, lon: 34.6553 },
+  { name: 'באר שבע', lat: 31.2530, lon: 34.7915 },
+  { name: 'נתניה', lat: 32.3215, lon: 34.8532 },
+  { name: 'ניו יורק', lat: 40.7128, lon: -74.0060 },
+  { name: 'לונדון', lat: 51.5074, lon: -0.1278 },
+  { name: 'פריז', lat: 48.8566, lon: 2.3522 },
+  { name: 'מוסקבה', lat: 55.7558, lon: 37.6173 },
+]
 
 export default function ToolsScreen({ navigation }) {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [gematriaInput, setGematriaInput] = useState('')
   const [gematriaResult, setGematriaResult] = useState(0)
+  const [selectedCity, setSelectedCity] = useState(CITIES[0])
+  const [zmanim, setZmanim] = useState(null)
+  const [loadingZmanim, setLoadingZmanim] = useState(true)
 
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -64,11 +95,32 @@ export default function ToolsScreen({ navigation }) {
     setGematriaResult(gematriaSum(gematriaInput))
   }, [gematriaInput])
 
-  const sunTimes = getSunTimes(ISRAEL_LAT, ISRAEL_LON, currentTime)
+  // Load zmanim when city changes
+  useEffect(() => {
+    const loadZmanim = async () => {
+      setLoadingZmanim(true)
+      const data = await fetchZmanim(selectedCity.lat, selectedCity.lon)
+      setZmanim(data)
+      setLoadingZmanim(false)
+    }
+    loadZmanim()
+  }, [selectedCity])
+
   const timeStr = currentTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const dateStr = currentTime.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const sunriseStr = sunTimes.sunrise.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
-  const sunsetStr = sunTimes.sunset.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+
+  const formatTime = (date) => {
+    if (!date) return '--:--'
+    return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const sunriseStr = zmanim?.sunrise ? formatTime(zmanim.sunrise) : '--:--'
+  const sunsetStr = zmanim?.sunset ? formatTime(zmanim.sunset) : '--:--'
+  const alotStr = zmanim?.alotHaShachar ? formatTime(zmanim.alotHaShachar) : '--:--'
+  const sofZmanShmaStr = zmanim?.sofZmanShma ? formatTime(zmanim.sofZmanShma) : '--:--'
+  const sofZmanTfillaStr = zmanim?.sofZmanTfilla ? formatTime(zmanim.sofZmanTfilla) : '--:--'
+  const chatzotStr = zmanim?.chatzot ? formatTime(zmanim.chatzot) : '--:--'
+  const tzeitStr = zmanim?.tzeit ? formatTime(zmanim.tzeit) : '--:--'
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -78,9 +130,12 @@ export default function ToolsScreen({ navigation }) {
         showBackButton
         onBackPress={() => navigation.goBack()}
       />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Zmanim - Times of day */}
         <View style={styles.section}>
@@ -89,21 +144,71 @@ export default function ToolsScreen({ navigation }) {
             <Text style={styles.sectionTitle}>זמני היום</Text>
           </View>
           <View style={styles.card}>
+            <Text style={styles.cityLabel}>בחר עיר:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cityPicker}>
+              {CITIES.map((city) => (
+                <Pressable
+                  key={city.name}
+                  style={[styles.cityChip, selectedCity.name === city.name && styles.cityChipActive]}
+                  onPress={() => setSelectedCity(city)}
+                >
+                  <Text style={[styles.cityChipText, selectedCity.name === city.name && styles.cityChipTextActive]}>
+                    {city.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
             <Text style={styles.clockText}>{timeStr}</Text>
             <Text style={styles.dateText}>{dateStr}</Text>
-            <View style={styles.sunRow}>
-              <View style={styles.sunItem}>
-                <Ionicons name="sunny-outline" size={20} color={PRIMARY_BLUE} />
-                <Text style={styles.sunLabel}>הנץ החמה (קרוב)</Text>
-                <Text style={styles.sunTime}>{sunriseStr}</Text>
+
+            {loadingZmanim ? (
+              <View style={styles.loadingZmanim}>
+                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+                <Text style={styles.loadingText}>טוען זמנים מדויקים...</Text>
               </View>
-              <View style={styles.sunItem}>
-                <Ionicons name="moon-outline" size={20} color={PRIMARY_BLUE} />
-                <Text style={styles.sunLabel}>שקיעה (קרוב)</Text>
-                <Text style={styles.sunTime}>{sunsetStr}</Text>
-              </View>
-            </View>
-            <Text style={styles.disclaimer}>זמנים משוערים לאזור ישראל. לזמנים מדויקים לפי מיקום השתמשו באפליקציה ייעודית.</Text>
+            ) : (
+              <>
+                <View style={styles.zmanimGrid}>
+                  <View style={styles.zmanItem}>
+                    <Ionicons name="sunny-outline" size={18} color={PRIMARY_BLUE} />
+                    <Text style={styles.zmanLabel}>עלות השחר</Text>
+                    <Text style={styles.zmanTime}>{alotStr}</Text>
+                  </View>
+                  <View style={styles.zmanItem}>
+                    <Ionicons name="sunrise-outline" size={18} color={PRIMARY_BLUE} />
+                    <Text style={styles.zmanLabel}>הנץ החמה</Text>
+                    <Text style={styles.zmanTime}>{sunriseStr}</Text>
+                  </View>
+                  <View style={styles.zmanItem}>
+                    <Ionicons name="book-outline" size={18} color={PRIMARY_BLUE} />
+                    <Text style={styles.zmanLabel}>סוף זמן ק״ש</Text>
+                    <Text style={styles.zmanTime}>{sofZmanShmaStr}</Text>
+                  </View>
+                  <View style={styles.zmanItem}>
+                    <Ionicons name="time-outline" size={18} color={PRIMARY_BLUE} />
+                    <Text style={styles.zmanLabel}>סוף זמן תפילה</Text>
+                    <Text style={styles.zmanTime}>{sofZmanTfillaStr}</Text>
+                  </View>
+                  <View style={styles.zmanItem}>
+                    <Ionicons name="sunny" size={18} color={PRIMARY_BLUE} />
+                    <Text style={styles.zmanLabel}>חצות היום</Text>
+                    <Text style={styles.zmanTime}>{chatzotStr}</Text>
+                  </View>
+                  <View style={styles.zmanItem}>
+                    <Ionicons name="partly-sunny-outline" size={18} color={PRIMARY_BLUE} />
+                    <Text style={styles.zmanLabel}>שקיעה</Text>
+                    <Text style={styles.zmanTime}>{sunsetStr}</Text>
+                  </View>
+                  <View style={styles.zmanItem}>
+                    <Ionicons name="moon-outline" size={18} color={PRIMARY_BLUE} />
+                    <Text style={styles.zmanLabel}>צאת הכוכבים</Text>
+                    <Text style={styles.zmanTime}>{tzeitStr}</Text>
+                  </View>
+                </View>
+                <Text style={styles.disclaimer}>זמנים מדויקים מ-HebCal API לפי מיקום {selectedCity.name}</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -131,6 +236,7 @@ export default function ToolsScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
@@ -158,6 +264,38 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_700Bold',
     color: DEEP_BLUE,
   },
+  cityLabel: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 8,
+  },
+  cityPicker: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  cityChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  cityChipActive: {
+    backgroundColor: PRIMARY_BLUE,
+    borderColor: PRIMARY_BLUE,
+  },
+  cityChipText: {
+    fontSize: 12,
+    fontFamily: 'Heebo_500Medium',
+    color: '#64748b',
+  },
+  cityChipTextActive: {
+    color: '#fff',
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -184,27 +322,42 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
-  sunRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 12,
+  loadingZmanim: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+  },
+  zmanimGrid: {
+    marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(11,27,58,0.06)',
+    gap: 12,
   },
-  sunItem: {
+  zmanItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 10,
+    paddingVertical: 6,
   },
-  sunLabel: {
-    fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+  zmanLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Heebo_500Medium',
     color: '#6b7280',
+    textAlign: 'right',
   },
-  sunTime: {
-    fontSize: 18,
+  zmanTime: {
+    fontSize: 16,
     fontFamily: 'Heebo_700Bold',
     color: DEEP_BLUE,
+    minWidth: 60,
+    textAlign: 'left',
   },
   disclaimer: {
     fontSize: 11,

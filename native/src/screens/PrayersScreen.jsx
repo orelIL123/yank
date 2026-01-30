@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator, Modal, Share } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -33,6 +34,13 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
   useEffect(() => {
     loadPrayers()
   }, [])
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadPrayers()
+      return undefined
+    }, [])
+  )
 
   const loadPrayers = async () => {
     try {

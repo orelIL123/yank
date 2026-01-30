@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, Pressable, ImageBackground, Linking, Alert, ActivityIndicator, Platform, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, Pressable, ImageBackground, Image, Linking, Alert, ActivityIndicator, Platform, Dimensions } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Video } from 'expo-av'
@@ -194,36 +194,31 @@ export default function FeaturedTopic({ config, isAdmin, onEdit }) {
             disabled={!featured_topic_link_url}
           >
             {featured_topic_image_url ? (
-              <ImageBackground
-                source={{ uri: featured_topic_image_url }}
-                style={styles.featuredImageBackground}
-                imageStyle={styles.featuredImage}
-                resizeMode="cover"
-              >
-                <LinearGradient
-                  colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
-                  style={styles.featuredOverlay}
-                >
-                  <View style={styles.featuredContent}>
-                    {featured_topic_title && (
-                      <Text style={styles.featuredTitle}>{featured_topic_title}</Text>
-                    )}
-                    {featured_topic_description && (
-                      <Text style={styles.featuredDescription}>{featured_topic_description}</Text>
-                    )}
-                    {featured_topic_link_url && (
-                      <View style={styles.featuredButtonWrapper}>
-                        <Pressable style={styles.featuredButton}>
-                          <Text style={styles.featuredButtonText}>
-                            {featured_topic_button_text || 'למידע נוסף'}
-                          </Text>
-                          <Ionicons name="arrow-back" size={18} color="#fff" />
-                        </Pressable>
+              <View style={styles.simpleImageContainer}>
+                <Image
+                  source={{ uri: featured_topic_image_url }}
+                  style={styles.simpleImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.simpleTextContent}>
+                  {featured_topic_title && (
+                    <Text style={styles.simpleTitle}>{featured_topic_title}</Text>
+                  )}
+                  {featured_topic_description && (
+                    <Text style={styles.simpleDescription}>{featured_topic_description}</Text>
+                  )}
+                  {featured_topic_link_url && (
+                    <View style={styles.simpleButtonWrapper}>
+                      <View style={styles.simpleButton}>
+                        <Text style={styles.simpleButtonText}>
+                          {featured_topic_button_text || 'למידע נוסף'}
+                        </Text>
+                        <Ionicons name="arrow-back" size={16} color="#fff" />
                       </View>
-                    )}
-                  </View>
-                </LinearGradient>
-              </ImageBackground>
+                    </View>
+                  )}
+                </View>
+              </View>
             ) : (
               <LinearGradient
                 colors={[PRIMARY_BLUE, '#1e40af']}
@@ -489,6 +484,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Poppins_700Bold',
     letterSpacing: 1,
+  },
+  simpleImageContainer: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  simpleImage: {
+    width: '100%',
+    height: 180,
+  },
+  simpleTextContent: {
+    padding: 16,
+    alignItems: 'flex-end',
+  },
+  simpleTitle: {
+    fontSize: 18,
+    fontFamily: 'Heebo_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  simpleDescription: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+    lineHeight: 20,
+  },
+  simpleButtonWrapper: {
+    marginTop: 12,
+  },
+  simpleButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: PRIMARY_BLUE,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  simpleButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
   },
 })
 
