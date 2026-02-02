@@ -9,6 +9,23 @@ const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
+// RTL paragraphs to prevent text direction flip on long Hebrew content
+function renderRtlParagraphs(text, textStyle) {
+  if (!text || typeof text !== 'string') return null
+  const paragraphs = String(text).split(/\n\n+/).filter((p) => p.trim())
+  if (paragraphs.length === 0) {
+    return <Text style={[textStyle, { writingDirection: 'rtl' }]}>{text}</Text>
+  }
+  return paragraphs.map((paragraph, index) => (
+    <Text
+      key={index}
+      style={[textStyle, { writingDirection: 'rtl', marginBottom: index < paragraphs.length - 1 ? 20 : 0 }]}
+    >
+      {paragraph.trim()}
+    </Text>
+  ))
+}
+
 // קטגוריות ספר המידות - תוכן אמיתי מ-Sefaria API בלבד
 // שמות מדויקים כפי שמופיעים ב-Sefaria API (מעודכן לפי המבנה הרשמי)
 const MIDOT_CATEGORIES = [
@@ -283,8 +300,8 @@ export default function SeferHaMidotScreen({ navigation }) {
             <View style={styles.divider} />
           </View>
           
-          <View style={styles.textContainer}>
-            <Text style={styles.textContent}>{categoryContent.hebrew || categoryContent.content}</Text>
+          <View style={[styles.textContainer, styles.textContainerRtl]}>
+            {renderRtlParagraphs(categoryContent.hebrew || categoryContent.content || '', styles.textContent)}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -404,11 +421,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(11,27,58,0.1)',
   },
+  textContainerRtl: {
+    direction: 'rtl',
+  },
   textContent: {
     fontSize: 18,
     fontFamily: 'Heebo_400Regular',
     color: DEEP_BLUE,
     textAlign: 'right',
     lineHeight: 32,
+    writingDirection: 'rtl',
   },
 })

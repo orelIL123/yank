@@ -47,7 +47,22 @@ const FONTS = {
   regular: 'Poppins_400Regular',
 };
 
-// Helper function removed - now handled in TehillimScreen
+// Helper: split text into paragraphs so each block gets explicit RTL (prevents bidi flip on long text)
+function renderRtlParagraphs(text, textStyle) {
+  if (!text || typeof text !== 'string') return null;
+  const paragraphs = text.split(/\n\n+/).filter((p) => p.trim());
+  if (paragraphs.length === 0) {
+    return <Text style={[textStyle, { writingDirection: 'rtl' }]}>{text}</Text>;
+  }
+  return paragraphs.map((paragraph, index) => (
+    <Text
+      key={index}
+      style={[textStyle, { writingDirection: 'rtl', marginBottom: index < paragraphs.length - 1 ? 20 : 0 }]}
+    >
+      {paragraph.trim()}
+    </Text>
+  ));
+}
 
 // Helper function to calculate daily Orchot Tzadikim gate (1-28 cycle)
 function getDailyOrchotTzadikimGate() {
@@ -613,8 +628,8 @@ export default function DailyLearningScreen({ navigation, userRole }) {
               ) : null}
 
               {displayContent.text ? (
-                <View style={styles.textContainer}>
-                  <Text style={styles.textContent}>{displayContent.text}</Text>
+                <View style={[styles.textContainer, styles.textContainerRtl]}>
+                  {renderRtlParagraphs(displayContent.text, styles.textContent)}
                 </View>
               ) : null}
             </>
@@ -775,8 +790,8 @@ export default function DailyLearningScreen({ navigation, userRole }) {
             <View style={styles.divider} />
           </View>
 
-          <View style={styles.textContainer}>
-            <Text style={styles.textContent}>{displayContent.hebrew || displayContent.content}</Text>
+          <View style={[styles.textContainer, styles.textContainerRtl]}>
+            {renderRtlParagraphs(displayContent.hebrew || displayContent.content || '', styles.textContent)}
           </View>
         </ScrollView>
 
@@ -1200,6 +1215,9 @@ const styles = StyleSheet.create({
   textContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
+  },
+  textContainerRtl: {
+    direction: 'rtl',
   },
   textContent: {
     fontSize: 19,

@@ -219,11 +219,12 @@ function FeaturedTopicForm() {
     // Remove whitespace
     input = input.trim()
     
-    // If it's a full YouTube URL, extract the ID
+    // If it's a full YouTube URL, extract the ID (including live streams)
     const patterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
       /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-      /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/
+      /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/live\/([a-zA-Z0-9_-]{11})/  // YouTube Live streams
     ]
     
     for (const pattern of patterns) {
@@ -470,11 +471,12 @@ function FeaturedTopicForm() {
                 textAlign="right"
               />
               <Text style={styles.helperText}>
-                💡 טיפ: אפשר להדביק את כל הקישור מיוטיוב והמערכת תחלץ את המזהה אוטומטית!{'\n'}
+                💡 טיפ: אפשר להדביק את כל הקישור מיוטיוב (כולל לייב) והמערכת תחלץ את המזהה אוטומטית!{'\n'}
                 דוגמאות:{'\n'}
-                • youtube.com/watch?v=Be88vYnfQdA{'\n'}
-                • youtu.be/Be88vYnfQdA{'\n'}
-                • או רק: Be88vYnfQdA
+                • youtube.com/watch?v=VIDEO_ID{'\n'}
+                • youtube.com/live/VIDEO_ID (לייב){'\n'}
+                • youtu.be/VIDEO_ID{'\n'}
+                • או רק: VIDEO_ID
               </Text>
             </View>
           )}

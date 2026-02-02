@@ -23,6 +23,23 @@ function getHebrewDate() {
   })
 }
 
+// RTL paragraphs to prevent text direction flip on long Hebrew content
+function renderRtlParagraphs(text, textStyle) {
+  if (!text || typeof text !== 'string') return null
+  const paragraphs = text.split(/\n\n+/).filter((p) => p.trim())
+  if (paragraphs.length === 0) {
+    return <Text style={[textStyle, { writingDirection: 'rtl' }]}>{text}</Text>
+  }
+  return paragraphs.map((paragraph, index) => (
+    <Text
+      key={index}
+      style={[textStyle, { writingDirection: 'rtl', marginBottom: index < paragraphs.length - 1 ? 20 : 0 }]}
+    >
+      {paragraph.trim()}
+    </Text>
+  ))
+}
+
 export default function OrchotTzadikimScreen({ navigation, userRole }) {
   const [loading, setLoading] = useState(true)
   const [dailyContent, setDailyContent] = useState(null)
@@ -207,8 +224,8 @@ export default function OrchotTzadikimScreen({ navigation, userRole }) {
             )}
 
             {dailyContent.content && (
-              <View style={styles.contentContainer}>
-                <Text style={styles.contentText}>{dailyContent.content}</Text>
+              <View style={[styles.contentContainer, styles.contentContainerRtl]}>
+                {renderRtlParagraphs(dailyContent.content, styles.contentText)}
               </View>
             )}
 
@@ -424,12 +441,16 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 16,
   },
+  contentContainerRtl: {
+    direction: 'rtl',
+  },
   contentText: {
     fontSize: 18,
     fontFamily: 'Heebo_400Regular',
     color: DEEP_BLUE,
     textAlign: 'right',
     lineHeight: 32,
+    writingDirection: 'rtl',
   },
   updateTime: {
     fontSize: 12,
