@@ -1,16 +1,19 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, Pressable, ImageBackground, Image, Linking, Alert, ActivityIndicator, Platform, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, Pressable, ImageBackground, Image, Linking, Alert, ActivityIndicator, Modal, Dimensions } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Video } from 'expo-av'
+import YoutubePlayer from 'react-native-youtube-iframe'
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
-
+const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const PRIMARY_BLUE = '#1e3a8a'
 const DEEP_BLUE = '#0b1b3a'
+const VIDEO_HEIGHT = Math.min(SCREEN_WIDTH * (9 / 16), 280)
 
 export default function FeaturedTopic({ config, isAdmin, onEdit }) {
   const [videoLoading, setVideoLoading] = useState(true)
+  const [showVideoModal, setShowVideoModal] = useState(false)
+  const [videoIdInModal, setVideoIdInModal] = useState(null)
 
   console.log('🟣 FeaturedTopic: Received config:', config)
   console.log('🟣 FeaturedTopic: Enabled?', config?.featured_topic_enabled)
@@ -38,6 +41,16 @@ export default function FeaturedTopic({ config, isAdmin, onEdit }) {
     featured_topic_button_text,
   } = config
 
+  // YouTube URLs can't be played in expo-av Video (needs direct stream). Use "open in YouTube" for them.
+  const isYoutubeLiveUrl =
+    featured_topic_type === 'live_video' &&
+    featured_topic_video_url &&
+    (featured_topic_video_url.includes('youtube.com') || featured_topic_video_url.includes('youtu.be'))
+
+  const youtubeIdForLive =
+    featured_topic_youtube_id ||
+    (featured_topic_video_url && (featured_topic_video_url.match(/(?:youtube\.com\/live\/|youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/)?.[1] || featured_topic_video_url.match(/[?&]v=([a-zA-Z0-9_-]+)/)?.[1]))
+
   const handlePress = () => {
     if (featured_topic_link_url) {
       Linking.openURL(featured_topic_link_url).catch(() => {
@@ -46,78 +59,119 @@ export default function FeaturedTopic({ config, isAdmin, onEdit }) {
     }
   }
 
-  const handleYouTubePress = () => {
-    if (featured_topic_youtube_id) {
-      // YouTube blocks embed in WebView (Error 153), so always open in YouTube app
-      handleOpenInYouTubeApp()
+  const openInAppVideo = (videoId) => {
+    if (videoId) {
+      setVideoIdInModal(videoId)
+      setShowVideoModal(true)
     }
   }
 
-  const handleOpenInYouTubeApp = () => {
-    if (featured_topic_youtube_id) {
-      // Try YouTube app first, then fallback to browser
-      const youtubeAppUrl = `vnd.youtube:${featured_topic_youtube_id}`
-      const youtubeWebUrl = `https://www.youtube.com/watch?v=${featured_topic_youtube_id}`
-      
-      // Try to open YouTube app first
-      Linking.canOpenURL(youtubeAppUrl).then((supported) => {
-        if (supported) {
-          return Linking.openURL(youtubeAppUrl)
-        } else {
-          // Fallback to web browser
-          return Linking.openURL(youtubeWebUrl)
-        }
-      }).catch(() => {
-        // If both fail, try web URL
+  const openYouTubeByVideoId = (videoId) => {
+    if (!videoId) return
+    const youtubeAppUrl = `vnd.youtube:${videoId}`
+    const youtubeWebUrl = `https://www.youtube.com/watch?v=${videoId}`
+    Linking.canOpenURL(youtubeAppUrl)
+      .then((supported) => {
+        if (supported) return Linking.openURL(youtubeAppUrl)
+        return Linking.openURL(youtubeWebUrl)
+      })
+      .catch(() => {
         Linking.openURL(youtubeWebUrl).catch(() => {
           Alert.alert('שגיאה', 'לא ניתן לפתוח את הסרטון. אנא פתח את יוטיוב ידנית.')
         })
       })
-    }
   }
 
   const renderContent = () => {
     switch (featured_topic_type) {
       case 'youtube':
-        return (
-          <>
+        return featured_topic_youtube_id ? (
+          <Pressable
+            style={styles.featuredCard}
+            onPress={() => openInAppVideo(featured_topic_youtube_id)}
+            accessibilityRole="button"
+          >
+            <View style={styles.youtubePreviewContainer}>
+              <ImageBackground
+                source={{ uri: `https://img.youtube.com/vi/${featured_topic_youtube_id}/maxresdefault.jpg` }}
+                style={styles.featuredImageBackground}
+                imageStyle={{ borderRadius: 18 }}
+                resizeMode="contain"
+                onError={() => console.log('Image load error')}
+              >
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)']}
+                  style={styles.featuredOverlay}
+                >
+                  <View style={styles.playOverlay}>
+                    <View style={styles.playButtonSubtle}>
+                      <Ionicons name="play" size={24} color="#fff" style={{ marginLeft: 2 }} />
+                    </View>
+                  </View>
+                  <View style={styles.featuredContentBottom}>
+                    {featured_topic_title && (
+                      <Text style={styles.featuredTitle}>{featured_topic_title}</Text>
+                    )}
+                    {featured_topic_description && (
+                      <Text style={styles.featuredDescription}>{featured_topic_description}</Text>
+                    )}
+                  </View>
+                </LinearGradient>
+              </ImageBackground>
+            </View>
+            {isAdmin && (
+              <Pressable
+                style={styles.editButton}
+                onPress={onEdit}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="create-outline" size={20} color="#fff" />
+              </Pressable>
+            )}
+          </Pressable>
+        ) : null
+
+      case 'live_video':
+        // שידור חי מ-YouTube – תצוגה מקדימה + נגן בתוך האפליקציה (כמו סרטון רגיל)
+        if (isYoutubeLiveUrl && youtubeIdForLive) {
+          return (
             <Pressable
               style={styles.featuredCard}
-              onPress={handleYouTubePress}
+              onPress={() => openInAppVideo(youtubeIdForLive)}
               accessibilityRole="button"
             >
-              {featured_topic_youtube_id && (
-                <View style={styles.youtubePreviewContainer}>
-                  <ImageBackground
-                    source={{ uri: `https://img.youtube.com/vi/${featured_topic_youtube_id}/maxresdefault.jpg` }}
-                    style={styles.featuredImageBackground}
-                    imageStyle={{ borderRadius: 18 }}
-                    resizeMode="contain"
-                    onError={() => console.log('Image load error')}
+              <View style={styles.youtubePreviewContainer}>
+                <ImageBackground
+                  source={{
+                    uri:
+                      featured_topic_image_url ||
+                      `https://img.youtube.com/vi/${youtubeIdForLive}/maxresdefault.jpg`,
+                  }}
+                  style={styles.featuredImageBackground}
+                  imageStyle={{ borderRadius: 18 }}
+                  resizeMode="contain"
+                  onError={() => console.log('Image load error')}
+                >
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)']}
+                    style={styles.featuredOverlay}
                   >
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)']}
-                      style={styles.featuredOverlay}
-                    >
-                      {/* Subtle Play Overlay */}
-                      <View style={styles.playOverlay}>
-                        <View style={styles.playButtonSubtle}>
-                          <Ionicons name="play" size={24} color="#fff" style={{ marginLeft: 2 }} />
-                        </View>
+                    <View style={styles.playOverlay}>
+                      <View style={styles.playButtonSubtle}>
+                        <Ionicons name="play" size={24} color="#fff" style={{ marginLeft: 2 }} />
                       </View>
-
-                      <View style={styles.featuredContentBottom}>
-                        {featured_topic_title && (
-                          <Text style={styles.featuredTitle}>{featured_topic_title}</Text>
-                        )}
-                        {featured_topic_description && (
-                          <Text style={styles.featuredDescription}>{featured_topic_description}</Text>
-                        )}
-                      </View>
-                    </LinearGradient>
-                  </ImageBackground>
-                </View>
-              )}
+                    </View>
+                    <View style={styles.featuredContentBottom}>
+                      {featured_topic_title && (
+                        <Text style={styles.featuredTitle}>{featured_topic_title}</Text>
+                      )}
+                      {featured_topic_description && (
+                        <Text style={styles.featuredDescription}>{featured_topic_description}</Text>
+                      )}
+                    </View>
+                  </LinearGradient>
+                </ImageBackground>
+              </View>
               {isAdmin && (
                 <Pressable
                   style={styles.editButton}
@@ -128,11 +182,9 @@ export default function FeaturedTopic({ config, isAdmin, onEdit }) {
                 </Pressable>
               )}
             </Pressable>
-
-          </>
-        )
-
-      case 'live_video':
+          )
+        }
+        // Direct stream URL (HLS etc.) – use expo-av Video
         return (
           <View style={styles.featuredCard}>
             {featured_topic_video_url ? (
@@ -155,7 +207,10 @@ export default function FeaturedTopic({ config, isAdmin, onEdit }) {
                   onError={(error) => {
                     console.error('Video error:', error)
                     setVideoLoading(false)
-                    Alert.alert('שגיאה', 'לא ניתן לטעון את השידור החי')
+                    Alert.alert(
+                      'שגיאה',
+                      'לא ניתן לטעון את השידור. ייתכן שהשידור הסתיים – נסה לפתוח ביוטיוב.'
+                    )
                   }}
                 />
                 <View style={styles.liveBadge}>
@@ -258,7 +313,53 @@ export default function FeaturedTopic({ config, isAdmin, onEdit }) {
     }
   }
 
-  return <View style={styles.container}>{renderContent()}</View>
+  return (
+    <>
+      <View style={styles.container}>{renderContent()}</View>
+
+      <Modal
+        visible={showVideoModal && !!videoIdInModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { setShowVideoModal(false); setVideoIdInModal(null) }}
+      >
+        <View style={styles.videoModalOverlay}>
+          <View style={styles.videoModalContent}>
+            <View style={styles.videoModalHeader}>
+              <Text style={styles.videoModalTitle} numberOfLines={1}>
+                {featured_topic_title || 'נושא מרכזי'}
+              </Text>
+              <Pressable
+                style={styles.videoModalClose}
+                onPress={() => { setShowVideoModal(false); setVideoIdInModal(null) }}
+                hitSlop={12}
+              >
+                <Ionicons name="close" size={28} color={DEEP_BLUE} />
+              </Pressable>
+            </View>
+            <View style={styles.videoPlayerWrapper}>
+              <YoutubePlayer
+                height={VIDEO_HEIGHT}
+                videoId={videoIdInModal}
+                play={true}
+                webViewStyle={{ opacity: 0.99 }}
+                initialPlayerParams={{ controls: 1, modestbranding: 1, rel: 0 }}
+              />
+            </View>
+            <Pressable
+              style={styles.openInYoutubeButton}
+              onPress={() => {
+                if (videoIdInModal) openYouTubeByVideoId(videoIdInModal)
+              }}
+            >
+              <Ionicons name="logo-youtube" size={20} color="#fff" />
+              <Text style={styles.openInYoutubeButtonText}>פתח ביוטיוב</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
+  )
 }
 
 const styles = StyleSheet.create({
@@ -404,6 +505,66 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 5,
+  },
+  videoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  videoModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 24,
+    maxHeight: '90%',
+  },
+  videoModalHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+  },
+  videoModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Heebo_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    flex: 1,
+    marginRight: 12,
+  },
+  videoModalClose: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoPlayerWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    marginHorizontal: 16,
+    marginTop: 8,
+  },
+  openInYoutubeButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FF0000',
+    marginHorizontal: 16,
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  openInYoutubeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
   },
   liveVideoContainer: {
     width: '100%',
