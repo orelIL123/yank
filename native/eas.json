@@ -34,7 +34,7 @@
   "submit": {
     "production": {
       "android": {
-        "serviceAccountKeyPath": "../../config/google-play-service-account.json",
+        "serviceAccountKeyPath": "/root/.openclaw/workspace/config/google-play-service-account.json",
         "track": "internal"
       }
     }
