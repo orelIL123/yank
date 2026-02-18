@@ -1,16 +1,23 @@
 import { initializeApp, getApps } from 'firebase/app'
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { getFirestore, setLogLevel } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
+// Use environment variables; never commit real keys to repo (see native/.env.example)
 const firebaseConfig = {
-  apiKey: "AIzaSyC6CfvVURku2xMCgnhIGQbc4vQTKLP3SYA",
-  authDomain: "yank-99f79.firebaseapp.com",
-  projectId: "yank-99f79",
-  storageBucket: "yank-99f79.firebasestorage.app",
-  messagingSenderId: "835481530038",
-  appId: "1:835481530038:web:cd4141f7f1d099a26bc017"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '',
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || '',
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '',
+}
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  throw new Error(
+    'Firebase config missing: set EXPO_PUBLIC_FIREBASE_* in native/.env (copy from .env.example).'
+  )
 }
 
 // Initialize Firebase with error handling
@@ -50,6 +57,10 @@ try {
   }
 
   db = getFirestore(app)
+  // הנמכת לוגים של Firestore – מונע התראות "WebChannel transport errored" (חיבור נפל לרגע, Firestore מתחבר מחדש אוטומטית)
+  try {
+    setLogLevel('error')
+  } catch (_) {}
   storage = getStorage(app)
 } catch (error) {
   console.error('Firebase services initialization error:', error)

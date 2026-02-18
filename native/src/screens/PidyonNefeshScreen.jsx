@@ -9,7 +9,7 @@ const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-export default function PidyonNefeshScreen({ navigation }) {
+export default function PidyonNefeshScreen({ navigation, userRole, userPermissions }) {
   const [pidyonList, setPidyonList] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -17,6 +17,9 @@ export default function PidyonNefeshScreen({ navigation }) {
   const [motherName, setMotherName] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  
+  const isAdmin = userRole === 'admin'
 
   useEffect(() => {
     loadPidyonList()
@@ -53,25 +56,77 @@ export default function PidyonNefeshScreen({ navigation }) {
     try {
       setSubmitting(true)
 
-      await db.addDocument('pidyonNefesh', {
-        name: name.trim(),
-        motherName: motherName.trim(),
-        description: description.trim(),
-        createdAt: new Date().toISOString(),
-      })
+      if (editingId) {
+        // Update existing pidyon
+        await db.updateDocument('pidyonNefesh', editingId, {
+          name: name.trim(),
+          motherName: motherName.trim(),
+          description: description.trim(),
+        })
+        Alert.alert('הצלחה', 'הפדיון נפש עודכן בהצלחה')
+      } else {
+        // Add new pidyon
+        await db.addDocument('pidyonNefesh', {
+          name: name.trim(),
+          motherName: motherName.trim(),
+          description: description.trim(),
+          createdAt: new Date().toISOString(),
+        })
+        Alert.alert('הצלחה', 'הפדיון נפש נוסף בהצלחה')
+      }
 
-      Alert.alert('הצלחה', 'הפדיון נפש נוסף בהצלחה')
       setName('')
       setMotherName('')
       setDescription('')
+      setEditingId(null)
       setShowForm(false)
       loadPidyonList()
     } catch (error) {
-      console.error('Error adding pidyon nefesh:', error)
-      Alert.alert('שגיאה', 'לא ניתן להוסיף פדיון נפש')
+      console.error('Error saving pidyon nefesh:', error)
+      Alert.alert('שגיאה', editingId ? 'לא ניתן לעדכן פדיון נפש' : 'לא ניתן להוסיף פדיון נפש')
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleEdit = (pidyon) => {
+    setName(pidyon.name || '')
+    setMotherName(pidyon.motherName || '')
+    setDescription(pidyon.description || '')
+    setEditingId(pidyon.id)
+    setShowForm(true)
+  }
+
+  const handleDelete = (pidyon) => {
+    Alert.alert(
+      'מחיקת פדיון נפש',
+      `האם אתה בטוח שברצונך למחוק את ${pidyon.name} בן/בת ${pidyon.motherName}?`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await db.deleteDocument('pidyonNefesh', pidyon.id)
+              Alert.alert('הצלחה', 'הפדיון נפש נמחק בהצלחה')
+              loadPidyonList()
+            } catch (error) {
+              console.error('Error deleting pidyon nefesh:', error)
+              Alert.alert('שגיאה', 'לא ניתן למחוק את הפדיון נפש')
+            }
+          },
+        },
+      ]
+    )
+  }
+
+  const handleCancelEdit = () => {
+    setName('')
+    setMotherName('')
+    setDescription('')
+    setEditingId(null)
+    setShowForm(false)
   }
 
   const formatDate = (timestamp) => {
@@ -119,13 +174,22 @@ export default function PidyonNefeshScreen({ navigation }) {
           <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
         </Pressable>
         <Text style={styles.headerTitle}>פדיון נפש</Text>
-        <Pressable
-          style={styles.addButton}
-          onPress={() => setShowForm(!showForm)}
-          accessibilityRole="button"
-        >
-          <Ionicons name={showForm ? "close" : "add"} size={28} color="#fff" />
-        </Pressable>
+        {isAdmin && (
+          <Pressable
+            style={styles.addButton}
+            onPress={() => {
+              if (showForm) {
+                handleCancelEdit()
+              } else {
+                setShowForm(true)
+              }
+            }}
+            accessibilityRole="button"
+          >
+            <Ionicons name={showForm ? "close" : "add"} size={28} color="#fff" />
+          </Pressable>
+        )}
+        {!isAdmin && <View style={{ width: 44 }} />}
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
@@ -137,10 +201,12 @@ export default function PidyonNefeshScreen({ navigation }) {
       >
         <Text style={styles.subtitle}>שמות לברכה ורפואה שלמה</Text>
 
-        {/* Add Form */}
-        {showForm && (
+        {/* Add/Edit Form - Admin Only */}
+        {showForm && isAdmin && (
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>הוסף שם לפדיון נפש</Text>
+            <Text style={styles.formTitle}>
+              {editingId ? 'ערוך שם בפדיון נפש' : 'הוסף שם לפדיון נפש'}
+            </Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>שם *</Text>
@@ -235,6 +301,24 @@ export default function PidyonNefeshScreen({ navigation }) {
                   <Text style={styles.pidyonDate}>{formatDate(pidyon.createdAt)}</Text>
                 </View>
               </View>
+              {isAdmin && (
+                <View style={styles.adminActions}>
+                  <Pressable
+                    style={styles.editButton}
+                    onPress={() => handleEdit(pidyon)}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
+                  </Pressable>
+                  <Pressable
+                    style={styles.deleteButton}
+                    onPress={() => handleDelete(pidyon)}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  </Pressable>
+                </View>
+              )}
             </View>
           ))
         )}
@@ -484,5 +568,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
+  },
+  adminActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    justifyContent: 'flex-end',
+  },
+  editButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })

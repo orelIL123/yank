@@ -8,7 +8,9 @@ import YoutubePlayer from 'react-native-youtube-iframe'
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const PRIMARY_BLUE = '#1e3a8a'
 const DEEP_BLUE = '#0b1b3a'
-const VIDEO_HEIGHT = Math.min(SCREEN_WIDTH * (9 / 16), 280)
+// נושא מרכזי תופס יותר מקום על המסך – מרווחים קטנים, יחס 16:9
+const FEATURED_HORIZONTAL_MARGIN = 10
+const VIDEO_HEIGHT = Math.min(SCREEN_WIDTH * (9 / 16), 320)
 
 export default function FeaturedTopic({ config, isAdmin, onEdit }) {
   const [videoLoading, setVideoLoading] = useState(true)
@@ -364,9 +366,9 @@ export default function FeaturedTopic({ config, isAdmin, onEdit }) {
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 12,
-    marginHorizontal: 16,
-    marginBottom: 8,
+    marginTop: 8,
+    marginHorizontal: FEATURED_HORIZONTAL_MARGIN,
+    marginBottom: 12,
   },
   featuredCard: {
     borderRadius: 18,
@@ -389,7 +391,7 @@ const styles = StyleSheet.create({
   },
   youtubePreviewContainer: {
     width: '100%',
-    aspectRatio: 16 / 9, // YouTube standard aspect ratio - exactly like YouTube!
+    aspectRatio: 16 / 9,
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: '#000',
@@ -568,7 +570,7 @@ const styles = StyleSheet.create({
   },
   liveVideoContainer: {
     width: '100%',
-    aspectRatio: 16 / 9, // YouTube standard aspect ratio
+    aspectRatio: 16 / 9,
     backgroundColor: '#000',
     position: 'relative',
     borderRadius: 18,
@@ -648,13 +650,15 @@ const styles = StyleSheet.create({
   },
   simpleImageContainer: {
     width: '100%',
+    aspectRatio: 16 / 9,
     backgroundColor: '#fff',
     borderRadius: 18,
     overflow: 'hidden',
   },
   simpleImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
+    borderRadius: 18,
   },
   simpleTextContent: {
     padding: 16,

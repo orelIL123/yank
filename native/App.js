@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { StatusBar } from 'expo-status-bar'
-import { View, ActivityIndicator, Image, Animated } from 'react-native'
+import { View, ActivityIndicator, Image, Animated, Alert } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
@@ -59,6 +59,7 @@ import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } fr
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
 import { registerForPushNotificationsAsync } from './src/utils/notifications'
+import analytics from './src/services/analytics'
 
 const Stack = createNativeStackNavigator()
 
@@ -113,6 +114,9 @@ export default function App() {
         setUser(currentUser)
 
         if (currentUser) {
+          // Start analytics session
+          analytics.startSession(currentUser.uid)
+
           // Load cached role immediately (works offline)
           try {
             const cached = await AsyncStorage.getItem(`user_role_cache_${currentUser.uid}`)
@@ -310,19 +314,54 @@ export default function App() {
     checkForUpdates()
   }, [])
 
+  // Track app install on first launch
+  useEffect(() => {
+    analytics.trackAppInstall()
+  }, [])
+
+  // Analytics heartbeat - keeps active user count accurate
+  useEffect(() => {
+    if (!user) return
+    // Send heartbeat every 2 minutes while app is open
+    const interval = setInterval(() => {
+      analytics.heartbeat(user.uid)
+    }, 120000)
+    return () => clearInterval(interval)
+  }, [user])
+
   // Push notifications setup
   useEffect(() => {
     // Register for push notifications when user is logged in
     if (user) {
-      registerForPushNotificationsAsync().then(async (token) => {
-        if (token) {
-          console.log('📱 Push Token received:', token)
-          // NOTE: We no longer persist push tokens to Firestore (Firebase is auth-only).
-          // If we need server-side pushes later, we'll store tokens in Supabase via Edge Function.
+      const requestWithExplanation = async () => {
+        try {
+          // Check current permission status first
+          const { status: existingStatus } = await Notifications.getPermissionsAsync()
+          if (existingStatus !== 'granted') {
+            // Show explanation dialog before asking for permission
+            await new Promise((resolve) => {
+              Alert.alert(
+                '🔔 התראות מהרב הינוקא',
+                'מומלץ לאשר את ההתראות על מנת להתעדכן באירועים ושיעורים של מו"ר הרב הינוקא שליט"א',
+                [
+                  { text: 'לא עכשיו', style: 'cancel', onPress: resolve },
+                  { text: 'אשר התראות', onPress: resolve },
+                ],
+                { cancelable: false }
+              )
+            })
+          }
+          const token = await registerForPushNotificationsAsync()
+          if (token) {
+            console.log('📱 Push Token received:', token)
+            // NOTE: We no longer persist push tokens to Firestore (Firebase is auth-only).
+            // If we need server-side pushes later, we'll store tokens in Supabase via Edge Function.
+          }
+        } catch (error) {
+          console.error('❌ Error registering for push notifications:', error)
         }
-      }).catch(error => {
-        console.error('❌ Error registering for push notifications:', error)
-      })
+      }
+      requestWithExplanation()
     }
   }, [user])
 
@@ -402,6 +441,9 @@ export default function App() {
         onStateChange={(state) => {
           const currentRoute = navigationRef.current?.getCurrentRoute()
           console.log('🔴 NAVIGATION STATE CHANGED - Current screen:', currentRoute?.name)
+          if (currentRoute?.name) {
+            analytics.trackScreenView(currentRoute.name, user?.uid || null)
+          }
         }}
       >
         <StatusBar style="dark" />
@@ -490,13 +532,17 @@ export default function App() {
             {(props) => <BaalShemTovStoriesScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-          <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="Notifications">
+            {(props) => <NotificationsScreen {...props} userRole={userRole} />}
+          </Stack.Screen>
           <Stack.Screen name="PersonalDetails">
             {(props) => <PersonalDetailsScreen {...props} user={user} />}
           </Stack.Screen>
           <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
           <Stack.Screen name="Tools" component={ToolsScreen} />
-          <Stack.Screen name="PidyonNefesh" component={PidyonNefeshScreen} />
+          <Stack.Screen name="PidyonNefesh">
+            {(props) => <PidyonNefeshScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
+          </Stack.Screen>
           <Stack.Screen name="MiBeitRabeinu">
             {(props) => <MiBeitRabeinuScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>

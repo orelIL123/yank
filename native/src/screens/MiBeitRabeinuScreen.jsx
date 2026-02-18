@@ -12,7 +12,7 @@ import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
 import db from '../services/database'
 import { canManageVideos } from '../utils/permissions'
-import { pickVideo, uploadFileToSupabaseStorage } from '../utils/storage'
+import { pickVideo, pickImage, uploadFileToSupabaseStorage } from '../utils/storage'
 import { supabase } from '../config/supabase'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -69,7 +69,9 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [formVideoTitle, setFormVideoTitle] = useState('')
+  const [dailyMediaType, setDailyMediaType] = useState('video') // 'video' | 'image'
   const [selectedVideoFile, setSelectedVideoFile] = useState(null)
+  const [selectedImageFile, setSelectedImageFile] = useState(null)
   const [selectedThumbnailFile, setSelectedThumbnailFile] = useState(null)
   const [videoPreviewUri, setVideoPreviewUri] = useState(null)
 
@@ -198,96 +200,133 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
     }
   }
 
+  const handlePickDailyImage = async () => {
+    try {
+      const image = await pickImage()
+      if (image) {
+        setSelectedImageFile({ uri: image.uri })
+      }
+    } catch (error) {
+      console.error('Error picking image:', error)
+      Alert.alert('שגיאה', 'לא ניתן לבחור תמונה')
+    }
+  }
+
   const handleUploadDailyVideo = async () => {
-    if (!formVideoTitle.trim() || !selectedVideoFile) {
+    const isImage = dailyMediaType === 'image'
+    if (!formVideoTitle.trim()) {
+      Alert.alert('שגיאה', 'יש למלא כותרת')
+      return
+    }
+    if (isImage && !selectedImageFile) {
+      Alert.alert('שגיאה', 'יש לבחור תמונה')
+      return
+    }
+    if (!isImage && !selectedVideoFile) {
       Alert.alert('שגיאה', 'יש למלא כותרת ולבחור סרטון')
       return
     }
 
     if (dailyVideos.length >= 4) {
-      Alert.alert('שגיאה', 'ניתן להעלות עד 4 סרטונים יומיים')
+      Alert.alert('שגיאה', 'ניתן להעלות עד 4 פריטים יומיים')
       return
     }
 
     setUploadingVideo(true)
     setUploadProgress(0)
     try {
-      // Generate unique filename
       const timestamp = Date.now()
-      const extension = selectedVideoFile.uri.split('.').pop() || 'mp4'
-      const fileName = `daily-video-${timestamp}.${extension}`
-      const storagePath = `daily-videos/${fileName}`
-
-      // Upload to Supabase Storage - try 'daily-videos' bucket first, fallback to 'newsletters' (which exists)
-      let videoUrl;
-      try {
-        videoUrl = await uploadFileToSupabaseStorage(
-          selectedVideoFile.uri,
-          'daily-videos',
-          storagePath,
-          (progress) => {
-            setUploadProgress(progress)
-            console.log('Upload progress:', progress)
-          }
-        )
-      } catch (bucketError) {
-        console.log('Trying newsletters bucket as fallback...');
-        // Fallback to 'newsletters' bucket (which exists) with folder prefix
-        const fallbackPath = `daily-videos/${fileName}`
-        videoUrl = await uploadFileToSupabaseStorage(
-          selectedVideoFile.uri,
-          'newsletters',
-          fallbackPath,
-          (progress) => {
-            setUploadProgress(progress)
-            console.log('Upload progress:', progress)
-          }
-        )
-      }
-
-      // Upload thumbnail if selected
-      let thumbnailUrl = videoUrl.replace(/\.(mp4|mov|avi)$/i, '.jpg')
-      if (selectedThumbnailFile) {
-        try {
-          const thumbExt = selectedThumbnailFile.uri.split('.').pop() || 'jpg'
-          const thumbFileName = `daily-thumb-${timestamp}.${thumbExt}`
-          const thumbPath = `daily-videos/thumbnails/${thumbFileName}`
-          
-          thumbnailUrl = await uploadFileToSupabaseStorage(
-            selectedThumbnailFile.uri,
-            'newsletters',
-            thumbPath,
-            () => {}
-          )
-        } catch (thumbErr) {
-          console.error('Error uploading thumbnail:', thumbErr)
-          // Fallback to auto-generated name if upload fails
-        }
-      }
-
-      // Calculate expiresAt (24 hours from now)
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-      // Save to database
-      await db.addDocument('dailyVideos', {
-        title: formVideoTitle.trim(),
-        videoUrl,
-        thumbnailUrl,
-        createdAt: new Date().toISOString(),
-        expiresAt,
-      })
+      if (isImage) {
+        const ext = selectedImageFile.uri.split('.').pop() || 'jpg'
+        const fileName = `daily-image-${timestamp}.${ext}`
+        const storagePath = `daily-videos/${fileName}`
+        let imageUrl
+        try {
+          imageUrl = await uploadFileToSupabaseStorage(
+            selectedImageFile.uri,
+            'daily-videos',
+            storagePath,
+            (p) => setUploadProgress(p)
+          )
+        } catch (e) {
+          imageUrl = await uploadFileToSupabaseStorage(
+            selectedImageFile.uri,
+            'newsletters',
+            storagePath,
+            (p) => setUploadProgress(p)
+          )
+        }
+        await db.addDocument('dailyVideos', {
+          title: formVideoTitle.trim(),
+          imageUrl,
+          createdAt: new Date().toISOString(),
+          expiresAt,
+        })
+        Alert.alert('הצלחה', 'התמונה הועלתה בהצלחה')
+      } else {
+        const extension = selectedVideoFile.uri.split('.').pop() || 'mp4'
+        const fileName = `daily-video-${timestamp}.${extension}`
+        const storagePath = `daily-videos/${fileName}`
 
-      Alert.alert('הצלחה', 'הסרטון הועלה בהצלחה')
+        let videoUrl
+        try {
+          videoUrl = await uploadFileToSupabaseStorage(
+            selectedVideoFile.uri,
+            'daily-videos',
+            storagePath,
+            (progress) => {
+              setUploadProgress(progress)
+            }
+          )
+        } catch (bucketError) {
+          const fallbackPath = `daily-videos/${fileName}`
+          videoUrl = await uploadFileToSupabaseStorage(
+            selectedVideoFile.uri,
+            'newsletters',
+            fallbackPath,
+            (progress) => setUploadProgress(progress)
+          )
+        }
+
+        let thumbnailUrl = videoUrl.replace(/\.(mp4|mov|avi)$/i, '.jpg')
+        if (selectedThumbnailFile) {
+          try {
+            const thumbExt = selectedThumbnailFile.uri.split('.').pop() || 'jpg'
+            const thumbFileName = `daily-thumb-${timestamp}.${thumbExt}`
+            const thumbPath = `daily-videos/thumbnails/${thumbFileName}`
+            thumbnailUrl = await uploadFileToSupabaseStorage(
+              selectedThumbnailFile.uri,
+              'newsletters',
+              thumbPath,
+              () => {}
+            )
+          } catch (_) {}
+        }
+
+        await db.addDocument('dailyVideos', {
+          title: formVideoTitle.trim(),
+          videoUrl,
+          thumbnailUrl,
+          createdAt: new Date().toISOString(),
+          expiresAt,
+        })
+        Alert.alert('הצלחה', 'הסרטון הועלה בהצלחה')
+      }
+
       setShowUploadModal(false)
       setFormVideoTitle('')
       setSelectedVideoFile(null)
+      setSelectedImageFile(null)
       setSelectedThumbnailFile(null)
       setVideoPreviewUri(null)
       setUploadProgress(0)
+      setDailyMediaType('video')
       loadDailyVideos()
     } catch (error) {
-      console.error('Error uploading video:', error)
-      Alert.alert('שגיאה', `לא ניתן להעלות את הסרטון: ${error.message}`)
+      console.error('Error uploading:', error)
+      Alert.alert('שגיאה', error.message || 'לא ניתן להעלות')
     } finally {
       setUploadingVideo(false)
       setUploadProgress(0)
@@ -688,35 +727,41 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.dailyVideosScroll}
             >
-              {dailyVideos.map((video, idx) => (
-                <Pressable
-                  key={video.id}
-                  style={styles.dailyVideoCard}
-                  onPress={() => handleDailyVideoPress(video)}
-                >
-                  {video.thumbnailUrl ? (
-                    <Image
-                      source={{ uri: video.thumbnailUrl }}
-                      style={styles.dailyVideoThumbnail}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.dailyVideoPlaceholder}>
-                      <Ionicons name="film-outline" size={40} color={PRIMARY_BLUE} style={{ opacity: 0.4 }} />
-                    </View>
-                  )}
-                  <View style={styles.playIconOverlay}>
-                    <View style={styles.playIconCircle}>
-                      <Ionicons name="play" size={32} color="#fff" />
-                    </View>
-                  </View>
-                  {video.title && (
-                    <Text style={styles.dailyVideoTitle} numberOfLines={2}>
-                      {video.title}
-                    </Text>
-                  )}
-                </Pressable>
-              ))}
+              {dailyVideos.map((video, idx) => {
+                const isImageOnly = video.imageUrl && !video.videoUrl
+                const thumbUri = isImageOnly ? video.imageUrl : (video.thumbnailUrl || video.imageUrl)
+                return (
+                  <Pressable
+                    key={video.id}
+                    style={styles.dailyVideoCard}
+                    onPress={() => handleDailyVideoPress(video)}
+                  >
+                    {thumbUri ? (
+                      <Image
+                        source={{ uri: thumbUri }}
+                        style={styles.dailyVideoThumbnail}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.dailyVideoPlaceholder}>
+                        <Ionicons name={isImageOnly ? 'image-outline' : 'film-outline'} size={40} color={PRIMARY_BLUE} style={{ opacity: 0.4 }} />
+                      </View>
+                    )}
+                    {!isImageOnly && (
+                      <View style={styles.playIconOverlay}>
+                        <View style={styles.playIconCircle}>
+                          <Ionicons name="play" size={32} color="#fff" />
+                        </View>
+                      </View>
+                    )}
+                    {video.title && (
+                      <Text style={styles.dailyVideoTitle} numberOfLines={2}>
+                        {video.title}
+                      </Text>
+                    )}
+                  </Pressable>
+                )
+              })}
             </ScrollView>
           )}
         </View>
@@ -769,7 +814,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
         </Pressable>
       </ScrollView>
 
-      {/* Daily Video Player Modal - splash image as poster until video plays */}
+      {/* Daily Video/Image Modal */}
       {selectedDailyVideo && (
         <Modal
           visible={!!selectedDailyVideo}
@@ -789,30 +834,45 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
             >
               <Ionicons name="close" size={32} color="#fff" />
             </Pressable>
-            <Video
-              ref={(ref) => {
-                if (ref) videoRefs.current[selectedDailyVideo.id] = ref
-              }}
-              source={{ uri: selectedDailyVideo.videoUrl }}
-              style={styles.videoPlayer}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={playingDailyVideo}
-              posterSource={
-                selectedDailyVideo.thumbnailUrl
-                  ? { uri: selectedDailyVideo.thumbnailUrl }
-                  : require('../../assets/splash-icon.png')
-              }
-              posterStyle={styles.videoPosterStyle}
-              onPlaybackStatusUpdate={(status) => {
-                if (status.didJustFinish) {
-                  setPlayingDailyVideo(false)
-                }
-              }}
-            />
-            <View style={styles.videoInfo}>
-              <Text style={styles.modalVideoTitle}>{selectedDailyVideo.title || 'סרטון'}</Text>
-            </View>
+            {selectedDailyVideo.imageUrl && !selectedDailyVideo.videoUrl ? (
+              <>
+                <Image
+                  source={{ uri: selectedDailyVideo.imageUrl }}
+                  style={styles.videoPlayer}
+                  resizeMode="contain"
+                />
+                <View style={styles.videoInfo}>
+                  <Text style={styles.modalVideoTitle}>{selectedDailyVideo.title || 'תמונה'}</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <Video
+                  ref={(ref) => {
+                    if (ref) videoRefs.current[selectedDailyVideo.id] = ref
+                  }}
+                  source={{ uri: selectedDailyVideo.videoUrl }}
+                  style={styles.videoPlayer}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay={playingDailyVideo}
+                  posterSource={
+                    selectedDailyVideo.thumbnailUrl
+                      ? { uri: selectedDailyVideo.thumbnailUrl }
+                      : require('../../assets/splash-icon.png')
+                  }
+                  posterStyle={styles.videoPosterStyle}
+                  onPlaybackStatusUpdate={(status) => {
+                    if (status.didJustFinish) {
+                      setPlayingDailyVideo(false)
+                    }
+                  }}
+                />
+                <View style={styles.videoInfo}>
+                  <Text style={styles.modalVideoTitle}>{selectedDailyVideo.title || 'סרטון'}</Text>
+                </View>
+              </>
+            )}
           </View>
         </Modal>
       )}
@@ -880,12 +940,14 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>הוסף סרטון יומי</Text>
+                <Text style={styles.modalTitle}>הוסף סרטון או תמונה יומית</Text>
                 <Pressable
                   onPress={() => {
                     setShowUploadModal(false)
                     setFormVideoTitle('')
+                    setDailyMediaType('video')
                     setSelectedVideoFile(null)
+                    setSelectedImageFile(null)
                     setVideoPreviewUri(null)
                     setUploadProgress(0)
                   }}
@@ -902,6 +964,26 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>סוג *</Text>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <Pressable
+                      style={[styles.videoPickerButton, dailyMediaType === 'video' && { borderColor: PRIMARY_BLUE, borderWidth: 2 }]}
+                      onPress={() => { setDailyMediaType('video'); setSelectedImageFile(null); }}
+                    >
+                      <Ionicons name="videocam-outline" size={22} color={PRIMARY_BLUE} />
+                      <Text style={styles.videoPickerText}>סרטון</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.videoPickerButton, dailyMediaType === 'image' && { borderColor: PRIMARY_BLUE, borderWidth: 2 }]}
+                      onPress={() => { setDailyMediaType('image'); setSelectedVideoFile(null); setVideoPreviewUri(null); }}
+                    >
+                      <Ionicons name="image-outline" size={22} color={PRIMARY_BLUE} />
+                      <Text style={styles.videoPickerText}>תמונה</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
                   <Text style={styles.formLabel}>כותרת *</Text>
                   <TextInput
                     style={styles.formInput}
@@ -912,114 +994,101 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                   />
                 </View>
 
-                <View style={styles.formGroup}>
-                  <Pressable
-                    style={styles.videoPickerButton}
-                    onPress={handlePickVideo}
-                    disabled={uploadingVideo}
-                  >
-                    <Ionicons name="videocam-outline" size={24} color={PRIMARY_BLUE} />
-                    <Text style={styles.videoPickerText}>
-                      {selectedVideoFile ? 'סרטון נבחר' : 'בחר סרטון'}
-                    </Text>
-                  </Pressable>
-                  {selectedVideoFile && (
-                    <Text style={styles.selectedVideoText}>
-                      {selectedVideoFile.uri.split('/').pop()}
-                    </Text>
-                  )}
-                  
-                  {/* Thumbnail Picker */}
+                {dailyMediaType === 'image' ? (
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>תמונה מקדימה (אופציונלי)</Text>
-                    {selectedThumbnailFile ? (
-                      <View style={styles.thumbnailPreviewContainer}>
-                        <Image
-                          source={{ uri: selectedThumbnailFile.uri }}
-                          style={styles.thumbnailPreview}
-                          resizeMode="cover"
-                        />
-                        <TouchableOpacity
-                          style={styles.removeThumbnailButton}
-                          onPress={() => setSelectedThumbnailFile(null)}
-                        >
-                          <Ionicons name="close-circle" size={24} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.videoPickerButton}
-                        onPress={handlePickThumbnail}
-                      >
-                        <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
-                        <Text style={styles.videoPickerText}>בחר תמונה מקדימה</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {/* Thumbnail Picker */}
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>תמונה מקדימה (אופציונלי)</Text>
-                    {selectedThumbnailFile ? (
-                      <View style={styles.thumbnailPreviewContainer}>
-                        <Image
-                          source={{ uri: selectedThumbnailFile.uri }}
-                          style={styles.thumbnailPreview}
-                          resizeMode="cover"
-                        />
-                        <TouchableOpacity
-                          style={styles.removeThumbnailButton}
-                          onPress={() => setSelectedThumbnailFile(null)}
-                        >
-                          <Ionicons name="close-circle" size={24} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.videoPickerButton}
-                        onPress={handlePickThumbnail}
-                      >
-                        <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
-                        <Text style={styles.videoPickerText}>בחר תמונה מקדימה</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {/* Video Preview */}
-                  {videoPreviewUri && !uploadingVideo && (
-                    <View style={styles.videoPreviewContainer}>
-                      <Video
-                        source={{ uri: videoPreviewUri }}
-                        style={styles.videoPreview}
-                        useNativeControls
-                        resizeMode={ResizeMode.CONTAIN}
-                        shouldPlay={false}
-                      />
-                      <Pressable
-                        style={styles.removePreviewButton}
-                        onPress={() => {
-                          setSelectedVideoFile(null)
-                          setVideoPreviewUri(null)
-                        }}
-                      >
-                        <Ionicons name="close-circle" size={24} color="#dc2626" />
-                      </Pressable>
-                    </View>
-                  )}
-                  
-                  {/* Upload Progress */}
-                  {uploadingVideo && (
-                    <View style={styles.uploadProgressContainer}>
-                      <ActivityIndicator size="small" color={PRIMARY_BLUE} />
-                      <Text style={styles.uploadProgressText}>
-                        מעלה סרטון... {Math.round(uploadProgress)}%
+                    <Pressable
+                      style={styles.videoPickerButton}
+                      onPress={handlePickDailyImage}
+                      disabled={uploadingVideo}
+                    >
+                      <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
+                      <Text style={styles.videoPickerText}>
+                        {selectedImageFile ? 'תמונה נבחרה' : 'בחר תמונה'}
                       </Text>
-                      <View style={styles.progressBarContainer}>
-                        <View style={[styles.progressBar, { width: `${uploadProgress}%` }]} />
-                      </View>
+                    </Pressable>
+                    {selectedImageFile && (
+                      <>
+                        <Image source={{ uri: selectedImageFile.uri }} style={[styles.thumbnailPreview, { marginTop: 8, maxHeight: 120 }]} resizeMode="contain" />
+                        <Pressable style={{ marginTop: 4 }} onPress={() => setSelectedImageFile(null)}>
+                          <Text style={{ color: '#ef4444', fontSize: 14 }}>הסר תמונה</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.formGroup}>
+                    <Pressable
+                      style={styles.videoPickerButton}
+                      onPress={handlePickVideo}
+                      disabled={uploadingVideo}
+                    >
+                      <Ionicons name="videocam-outline" size={24} color={PRIMARY_BLUE} />
+                      <Text style={styles.videoPickerText}>
+                        {selectedVideoFile ? 'סרטון נבחר' : 'בחר סרטון'}
+                      </Text>
+                    </Pressable>
+                    {selectedVideoFile && (
+                      <Text style={styles.selectedVideoText}>
+                        {selectedVideoFile.uri.split('/').pop()}
+                      </Text>
+                    )}
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>תמונה מקדימה (אופציונלי)</Text>
+                      {selectedThumbnailFile ? (
+                        <View style={styles.thumbnailPreviewContainer}>
+                          <Image
+                            source={{ uri: selectedThumbnailFile.uri }}
+                            style={styles.thumbnailPreview}
+                            resizeMode="cover"
+                          />
+                          <TouchableOpacity
+                            style={styles.removeThumbnailButton}
+                            onPress={() => setSelectedThumbnailFile(null)}
+                          >
+                            <Ionicons name="close-circle" size={24} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.videoPickerButton}
+                          onPress={handlePickThumbnail}
+                        >
+                          <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
+                          <Text style={styles.videoPickerText}>בחר תמונה מקדימה</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
-                  )}
-                </View>
+                    {videoPreviewUri && !uploadingVideo && (
+                      <View style={styles.videoPreviewContainer}>
+                        <Video
+                          source={{ uri: videoPreviewUri }}
+                          style={styles.videoPreview}
+                          useNativeControls
+                          resizeMode={ResizeMode.CONTAIN}
+                          shouldPlay={false}
+                        />
+                        <Pressable
+                          style={styles.removePreviewButton}
+                          onPress={() => { setSelectedVideoFile(null); setVideoPreviewUri(null); }}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#dc2626" />
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {uploadingVideo && (
+                  <View style={styles.uploadProgressContainer}>
+                    <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+                    <Text style={styles.uploadProgressText}>
+                      מעלה... {Math.round(uploadProgress)}%
+                    </Text>
+                    <View style={styles.progressBarContainer}>
+                      <View style={[styles.progressBar, { width: `${uploadProgress}%` }]} />
+                    </View>
+                  </View>
+                )}
               </ScrollView>
 
               <View style={styles.modalFooter}>
@@ -1028,7 +1097,9 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
                   onPress={() => {
                     setShowUploadModal(false)
                     setFormVideoTitle('')
+                    setDailyMediaType('video')
                     setSelectedVideoFile(null)
+                    setSelectedImageFile(null)
                     setVideoPreviewUri(null)
                     setUploadProgress(0)
                   }}

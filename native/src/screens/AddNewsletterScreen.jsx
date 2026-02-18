@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, Image } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import * as DocumentPicker from 'expo-document-picker'
+import * as ImagePicker from 'expo-image-picker'
 import db from '../services/database'
 import { uploadFileToSupabaseStorage } from '../utils/storage'
 
@@ -29,6 +30,7 @@ export default function AddNewsletterScreen({ navigation, route }) {
   const [holiday, setHoliday] = useState(newsletter?.holiday || '')
   const [selectedLanguage, setSelectedLanguage] = useState(newsletter?.language || 'hebrew')
   const [selectedFile, setSelectedFile] = useState(null)
+  const [thumbnailImage, setThumbnailImage] = useState(newsletter?.thumbnailUrl ? { uri: newsletter.thumbnailUrl } : null)
   const [uploading, setUploading] = useState(false)
 
   const handlePickFile = async () => {
@@ -102,6 +104,29 @@ export default function AddNewsletterScreen({ navigation, route }) {
     }
   }
 
+  const handlePickThumbnail = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('הרשאה נדרשת', 'אנחנו צריכים גישה לגלריית התמונות כדי לבחור תמונת תצוגה מקדימה')
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      })
+      if (!result.canceled && result.assets?.[0]) {
+        setThumbnailImage({ uri: result.assets[0].uri })
+        Alert.alert('הצלחה', 'תמונת תצוגה מקדימה נבחרה')
+      }
+    } catch (error) {
+      console.error('Error picking thumbnail:', error)
+      Alert.alert('שגיאה', 'לא ניתן לבחור תמונה: ' + (error.message || ''))
+    }
+  }
+
   const handleSubmit = async () => {
     if (!title.trim()) {
       Alert.alert('שגיאה', 'נא להזין כותרת')
@@ -118,10 +143,20 @@ export default function AddNewsletterScreen({ navigation, route }) {
 
       let fileUrl = newsletter?.fileUrl || ''
       let fileType = newsletter?.fileType || 'pdf'
+      let thumbnailUrl = newsletter?.thumbnailUrl || ''
 
       if (selectedFile) {
         fileUrl = await uploadFile(selectedFile)
         fileType = selectedFile.mimeType?.includes('pdf') ? 'pdf' : 'image'
+      }
+
+      if (thumbnailImage?.uri) {
+        if (thumbnailImage.uri.startsWith('file://')) {
+          const thumbPath = `thumbnails/${Date.now()}_thumb.jpg`
+          thumbnailUrl = await uploadFileToSupabaseStorage(thumbnailImage.uri, 'newsletters', thumbPath, () => {})
+        } else {
+          thumbnailUrl = thumbnailImage.uri
+        }
       }
 
       const newsletterData = {
@@ -133,6 +168,7 @@ export default function AddNewsletterScreen({ navigation, route }) {
         language: selectedLanguage,
         fileUrl,
         fileType,
+        thumbnailUrl: thumbnailUrl || null,
         publishDate: newsletter?.publishDate || new Date().toISOString(),
         createdAt: newsletter?.createdAt || new Date().toISOString(),
       }
@@ -288,6 +324,33 @@ export default function AddNewsletterScreen({ navigation, route }) {
               <Text style={styles.selectedFileText}>{selectedFile.name}</Text>
             </View>
           )}
+
+          <Text style={styles.label}>תצוגה מקדימה – תמונה (אופציונלי)</Text>
+          <Text style={styles.hint}>
+            תמונת דף השער / כריכה של העלון. תוצג בכרטיס בעלונים. מומלץ להעלות כדי שהעלון יוצג יפה ברשימה.
+          </Text>
+          <Pressable
+            style={styles.thumbnailPickerButton}
+            onPress={handlePickThumbnail}
+            accessibilityRole="button"
+          >
+            <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
+            <Text style={styles.filePickerText}>
+              {thumbnailImage ? 'תמונה נבחרה – לחץ להחלפה' : 'בחר תמונת תצוגה מקדימה (למשל צילום דף השער)'}
+            </Text>
+          </Pressable>
+          {thumbnailImage && (
+            <View style={styles.thumbnailPreviewWrap}>
+              <Image source={thumbnailImage} style={styles.thumbnailPreview} resizeMode="cover" />
+              <Pressable
+                style={styles.removeThumbnailBtn}
+                onPress={() => setThumbnailImage(null)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="close-circle" size={28} color="#ef4444" />
+              </Pressable>
+            </View>
+          )}
         </View>
 
         <Pressable
@@ -370,6 +433,14 @@ const styles = StyleSheet.create({
     marginBottom: -8,
     textAlign: 'right',
   },
+  hint: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'right',
+    marginTop: -4,
+    marginBottom: 4,
+  },
   input: {
     borderWidth: 1,
     borderColor: 'rgba(11,27,58,0.2)',
@@ -421,6 +492,34 @@ const styles = StyleSheet.create({
     borderColor: PRIMARY_BLUE,
     borderStyle: 'dashed',
     backgroundColor: 'rgba(30,58,138,0.05)',
+  },
+  thumbnailPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.3)',
+    backgroundColor: 'rgba(30,58,138,0.06)',
+  },
+  thumbnailPreviewWrap: {
+    position: 'relative',
+    alignSelf: 'flex-end',
+    borderRadius: 12,
+    overflow: 'hidden',
+    width: 160,
+    height: 120,
+  },
+  thumbnailPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  removeThumbnailBtn: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
   },
   filePickerText: {
     fontSize: 15,

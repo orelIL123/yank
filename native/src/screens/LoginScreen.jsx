@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { trackLogin } from '../services/analytics';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -34,6 +35,7 @@ export default function LoginScreen({ navigation }) {
       console.log('Attempting login with email:', email.trim());
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       console.log('Login successful! User:', userCredential.user.uid);
+      trackLogin(userCredential.user.uid, 'email');
       console.log('Firebase Auth persists session automatically - user will stay logged in');
       
       Keyboard.dismiss();

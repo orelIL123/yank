@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator, Modal, Share } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator, Share } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -11,6 +11,7 @@ import AppHeader from '../components/AppHeader'
 import { t } from '../utils/i18n'
 import db from '../services/database'
 import { canManagePrayers } from '../utils/permissions'
+import { BUNDLED_PRAYERS } from '../data/bundledPrayers'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -29,11 +30,22 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
   const [loading, setLoading] = useState(true)
   const [selectedLanguage, setSelectedLanguage] = useState('he')
   const [showAllPrayers, setShowAllPrayers] = useState(false)
+  const [bundledPrayersData, setBundledPrayersData] = useState({})
   const canManage = canManagePrayers(userRole, userPermissions)
 
   useEffect(() => {
     loadPrayers()
+    loadBundledPrayersData()
   }, [])
+
+  const loadBundledPrayersData = async () => {
+    try {
+      const config = await db.getAppConfig()
+      setBundledPrayersData(config?.bundled_prayers || {})
+    } catch (err) {
+      console.error('Error loading bundled prayers data:', err)
+    }
+  }
 
   useFocusEffect(
     React.useCallback(() => {
@@ -132,6 +144,74 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
     }
   }
 
+  const handleBundledPrayerPress = async (item) => {
+    const prayerData = bundledPrayersData[item.id]
+    const images = prayerData?.images || []
+
+    if (images.length === 0) {
+      Alert.alert(
+        'אין תוכן זמין',
+        'האדמין עדיין לא העלה תמונות לתפילה זו. אנא נסה שוב מאוחר יותר.',
+        [{ text: 'אישור' }]
+      )
+      return
+    }
+
+    // Navigate to image viewer with the prayer images
+    navigation.navigate('PrayerDetail', {
+      prayer: {
+        id: item.id,
+        title: item.title,
+        imageUrls: images,
+      }
+    })
+  }
+
+  // Build display list: group items with same groupKey into one card "לאיש / לאישה"
+  const bundledDisplayList = React.useMemo(() => {
+    const seen = new Set()
+    const result = []
+    for (const p of BUNDLED_PRAYERS) {
+      if (p.groupKey) {
+        if (seen.has(p.groupKey)) continue
+        seen.add(p.groupKey)
+        const items = BUNDLED_PRAYERS.filter(x => x.groupKey === p.groupKey)
+        result.push({ type: 'group', groupKey: p.groupKey, title: p.title, items })
+      } else {
+        result.push({ type: 'single', item: p })
+      }
+    }
+    return result
+  }, [])
+
+  const onBundledPress = (entry) => {
+    if (entry.type === 'single') {
+      handleBundledPrayerPress(entry.item)
+      return
+    }
+    Alert.alert(
+      entry.title,
+      'בחר גרסה:',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'לאיש',
+          onPress: () => {
+            const man = entry.items.find(i => i.gender === 'man')
+            if (man) handleBundledPrayerPress(man)
+          }
+        },
+        {
+          text: 'לאישה',
+          onPress: () => {
+            const woman = entry.items.find(i => i.gender === 'woman')
+            if (woman) handleBundledPrayerPress(woman)
+          }
+        }
+      ]
+    )
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -149,13 +229,13 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
     )
   }
 
-  // If showing all prayers
+  // If showing all prayers – same format as תפילות הינוקא (grid, no PDF; images only)
   if (showAllPrayers) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title="כל התפילות"
+          title={t('תפילות בנושאים שונים')}
           showBackButton={true}
           onBackPress={() => setShowAllPrayers(false)}
           rightIcon={canManage ? 'add' : undefined}
@@ -163,7 +243,7 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
         />
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Language tabs at top */}
+          <Text style={styles.subtitle}>בחרו שפה / Choose language</Text>
           <View style={styles.languageTabsRow}>
             {LANGUAGES.map((lang) => (
               <Pressable
@@ -192,68 +272,46 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
               <Text style={styles.emptySubtext}>התפילות יתווספו בקרוב</Text>
             </View>
           ) : (
-            prayers.map((prayer, idx) => (
-              <View key={prayer.id} style={[styles.prayerCard, idx === 0 && styles.prayerCardFirst]}>
-                <Pressable
-                  style={styles.prayerContentPressable}
-                  onPress={() => handlePrayerPress(prayer)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`תפילה ${prayer.title}`}
-                >
-                  <View style={styles.prayerContent}>
-                    <View style={styles.prayerIcon}>
-                      <Ionicons name="document-text-outline" size={32} color={PRIMARY_BLUE} />
-                    </View>
-                    <View style={styles.prayerTextBlock}>
-                      <Text style={styles.prayerTitle}>{prayer.title}</Text>
-                      {prayer.description && (
-                        <Text style={styles.prayerDesc}>{prayer.description}</Text>
-                      )}
-                      {(prayer.pdfUrls?.[selectedLanguage] || prayer.pdfUrl || (prayer.imageUrls && prayer.imageUrls.length > 0)) && (
-                        <View style={styles.pdfIndicator}>
-                          <Ionicons name="document-outline" size={14} color={PRIMARY_BLUE} />
-                          <Text style={styles.pdfIndicatorText}>תוכן זמין</Text>
+            <View style={styles.bundledGrid}>
+              {prayers.map((prayer) => {
+                const hasImages = (prayer.imageUrls && prayer.imageUrls.length > 0) || (prayer.imageUrl && prayer.imageUrl.trim())
+                const title = (prayer.title_he && selectedLanguage === 'he') || (prayer.title_en && selectedLanguage === 'en') || (prayer.title_ru && selectedLanguage === 'ru') || (prayer.title_fr && selectedLanguage === 'fr') || prayer.title || ''
+                return (
+                  <View key={prayer.id} style={styles.bundledCardWrapper}>
+                    <Pressable
+                      style={[styles.bundledCard, !hasImages && styles.bundledCardDisabled]}
+                      onPress={() => hasImages && handlePrayerPress(prayer)}
+                      disabled={!hasImages}
+                      accessibilityRole="button"
+                      accessibilityLabel={`תפילה ${title}`}
+                    >
+                      <View style={styles.bundledCardInner}>
+                        <Ionicons name="document-text-outline" size={22} color={PRIMARY_BLUE} />
+                        <View style={styles.bundledCardText}>
+                          <Text style={styles.bundledCardTitle} numberOfLines={2}>{title}</Text>
+                          {hasImages ? (
+                            <Text style={styles.genderBadge}>תוכן זמין</Text>
+                          ) : (
+                            <Text style={styles.bundledCardSubtext}>טוען תוכן...</Text>
+                          )}
                         </View>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-forward" size={24} color={PRIMARY_BLUE} />
+                        <Ionicons name="chevron-forward" size={18} color={PRIMARY_BLUE} />
+                      </View>
+                    </Pressable>
+                    {canManage && (
+                      <View style={styles.allPrayersActions}>
+                        <Pressable style={styles.allPrayersActionBtn} onPress={() => handleEditPrayer(prayer)}>
+                          <Ionicons name="create-outline" size={18} color={PRIMARY_BLUE} />
+                        </Pressable>
+                        <Pressable style={styles.allPrayersActionBtn} onPress={() => handleDeletePrayer(prayer)}>
+                          <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                        </Pressable>
+                      </View>
+                    )}
                   </View>
-                </Pressable>
-
-                {/* Quick Actions */}
-                <View style={styles.quickActions}>
-                  <Pressable
-                    style={styles.quickActionButton}
-                    onPress={() => handleSharePrayer(prayer)}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="share-social-outline" size={20} color={PRIMARY_BLUE} />
-                    <Text style={styles.quickActionText}>שתף</Text>
-                  </Pressable>
-
-                  {canManage && (
-                    <>
-                      <Pressable
-                        style={styles.quickActionButton}
-                        onPress={() => handleEditPrayer(prayer)}
-                        accessibilityRole="button"
-                      >
-                        <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
-                        <Text style={styles.quickActionText}>ערוך</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.quickActionButton, styles.deleteActionButton]}
-                        onPress={() => handleDeletePrayer(prayer)}
-                        accessibilityRole="button"
-                      >
-                        <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                        <Text style={[styles.quickActionText, styles.deleteActionText]}>מחק</Text>
-                      </Pressable>
-                    </>
-                  )}
-                </View>
-              </View>
-            ))
+                )
+              })}
+            </View>
           )}
         </ScrollView>
 
@@ -297,7 +355,38 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
           </LinearGradient>
         </Pressable>
 
-        {/* All Prayers Card */}
+        {/* 9 Bundled Prayers – grid (grouped: לאיש/לאישה on one card) */}
+        <View style={styles.bundledGrid}>
+          {bundledDisplayList.map((entry) => (
+            <Pressable
+              key={entry.type === 'single' ? entry.item.id : entry.groupKey}
+              style={styles.bundledCard}
+              onPress={() => onBundledPress(entry)}
+              accessibilityRole="button"
+            >
+              <View style={styles.bundledCardInner}>
+                <Ionicons name="document-text-outline" size={22} color={PRIMARY_BLUE} />
+                <View style={styles.bundledCardText}>
+                  <Text style={styles.bundledCardTitle} numberOfLines={2}>
+                    {entry.type === 'single' ? entry.item.title : entry.title}
+                  </Text>
+                  {entry.type === 'single' && entry.item.gender === 'man' && (
+                    <Text style={styles.genderBadge}>לאיש</Text>
+                  )}
+                  {entry.type === 'single' && entry.item.gender === 'woman' && (
+                    <Text style={styles.genderBadge}>לאישה</Text>
+                  )}
+                  {entry.type === 'group' && (
+                    <Text style={styles.genderBadge}>לאיש / לאישה</Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={PRIMARY_BLUE} />
+              </View>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* תפילות בנושאים שונים – opens all prayers */}
         <Pressable
           style={styles.mainCard}
           onPress={() => setShowAllPrayers(true)}
@@ -310,63 +399,12 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
             <View style={styles.mainCardTextContainer}>
               <Text style={styles.mainCardTitle}>תפילות בנושאים שונים</Text>
               <Text style={styles.mainCardSubtitle}>
-                {prayers.length} תפילות זמינות
+                {prayers.length} תפילות זמינות · שפות: עברית, English, Français
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={28} color={PRIMARY_BLUE} />
           </View>
         </Pressable>
-
-        {/* Quick Access to Latest Prayers */}
-        {prayers.length > 0 && (
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>תפילות אחרונות</Text>
-            </View>
-
-            {prayers.slice(0, 3).map((prayer, idx) => (
-              <Pressable
-                key={prayer.id}
-                style={styles.quickPrayerCard}
-                onPress={() => handlePrayerPress(prayer)}
-                accessibilityRole="button"
-              >
-                <View style={styles.quickPrayerContent}>
-                  <View style={styles.quickPrayerIcon}>
-                    <Ionicons name="document-text-outline" size={24} color={PRIMARY_BLUE} />
-                  </View>
-                  <View style={styles.quickPrayerTextBlock}>
-                    <Text style={styles.quickPrayerTitle}>{prayer.title}</Text>
-                    {prayer.description && (
-                      <Text style={styles.quickPrayerDesc} numberOfLines={1}>{prayer.description}</Text>
-                    )}
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={PRIMARY_BLUE} />
-                </View>
-              </Pressable>
-            ))}
-
-            {prayers.length > 3 && (
-              <Pressable
-                style={styles.viewAllButton}
-                onPress={() => setShowAllPrayers(true)}
-              >
-                <Text style={styles.viewAllButtonText}>צפה בכל התפילות</Text>
-                <Ionicons name="arrow-forward" size={18} color={PRIMARY_BLUE} />
-              </Pressable>
-            )}
-          </>
-        )}
-
-        <View style={styles.footerCard}>
-          <Ionicons name="heart-outline" size={32} color={PRIMARY_BLUE} />
-          <View style={styles.footerTextBlock}>
-            <Text style={styles.footerTitle}>תפילות נוספות</Text>
-            <Text style={styles.footerDesc}>
-              תפילות נוספות יופיעו כאן בקרוב.
-            </Text>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   )
@@ -380,7 +418,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingBottom: 32,
-    gap: 18,
+    gap: 14,
   },
   languageSelectorContainer: {
     flexDirection: 'row',
@@ -729,6 +767,72 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'right',
+  },
+  bundledGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  bundledCard: {
+    width: '48%',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.08)',
+  },
+  bundledCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bundledCardText: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  bundledCardTitle: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+  },
+  genderBadge: {
+    fontSize: 10,
+    fontFamily: 'Poppins_500Medium',
+    color: PRIMARY_BLUE,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  bundledCardWrapper: {
+    width: '48%',
+    marginBottom: 8,
+  },
+  bundledCardDisabled: {
+    opacity: 0.7,
+  },
+  bundledCardSubtext: {
+    fontSize: 10,
+    fontFamily: 'Poppins_400Regular',
+    color: '#9ca3af',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  allPrayersActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginTop: 6,
+  },
+  allPrayersActionBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(30,58,138,0.1)',
   },
   modalOverlay: {
     flex: 1,

@@ -16,6 +16,7 @@ const COLLECTION_MAP = {
   dailyLearning: 'daily_learning',
   dailyVideos: 'daily_videos',
   dailyTehillim: 'daily_tehillim',
+  dailyOrchotTzadikim: 'daily_orchot_tzadikim',
   dailySummary: 'daily_summary',
   dailyInsights: 'daily_insights',
   shortLessons: 'short_lessons',
@@ -516,6 +517,13 @@ class DatabaseService {
     }
 
     return data
+  }
+
+  /**
+   * Set document (alias for updateDocument - creates if doesn't exist)
+   */
+  async setDocument(collectionName, docId, docData) {
+    return await this.updateDocument(collectionName, docId, docData)
   }
 
   /**

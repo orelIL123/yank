@@ -88,7 +88,7 @@ export default function AboutScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}></Text>
           <Text style={styles.description}>
-            נולד בשנת 1988 בישראל, הרב שלמה יהודה בארי המכונה "היענ  וקא" (כינוי לילד פלא),
+          נולד בשנת 1988 בישראל, הרב שלמה יהודה בארי המכונה - ׳הינוקא׳ - (כינוי לילד פלא),
             הוא תלמיד חכם מפורסם עם יכולות יוצאות דופן מגיל צעיר.
           </Text>
         </View>
@@ -107,7 +107,7 @@ export default function AboutScreen({ navigation }) {
             • צאצא האר"י הקדוש
           </Text>
           <Text style={styles.description}>
-            • גר בספרד בילדותו, עבר בין ערים כמו ג'רונה ושביליה
+            • גר בספרד בילדותו, עבר בין ערים כמו ג'רונה וסביליה
           </Text>
           <Text style={styles.description}>
             • התמודד עם אתגרים כלכליים בגדלו

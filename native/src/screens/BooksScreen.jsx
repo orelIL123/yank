@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Linking, Alert } from 'react-native'
+import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Linking, Alert, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import AppHeader from '../components/AppHeader'
 import db from '../services/database'
+import { canManageBooks } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-export default function BooksScreen({ navigation }) {
-    console.log('📕 BooksScreen RENDERED')
+export default function BooksScreen({ navigation, userRole, userPermissions }) {
+    const canManage = canManageBooks(userRole, userPermissions)
     const [books, setBooks] = useState([])
     const [loading, setLoading] = useState(true)
     const [imageErrors, setImageErrors] = useState(new Set())
+    const [editBook, setEditBook] = useState(null)
+    const [editForm, setEditForm] = useState({ title: '', note: '', price: '', link: '', imageUrl: '' })
+    const [saving, setSaving] = useState(false)
 
     useEffect(() => {
         fetchBooks()
@@ -23,15 +27,6 @@ export default function BooksScreen({ navigation }) {
         try {
             const booksData = await db.getCollection('books', {
                 orderBy: { field: 'createdAt', direction: 'desc' }
-            })
-
-            booksData.forEach((book) => {
-                console.log('Book loaded:', {
-                    id: book.id,
-                    title: book.title,
-                    imageUrl: book.imageUrl,
-                    hasImageUrl: !!book.imageUrl
-                });
             })
 
             setBooks(booksData)
@@ -62,6 +57,62 @@ export default function BooksScreen({ navigation }) {
         setImageErrors(prev => new Set(prev).add(bookId));
     }
 
+    const handleDeleteBook = (item) => {
+        Alert.alert(
+            'מחיקת מוצר',
+            `למחוק את "${item.title}"?`,
+            [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'מחק',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await db.deleteDocument('books', item.id)
+                            fetchBooks()
+                        } catch (e) {
+                            Alert.alert('שגיאה', 'לא ניתן למחוק')
+                        }
+                    },
+                },
+            ]
+        )
+    }
+
+    const handleOpenEdit = (item) => {
+        setEditBook(item)
+        setEditForm({
+            title: item.title || '',
+            note: item.note || '',
+            price: item.price || '',
+            link: item.link || '',
+            imageUrl: item.imageUrl || '',
+        })
+    }
+
+    const handleSaveEdit = async () => {
+        if (!editBook || !editForm.title.trim()) {
+            Alert.alert('שגיאה', 'כותרת חובה')
+            return
+        }
+        setSaving(true)
+        try {
+            await db.updateDocument('books', editBook.id, {
+                title: editForm.title.trim(),
+                note: editForm.note || '',
+                price: editForm.price || '',
+                link: editForm.link || '',
+                imageUrl: editForm.imageUrl || '',
+            })
+            setEditBook(null)
+            fetchBooks()
+        } catch (e) {
+            Alert.alert('שגיאה', 'לא ניתן לשמור שינויים')
+        } finally {
+            setSaving(false)
+        }
+    }
+
     const renderBook = ({ item }) => {
         const hasError = imageErrors.has(item.id);
         const hasImage = item.imageUrl && item.imageUrl.trim() !== '' && !hasError;
@@ -74,22 +125,8 @@ export default function BooksScreen({ navigation }) {
                         source={{ uri: item.imageUrl }} 
                         style={styles.bookImage} 
                         resizeMode="cover"
-                        onError={(error) => {
-                            console.error('Error loading book image:', {
-                                bookId: item.id,
-                                bookTitle: item.title,
-                                imageUrl: item.imageUrl,
-                                error: error.nativeEvent?.error || error
-                            });
-                            handleImageError(item.id);
-                        }}
-                        onLoad={() => {
-                            console.log('✅ Book image loaded successfully:', {
-                                bookId: item.id,
-                                bookTitle: item.title,
-                                imageUrl: item.imageUrl
-                            });
-                        }}
+                        onError={() => handleImageError(item.id)}
+                        onLoad={() => {}}
                     />
                 ) : (
                     <View style={styles.bookPlaceholder}>
@@ -105,13 +142,25 @@ export default function BooksScreen({ navigation }) {
                 ) : null}
                 <Text style={styles.bookPrice}>{item.price}</Text>
 
-                <Pressable
-                    style={styles.buyButton}
-                    onPress={() => handleBuyBook(item.link)}
-                >
-                    <Text style={styles.buyButtonText}>לרכישה</Text>
-                    <Ionicons name="cart-outline" size={16} color="#fff" />
-                </Pressable>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Pressable
+                        style={styles.buyButton}
+                        onPress={() => handleBuyBook(item.link)}
+                    >
+                        <Text style={styles.buyButtonText}>לרכישה</Text>
+                        <Ionicons name="cart-outline" size={16} color="#fff" />
+                    </Pressable>
+                    {canManage && (
+                        <>
+                            <Pressable onPress={() => handleOpenEdit(item)} style={styles.adminIconBtn}>
+                                <Ionicons name="pencil" size={20} color={PRIMARY_BLUE} />
+                            </Pressable>
+                            <Pressable onPress={() => handleDeleteBook(item)} style={styles.adminIconBtn}>
+                                <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                            </Pressable>
+                        </>
+                    )}
+                </View>
             </View>
         </View>
         );
@@ -146,6 +195,73 @@ export default function BooksScreen({ navigation }) {
                     }
                 />
             )}
+
+            {/* Edit Book Modal (admin only) */}
+            <Modal visible={!!editBook} animationType="slide" transparent>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>עריכת מוצר</Text>
+                            <Pressable onPress={() => setEditBook(null)}>
+                                <Ionicons name="close" size={28} color={DEEP_BLUE} />
+                            </Pressable>
+                        </View>
+                        <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+                            <Text style={styles.formLabel}>כותרת *</Text>
+                            <TextInput
+                                style={styles.formInput}
+                                value={editForm.title}
+                                onChangeText={(t) => setEditForm(f => ({ ...f, title: t }))}
+                                placeholder="כותרת"
+                                placeholderTextColor="#9ca3af"
+                            />
+                            <Text style={styles.formLabel}>הערה</Text>
+                            <TextInput
+                                style={[styles.formInput, styles.formTextArea]}
+                                value={editForm.note}
+                                onChangeText={(t) => setEditForm(f => ({ ...f, note: t }))}
+                                placeholder="הערה"
+                                placeholderTextColor="#9ca3af"
+                                multiline
+                            />
+                            <Text style={styles.formLabel}>מחיר</Text>
+                            <TextInput
+                                style={styles.formInput}
+                                value={editForm.price}
+                                onChangeText={(t) => setEditForm(f => ({ ...f, price: t }))}
+                                placeholder="מחיר"
+                                placeholderTextColor="#9ca3af"
+                            />
+                            <Text style={styles.formLabel}>קישור לרכישה</Text>
+                            <TextInput
+                                style={styles.formInput}
+                                value={editForm.link}
+                                onChangeText={(t) => setEditForm(f => ({ ...f, link: t }))}
+                                placeholder="https://..."
+                                placeholderTextColor="#9ca3af"
+                                autoCapitalize="none"
+                            />
+                            <Text style={styles.formLabel}>כתובת תמונה</Text>
+                            <TextInput
+                                style={styles.formInput}
+                                value={editForm.imageUrl}
+                                onChangeText={(t) => setEditForm(f => ({ ...f, imageUrl: t }))}
+                                placeholder="https://..."
+                                placeholderTextColor="#9ca3af"
+                                autoCapitalize="none"
+                            />
+                        </ScrollView>
+                        <View style={styles.modalFooter}>
+                            <Pressable style={styles.cancelButton} onPress={() => setEditBook(null)}>
+                                <Text style={styles.cancelButtonText}>ביטול</Text>
+                            </Pressable>
+                            <Pressable style={styles.saveButton} onPress={handleSaveEdit} disabled={saving}>
+                                <Text style={styles.saveButtonText}>{saving ? 'שומר...' : 'שמור'}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </View>
     )
 }
@@ -241,5 +357,85 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontFamily: 'Poppins_500Medium',
         color: '#6b7280',
+    },
+    adminIconBtn: {
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: 'rgba(30,58,138,0.08)',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        maxHeight: '85%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.06)',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontFamily: 'Heebo_700Bold',
+        color: DEEP_BLUE,
+    },
+    modalBody: {
+        padding: 16,
+        maxHeight: 400,
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+        padding: 16,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.06)',
+    },
+    formLabel: {
+        fontSize: 14,
+        fontFamily: 'Heebo_500Medium',
+        color: DEEP_BLUE,
+        marginBottom: 4,
+        marginTop: 12,
+    },
+    formInput: {
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        borderRadius: 10,
+        padding: 12,
+        fontSize: 16,
+        color: DEEP_BLUE,
+    },
+    formTextArea: {
+        minHeight: 60,
+    },
+    cancelButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        backgroundColor: '#f3f4f6',
+    },
+    cancelButtonText: {
+        fontSize: 16,
+        color: '#6b7280',
+    },
+    saveButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 24,
+        borderRadius: 10,
+        backgroundColor: PRIMARY_BLUE,
+    },
+    saveButtonText: {
+        fontSize: 16,
+        color: '#fff',
+        fontFamily: 'Heebo_600SemiBold',
     },
 })

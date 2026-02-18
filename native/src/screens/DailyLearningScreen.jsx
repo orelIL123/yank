@@ -20,8 +20,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import * as ImagePicker from 'expo-image-picker';
 import AppHeader from '../components/AppHeader';
+
+function extractYouTubeId(url) {
+  if (!url || typeof url !== 'string') return null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+    /youtube\.com\/shorts\/([^&\n?#/]+)/,
+  ];
+  for (const p of patterns) {
+    const m = url.trim().match(p);
+    if (m && m[1]) return m[1];
+  }
+  return null;
+}
 import { getText, formatTextForDisplay, formatSefariaContent } from '../services/sefaria';
 import { db } from '../services/database';
 import { auth } from '../config/firebase';
@@ -47,21 +62,90 @@ const FONTS = {
   regular: 'Poppins_400Regular',
 };
 
-// Helper: split text into paragraphs so each block gets explicit RTL (prevents bidi flip on long text)
+// Max chars per Text node – keep very short runs to avoid bidi reversing Hebrew/niqqud
+const RTL_CHUNK_MAX = 40;
+
+// Unicode direction helpers:
+// - RLI/PDI isolates an RTL run (more robust than embedding for mixed text)
+// - RLM nudges the renderer to keep RTL ordering (helps with Hebrew + niqqud)
+const RLI = '\u2067'; // Right-to-Left Isolate
+const PDI = '\u2069'; // Pop Directional Isolate
+const RLM = '\u200F'; // Right-to-Left Mark
+
+function rtlProtect(str) {
+  const cleaned = String(str || '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  // Add an RLM at the start and after each space, then isolate the whole run.
+  const withMarks = RLM + cleaned.replace(/ /g, ` ${RLM}`);
+  return `${RLI}${withMarks}${PDI}`;
+}
+
+// Helper: split text into short RTL segments and protect with Unicode direction marks
 function renderRtlParagraphs(text, textStyle) {
   if (!text || typeof text !== 'string') return null;
   const paragraphs = text.split(/\n\n+/).filter((p) => p.trim());
   if (paragraphs.length === 0) {
-    return <Text style={[textStyle, { writingDirection: 'rtl' }]}>{text}</Text>;
+    return renderRtlChunks(text.trim(), textStyle, 0);
   }
-  return paragraphs.map((paragraph, index) => (
-    <Text
-      key={index}
-      style={[textStyle, { writingDirection: 'rtl', marginBottom: index < paragraphs.length - 1 ? 20 : 0 }]}
-    >
-      {paragraph.trim()}
-    </Text>
-  ));
+  return paragraphs.map((paragraph, pIndex) => {
+    const isLast = pIndex === paragraphs.length - 1;
+    return (
+      <View key={pIndex} style={{ marginBottom: isLast ? 0 : 20 }}>
+        {renderRtlChunks(paragraph.trim(), textStyle, pIndex)}
+      </View>
+    );
+  });
+}
+
+// Render each segment with direction isolation so the native engine doesn't reverse character order
+function renderRtlChunks(paragraph, textStyle, keyPrefix) {
+  const lines = paragraph.split(/\n/).filter((l) => l.trim());
+  const out = [];
+  let key = keyPrefix * 10000;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.length <= RTL_CHUNK_MAX) {
+      out.push(
+        <Text
+          key={key++}
+          style={[textStyle, { writingDirection: 'rtl' }]}
+          textBreakStrategy="highQuality"
+        >
+          {rtlProtect(trimmed)}
+        </Text>
+      );
+    } else {
+      const chunks = splitRtlChunks(trimmed, RTL_CHUNK_MAX);
+      chunks.forEach((chunk) => {
+        out.push(
+          <Text
+            key={key++}
+            style={[textStyle, { writingDirection: 'rtl' }]}
+            textBreakStrategy="highQuality"
+          >
+            {rtlProtect(chunk)}
+          </Text>
+        );
+      });
+    }
+  }
+  return out;
+}
+
+function splitRtlChunks(str, maxLen) {
+  const result = [];
+  let rest = str;
+  while (rest.length > maxLen) {
+    let splitAt = rest.lastIndexOf(' ', maxLen);
+    if (splitAt <= 0) splitAt = maxLen;
+    result.push(rest.slice(0, splitAt).trim());
+    rest = rest.slice(splitAt).trim();
+  }
+  if (rest) result.push(rest);
+  return result;
 }
 
 // Helper function to calculate daily Orchot Tzadikim gate (1-28 cycle)
@@ -158,6 +242,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
+  const [editYoutubeUrl, setEditYoutubeUrl] = useState('');
 
   // Check if user is admin
   useEffect(() => {
@@ -178,12 +263,15 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           try {
             const doc = await db.getDocument('dailyLearning', category.id);
             if (doc) {
+              const youtubeId = doc.youtubeId || (doc.youtubeUrl ? extractYouTubeId(doc.youtubeUrl) : null);
               setContent(prev => ({
                 ...prev,
                 [category.id]: {
                   title: doc.title || '',
                   text: doc.text || '',
                   imageUrl: doc.imageUrl || '',
+                  youtubeUrl: doc.youtubeUrl || '',
+                  youtubeId: youtubeId || '',
                   updatedAt: doc.updatedAt,
                 }
               }));
@@ -198,7 +286,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
             // Initialize with empty content
             setContent(prev => ({
               ...prev,
-              [category.id]: { title: '', text: '', imageUrl: '' }
+              [category.id]: { title: '', text: '', imageUrl: '', youtubeUrl: '', youtubeId: '' }
             }));
           }
         }
@@ -215,6 +303,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     setEditTitle(existingContent.title || '');
     setEditText(existingContent.text || '');
     setEditImageUrl(existingContent.imageUrl || '');
+    setEditYoutubeUrl(existingContent.youtubeUrl || '');
     setEditModalVisible(true);
   };
 
@@ -225,13 +314,19 @@ export default function DailyLearningScreen({ navigation, userRole }) {
     try {
       setLoading(prev => ({ ...prev, [editingCategory.id]: true }));
 
-      await db.updateDocument('dailyLearning', editingCategory.id, {
+      const youtubeId = editYoutubeUrl.trim() ? extractYouTubeId(editYoutubeUrl.trim()) : null;
+      const payload = {
         title: editTitle,
         text: editText,
         imageUrl: editImageUrl,
         updatedAt: new Date().toISOString(),
         updatedBy: auth.currentUser?.uid,
-      });
+      };
+      if (editingCategory.id === 'weekly-newsletter') {
+        payload.youtubeUrl = editYoutubeUrl.trim() || null;
+        payload.youtubeId = youtubeId || null;
+      }
+      await db.updateDocument('dailyLearning', editingCategory.id, payload);
 
       setContent(prev => ({
         ...prev,
@@ -239,6 +334,8 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           title: editTitle,
           text: editText,
           imageUrl: editImageUrl,
+          youtubeUrl: editingCategory.id === 'weekly-newsletter' ? (editYoutubeUrl.trim() || '') : (prev[editingCategory.id]?.youtubeUrl || ''),
+          youtubeId: editingCategory.id === 'weekly-newsletter' ? (youtubeId || '') : (prev[editingCategory.id]?.youtubeId || ''),
           updatedAt: new Date().toISOString(),
         }
       }));
@@ -271,12 +368,14 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                 title: '',
                 text: '',
                 imageUrl: '',
+                youtubeUrl: null,
+                youtubeId: null,
                 updatedAt: new Date().toISOString(),
               });
 
               setContent(prev => ({
                 ...prev,
-                [editingCategory.id]: { title: '', text: '', imageUrl: '' }
+                [editingCategory.id]: { title: '', text: '', imageUrl: '', youtubeUrl: '', youtubeId: '' }
               }));
 
               setEditModalVisible(false);
@@ -608,8 +707,20 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {displayContent.title || displayContent.text || displayContent.imageUrl ? (
-            <>
+          {displayContent.title || displayContent.text || displayContent.imageUrl || displayContent.youtubeId ? (
+            <View style={styles.learningCard}>
+              {displayContent.youtubeId ? (
+                <View style={styles.youtubeWrapper}>
+                  <YoutubePlayer
+                    height={(width - 40) * (9 / 16)}
+                    width={width - 40}
+                    videoId={displayContent.youtubeId}
+                    play={false}
+                    webViewStyle={{ borderRadius: 12 }}
+                  />
+                </View>
+              ) : null}
+
               {displayContent.title ? (
                 <View style={styles.contentHeader}>
                   <Text style={styles.contentTitle}>{displayContent.title}</Text>
@@ -617,7 +728,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                 </View>
               ) : null}
 
-              {displayContent.imageUrl ? (
+              {displayContent.imageUrl && !displayContent.youtubeId ? (
                 <View style={styles.imageContainer}>
                   <Image
                     source={{ uri: displayContent.imageUrl }}
@@ -632,7 +743,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                   {renderRtlParagraphs(displayContent.text, styles.textContent)}
                 </View>
               ) : null}
-            </>
+            </View>
           ) : (
             <View style={styles.emptyContainer}>
               <Ionicons name="document-text-outline" size={48} color={COLORS.textLight} />
@@ -690,6 +801,25 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                     textAlign="right"
                   />
                 </View>
+
+                {editingCategory?.id === 'weekly-newsletter' ? (
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>קישור YouTube (סרטון הגליון)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editYoutubeUrl}
+                      onChangeText={setEditYoutubeUrl}
+                      placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
+                      textAlign="right"
+                      autoCapitalize="none"
+                    />
+                    {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
+                      <Text style={styles.hintOk}>✓ קישור תקין</Text>
+                    ) : editYoutubeUrl.trim() ? (
+                      <Text style={styles.hintError}>קישור לא תקין</Text>
+                    ) : null}
+                  </View>
+                ) : null}
 
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>קישור לתמונה</Text>
@@ -824,75 +954,94 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                   />
                 </View>
 
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>תוכן</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={editText}
-                    onChangeText={setEditText}
-                    placeholder="הזן תוכן..."
-                    multiline
-                    numberOfLines={8}
-                    textAlign="right"
-                  />
-                </View>
+<View style={styles.formGroup}>
+                <Text style={styles.label}>תוכן</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={editText}
+                  onChangeText={setEditText}
+                  placeholder="הזן תוכן..."
+                  multiline
+                  numberOfLines={8}
+                  textAlign="right"
+                />
+              </View>
 
+              {editingCategory?.id === 'weekly-newsletter' ? (
                 <View style={styles.formGroup}>
-                  <Text style={styles.label}>קישור לתמונה</Text>
+                  <Text style={styles.label}>קישור YouTube (סרטון הגליון)</Text>
                   <TextInput
                     style={styles.input}
-                    value={editImageUrl}
-                    onChangeText={setEditImageUrl}
-                    placeholder="https://example.com/image.jpg"
+                    value={editYoutubeUrl}
+                    onChangeText={setEditYoutubeUrl}
+                    placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
                     textAlign="right"
                     autoCapitalize="none"
                   />
+                  {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
+                    <Text style={styles.hintOk}>✓ קישור תקין</Text>
+                  ) : editYoutubeUrl.trim() ? (
+                    <Text style={styles.hintError}>קישור לא תקין</Text>
+                  ) : null}
                 </View>
+              ) : null}
 
-                {editImageUrl ? (
-                  <View style={styles.imagePreview}>
-                    <Text style={styles.label}>תצוגה מקדימה:</Text>
-                    <Image
-                      source={{ uri: editImageUrl }}
-                      style={styles.previewImage}
-                      resizeMode="contain"
-                    />
-                  </View>
-                ) : null}
-              </ScrollView>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>קישור לתמונה</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editImageUrl}
+                  onChangeText={setEditImageUrl}
+                  placeholder="https://example.com/image.jpg"
+                  textAlign="right"
+                  autoCapitalize="none"
+                />
+              </View>
 
-              <View style={styles.modalFooter}>
+              {editImageUrl ? (
+                <View style={styles.imagePreview}>
+                  <Text style={styles.label}>תצוגה מקדימה:</Text>
+                  <Image
+                    source={{ uri: editImageUrl }}
+                    style={styles.previewImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Pressable
+                style={[styles.modalButton, styles.deleteButton]}
+                onPress={handleDeleteContent}
+              >
+                <Ionicons name="trash-outline" size={18} color="#fff" />
+                <Text style={styles.modalButtonText}>מחק</Text>
+              </Pressable>
+
+              <View style={styles.modalButtonGroup}>
                 <Pressable
-                  style={[styles.modalButton, styles.deleteButton]}
-                  onPress={handleDeleteContent}
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setEditModalVisible(false)}
                 >
-                  <Ionicons name="trash-outline" size={18} color="#fff" />
-                  <Text style={styles.modalButtonText}>מחק</Text>
+                  <Text style={styles.cancelButtonText}>ביטול</Text>
                 </Pressable>
 
-                <View style={styles.modalButtonGroup}>
-                  <Pressable
-                    style={[styles.modalButton, styles.cancelButton]}
-                    onPress={() => setEditModalVisible(false)}
-                  >
-                    <Text style={styles.cancelButtonText}>ביטול</Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[styles.modalButton, styles.saveButton]}
-                    onPress={handleSaveEdit}
-                  >
-                    <Text style={styles.modalButtonText}>שמור</Text>
-                  </Pressable>
-                </View>
+                <Pressable
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={handleSaveEdit}
+                >
+                  <Text style={styles.modalButtonText}>שמור</Text>
+                </Pressable>
               </View>
             </View>
           </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </SafeAreaView>
-    );
-  }
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
 
   return (
     <SafeAreaView style={styles.container}>
@@ -999,6 +1148,25 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                   textAlign="right"
                 />
               </View>
+
+              {editingCategory?.id === 'weekly-newsletter' ? (
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>קישור YouTube (סרטון הגליון)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editYoutubeUrl}
+                    onChangeText={setEditYoutubeUrl}
+                    placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
+                    textAlign="right"
+                    autoCapitalize="none"
+                  />
+                  {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
+                    <Text style={styles.hintOk}>✓ קישור תקין</Text>
+                  ) : editYoutubeUrl.trim() ? (
+                    <Text style={styles.hintError}>קישור לא תקין</Text>
+                  ) : null}
+                </View>
+              ) : null}
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>קישור לתמונה</Text>
@@ -1190,45 +1358,64 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 40,
-  },
-  contentHeader: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 16,
+    paddingBottom: 40,
+  },
+  learningCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  contentHeader: {
+    paddingHorizontal: 0,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   contentTitle: {
-    fontSize: 26,
+    fontSize: 22,
     fontFamily: 'Heebo_700Bold',
     color: COLORS.deepBlue,
     textAlign: 'right',
-    marginBottom: 16,
-    letterSpacing: 0.5,
+    marginBottom: 12,
+    letterSpacing: 0.3,
+    lineHeight: 32,
   },
   divider: {
-    height: 3,
+    height: 2,
     backgroundColor: COLORS.deepBlue,
-    opacity: 0.2,
-    borderRadius: 2,
-    marginBottom: 8,
+    opacity: 0.15,
+    borderRadius: 1,
+    marginTop: 4,
+    marginBottom: 0,
   },
   textContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 0,
+    paddingTop: 16,
+    paddingBottom: 8,
+    direction: 'rtl',
+    width: '100%',
   },
   textContainerRtl: {
     direction: 'rtl',
   },
   textContent: {
-    fontSize: 19,
+    fontSize: 18,
     fontFamily: 'Heebo_400Regular',
     color: COLORS.deepBlue,
     textAlign: 'right',
-    lineHeight: 38,
+    lineHeight: 34,
     writingDirection: 'rtl',
     letterSpacing: 0.2,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    width: '100%',
   },
   loadingContainer: {
     flex: 1,
@@ -1247,12 +1434,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   imageContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: 0,
+    paddingVertical: 16,
   },
   contentImage: {
     width: '100%',
-    height: 300,
+    height: 260,
     borderRadius: 12,
   },
   emptyContainer: {
@@ -1339,6 +1526,24 @@ const styles = StyleSheet.create({
   },
   imagePreview: {
     marginTop: 16,
+  },
+  youtubeWrapper: {
+    width: '100%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 0,
+  },
+  hintOk: {
+    fontSize: 13,
+    color: '#10b981',
+    marginTop: 6,
+    textAlign: 'right',
+  },
+  hintError: {
+    fontSize: 13,
+    color: '#ef4444',
+    marginTop: 6,
+    textAlign: 'right',
   },
   previewImage: {
     width: '100%',

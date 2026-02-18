@@ -8,7 +8,8 @@
     "android": "expo start --android --dev-client",
     "ios": "expo start --ios --dev-client",
     "web": "expo start --web",
-    "clear": "expo start --clear"
+    "clear": "expo start --clear",
+    "test": "jest"
   },
   "dependencies": {
     "@expo-google-fonts/cinzel-decorative": "^0.4.1",
@@ -54,5 +55,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
 }

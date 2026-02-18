@@ -166,7 +166,6 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
       title,
       body,
       data,
-      badge: 1,
       priority: 'high',
       channelId: 'default'
     }))

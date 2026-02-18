@@ -278,9 +278,7 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
     return (
       <View style={styles.container}>
         <AppHeader
-          title="סרטונים ארוכים"
-          subtitle="שיעורים מלאים מהרב"
-          onBackPress={() => navigation.goBack()}
+          title="שיעורים"          onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY_BLUE} />
@@ -293,7 +291,7 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
   return (
     <View style={styles.container}>
       <AppHeader
-        title="סרטונים ארוכים"
+        title="שיעורים"
         subtitle="שיעורים מלאים מהרב"
         onBackPress={() => navigation.goBack()}
       />

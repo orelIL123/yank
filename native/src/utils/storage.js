@@ -26,14 +26,26 @@ export async function pickImage(options = {}) {
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
+    allowsEditing: options.allowsEditing !== undefined ? options.allowsEditing : true,
     aspect: options.aspect || [16, 9],
     quality: options.quality || 0.8,
+    allowsMultipleSelection: options.allowsMultipleSelection || false,
     ...options,
   })
 
   if (result.canceled) return null
 
+  // If multiple selection is enabled, return array of images
+  if (options.allowsMultipleSelection) {
+    return result.assets.map(asset => ({
+      uri: asset.uri,
+      width: asset.width,
+      height: asset.height,
+      type: asset.type,
+    }))
+  }
+
+  // Single image
   return {
     uri: result.assets[0].uri,
     width: result.assets[0].width,
@@ -331,18 +343,27 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
         if (newslettersBucket) return 'newsletters'
       }
       
-      const preferredNames = ['public', 'uploads', 'files', 'assets']
+      // For 'news' (תיעודים ועדכונים) use newsletters or first available with news/ prefix
+      if (preferredBucket === 'news') {
+        const newslettersBucket = knownBuckets.find(b => b.name === 'newsletters')
+        if (newslettersBucket) return 'newsletters'
+      }
+      
+      const preferredNames = ['public', 'uploads', 'files', 'assets', 'newsletters']
       const byName = preferredNames.map(n => knownBuckets.find(b => b.name === n)).find(Boolean)
       return (byName || knownBuckets[0])?.name || null
     }
     
-      // Determine folder prefix based on bucket type
-    const getFolderPrefix = (bucketName) => {
-      if (bucketName === 'daily-videos' || bucketName === 'videos') {
+      // Determine folder prefix when using fallback bucket (so paths don't collide)
+    const getFolderPrefix = (preferredBucketName) => {
+      if (preferredBucketName === 'daily-videos' || preferredBucketName === 'videos') {
         return 'daily-videos/'
       }
-      if (bucketName.includes('newsletter')) {
-        return '' // Don't add prefix for newsletters bucket
+      if (preferredBucketName === 'news') {
+        return 'news/'
+      }
+      if (preferredBucketName.includes('newsletter')) {
+        return ''
       }
       return ''
     }
@@ -523,11 +544,11 @@ export async function uploadFileToSupabaseStorage(uri, bucket, path, onProgress)
     const { data: urlData } = supabase.storage
       .from(effectiveBucket)
       .getPublicUrl(effectivePath)
-
+    
     if (onProgress) {
       onProgress(100)
     }
-
+    
     return urlData.publicUrl
   } catch (error) {
     console.error('Error uploading file to Supabase Storage:', error)

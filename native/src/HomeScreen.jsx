@@ -12,6 +12,7 @@ import NotificationModal from './components/NotificationModal'
 import { auth } from './config/firebase'
 import db from './services/database'
 import cache from './utils/cache'
+import { setBadgeCount } from './utils/notifications'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -52,6 +53,7 @@ export default function HomeScreen({ navigation, userRole }) {
 
   const [activeTab, setActiveTab] = React.useState('home')
   const pulse = React.useRef(new Animated.Value(0)).current
+  const glowPulse = React.useRef(new Animated.Value(0)).current
 
   const triggerPulse = React.useCallback(() => {
     pulse.setValue(0)
@@ -69,6 +71,38 @@ export default function HomeScreen({ navigation, userRole }) {
       { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 2.0] }) },
     ],
   }
+
+  // Glow animation for music button
+  React.useEffect(() => {
+    const glowAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowPulse, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowPulse, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    )
+    glowAnimation.start()
+    return () => glowAnimation.stop()
+  }, [glowPulse])
+
+  const glowStyle = {
+    opacity: glowPulse.interpolate({ 
+      inputRange: [0, 1], 
+      outputRange: [0.5, 1] 
+    }),
+    transform: [
+      { scale: glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.12] }) },
+    ],
+  }
   const [quote, setQuote] = useState('ציטוט יומי - הרב הינוקא')
   const [quoteAuthor, setQuoteAuthor] = useState('הרב הינוקא')
   const [quoteImage, setQuoteImage] = useState(null)
@@ -78,6 +112,7 @@ export default function HomeScreen({ navigation, userRole }) {
   const [editingAuthor, setEditingAuthor] = useState('')
   const [savingQuote, setSavingQuote] = useState(false)
   const [showQuoteImageModal, setShowQuoteImageModal] = useState(false)
+  const [quoteImageAspectRatio, setQuoteImageAspectRatio] = useState(null)
   const [unreadCount, setUnreadCount] = React.useState(0)
   const [menuVisible, setMenuVisible] = React.useState(false)
   const [songs, setSongs] = useState([])
@@ -100,6 +135,11 @@ export default function HomeScreen({ navigation, userRole }) {
   const onShareQuote = React.useCallback(() => {
     Share.share({ message: `"${quote}" - ${quoteAuthor}` }).catch(() => { })
   }, [quote, quoteAuthor])
+
+  // Reset aspect ratio when quote image changes (prevents showing old ratio before new image loads)
+  useEffect(() => {
+    setQuoteImageAspectRatio(null)
+  }, [quoteImage])
 
   // Load daily quote and featured topic
   useEffect(() => {
@@ -516,6 +556,7 @@ export default function HomeScreen({ navigation, userRole }) {
 
       if (!userId) {
         setUnreadCount(0)
+        setBadgeCount(0).catch(() => {})
         return
       }
 
@@ -523,7 +564,9 @@ export default function HomeScreen({ navigation, userRole }) {
         return !notification.readBy || !notification.readBy.includes(userId)
       })
 
-      setUnreadCount(unreadNotifications.length)
+      const count = unreadNotifications.length
+      setUnreadCount(count)
+      setBadgeCount(count).catch(() => {})
     } catch (error) {
       console.error('Error loading notifications:', error)
     }
@@ -675,20 +718,20 @@ export default function HomeScreen({ navigation, userRole }) {
             }}
           />
 
-          {/* Pidyon Nefesh (ticker under hero) */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+          {/* Pidyon Nefesh (ticker under hero) – compact */}
+          <View style={styles.sectionPidyonCompact}>
+            <View style={styles.sectionHeaderCompact}>
               <Pressable
                 onPress={() => navigation?.navigate('PidyonNefesh')}
                 accessibilityRole="button"
               >
-                <Text style={styles.sectionLinkText}>עוד →</Text>
+                <Text style={styles.sectionLinkTextCompact}>עוד →</Text>
               </Pressable>
-              <Text style={styles.sectionTitle}>שמות לברכה (פדיון נפש)</Text>
+              <Text style={styles.sectionTitleCompact}>שמות לברכה (פדיון נפש)</Text>
             </View>
 
             {pidyonLoading ? (
-              <View style={styles.pidyonLoadingContainer}>
+              <View style={styles.pidyonLoadingContainerCompact}>
                 <ActivityIndicator size="small" color={PRIMARY_BLUE} />
               </View>
             ) : pidyonList.length > 0 ? (
@@ -708,7 +751,7 @@ export default function HomeScreen({ navigation, userRole }) {
                   {[...pidyonList, ...pidyonList, ...pidyonList].map((pidyon, idx) => (
                     <View key={`${pidyon.id}-${idx}`} style={styles.pidyonCardInline}>
                       <View style={styles.pidyonIconWrapper}>
-                        <Ionicons name="heart" size={20} color={PRIMARY_BLUE} />
+                        <Ionicons name="heart" size={14} color={PRIMARY_BLUE} />
                       </View>
                       <View style={styles.pidyonTextInline}>
                         <Text style={styles.pidyonNameInline} numberOfLines={1}>
@@ -725,8 +768,8 @@ export default function HomeScreen({ navigation, userRole }) {
                 </ScrollView>
               </View>
             ) : (
-              <View style={styles.pidyonEmptyContainer}>
-                <Text style={styles.pidyonEmptyText}>עדיין אין שמות להצגה</Text>
+              <View style={styles.pidyonEmptyContainerCompact}>
+                <Text style={styles.pidyonEmptyTextCompact}>עדיין אין שמות להצגה</Text>
               </View>
             )}
           </View>
@@ -798,12 +841,12 @@ export default function HomeScreen({ navigation, userRole }) {
           {/* Featured Buttons Row - Sefer HaMidot & Shulchan Shlomo */}
           <View style={styles.section}>
             <View style={styles.featuredButtonsRow}>
-              {/* Sefer HaMidot - Small Button */}
+              {/* Tools - Small Button */}
               <Pressable
                 style={styles.featuredButton}
-                onPress={() => navigation?.navigate('SeferHaMidot')}
+                onPress={() => navigation?.navigate('Tools')}
                 accessibilityRole="button"
-                accessibilityLabel="ספר המידות - לרבי נחמן מברסלב"
+                accessibilityLabel="כלי עזר - זמנים, פרשה וגימטריה"
               >
                 <LinearGradient
                   colors={['#7c3aed', '#8b5cf6', '#a78bfa']}
@@ -813,11 +856,11 @@ export default function HomeScreen({ navigation, userRole }) {
                 >
                   <View style={styles.featuredContent}>
                     <View style={styles.featuredIconWrapper}>
-                      <Ionicons name="flame" size={36} color="#fff" />
+                      <Ionicons name="construct" size={36} color="#fff" />
                     </View>
                     <View style={styles.featuredText}>
-                      <Text style={styles.featuredTitle}>ספר המידות</Text>
-                      <Text style={styles.featuredSubtitle}>לרבי נחמן מברסלב</Text>
+                      <Text style={styles.featuredTitle}>כלי עזר</Text>
+                      <Text style={styles.featuredSubtitle}>זמנים, פרשה וגימטריה</Text>
                     </View>
                   </View>
                 </LinearGradient>
@@ -880,8 +923,15 @@ export default function HomeScreen({ navigation, userRole }) {
                     >
                       <Image
                         source={{ uri: quoteImage }}
-                        style={styles.quoteImage}
-                        resizeMode="cover"
+                        style={[
+                          styles.quoteImage,
+                          { aspectRatio: quoteImageAspectRatio != null ? quoteImageAspectRatio : 9 / 16 }
+                        ]}
+                        resizeMode="contain"
+                        onLoad={(e) => {
+                          const { width, height } = e.nativeEvent.source
+                          if (width && height && height > 0) setQuoteImageAspectRatio(width / height)
+                        }}
                       />
                     </Pressable>
                   )}
@@ -959,24 +1009,6 @@ export default function HomeScreen({ navigation, userRole }) {
                 <Ionicons name="heart" size={20} color="#fff" />
                 <Text style={styles.takePartText}>קח חלק</Text>
               </LinearGradient>
-            </Pressable>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Pressable onPress={() => navigation?.navigate('PidyonNefesh')} accessibilityRole="button">
-                <Text style={styles.sectionLinkText}>פתח →</Text>
-              </Pressable>
-              <Text style={styles.sectionTitle}>פדיון נפש (ניהול שמות)</Text>
-            </View>
-            <Pressable
-              style={styles.managePidyonCard}
-              onPress={() => navigation?.navigate('PidyonNefesh')}
-              accessibilityRole="button"
-              accessibilityLabel="פתח פדיון נפש"
-            >
-              <Ionicons name="heart" size={20} color={PRIMARY_BLUE} />
-              <Text style={styles.managePidyonText}>הוסף / ערוך שמות לפדיון נפש</Text>
             </Pressable>
           </View>
 
@@ -1147,19 +1179,35 @@ export default function HomeScreen({ navigation, userRole }) {
             pressed && styles.centerNavButtonPressed
           ]}
         >
-          <LinearGradient
-            pointerEvents="none"
-            colors={activeTab === 'music' 
-              ? [PRIMARY_BLUE, '#1e40af', PRIMARY_BLUE]
-              : ['#4B5563', '#374151', '#4B5563']
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.centerNavGradient}
-          >
-            <View style={styles.centerNavGlow} pointerEvents="none" />
-            <Ionicons name="musical-notes" size={28} color="#fff" />
-          </LinearGradient>
+          {/* Button + Glow wrapper */}
+          <View style={styles.centerNavButtonInner}>
+            {/* Outer Glow Ring */}
+            <Animated.View style={[styles.centerNavGlowOuterContainer, glowStyle]} pointerEvents="none">
+              <LinearGradient
+                pointerEvents="none"
+                colors={activeTab === 'music'
+                  ? ['rgba(30,64,175,0.6)', 'rgba(59,130,246,0.35)', 'rgba(30,64,175,0.6)']
+                  : ['rgba(75,85,99,0.25)', 'rgba(100,116,139,0.15)', 'rgba(75,85,99,0.25)']
+                }
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.centerNavGlowOuter}
+              />
+            </Animated.View>
+            {/* Main Gradient Circle */}
+            <LinearGradient
+              pointerEvents="none"
+              colors={activeTab === 'music' 
+                ? [PRIMARY_BLUE, '#1e40af', PRIMARY_BLUE]
+                : ['#4B5563', '#374151', '#4B5563']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.centerNavGradient}
+            >
+              <Ionicons name="musical-notes" size={28} color="#fff" />
+            </LinearGradient>
+          </View>
           <Text style={styles.centerNavLabel} pointerEvents="none">ניגונים</Text>
         </Pressable>
 
@@ -1438,30 +1486,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     lineHeight: 18,
   },
-  managePidyonCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(11,27,58,0.1)',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-    justifyContent: 'flex-end',
-  },
-  managePidyonText: {
-    color: DEEP_BLUE,
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-    textAlign: 'right',
-    flex: 1,
-  },
   grid: {
   },
   gridRow: {
@@ -1567,24 +1591,23 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   quoteContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+    flexDirection: 'column',
   },
   quoteTextContainer: {
-    flex: 1,
+    width: '100%',
   },
   quoteImageContainer: {
-    width: 120,
-    aspectRatio: 16 / 9,
-    borderRadius: 12,
+    alignSelf: 'center',
+    width: '100%',
+    maxHeight: 320,
+    borderRadius: 14,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(30,58,138,0.1)',
+    marginTop: 10,
+    backgroundColor: 'rgba(0,0,0,0.04)',
   },
   quoteImage: {
     width: '100%',
-    height: '100%',
+    maxHeight: 320,
   },
   imagePickerContainer: {
     marginTop: 8,
@@ -2093,42 +2116,39 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.92 }],
     opacity: 0.9,
   },
-  centerNavGlowOuter: {
+  centerNavButtonInner: {
+    width: 90,
+    height: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerNavGlowOuterContainer: {
     position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: PRIMARY_BLUE,
-    opacity: 0.15,
-    top: -16,
-    left: '50%',
-    marginLeft: -50,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerNavGlowOuter: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
   },
   centerNavGradient: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: PRIMARY_BLUE,
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 18,
-    borderWidth: 5,
+    borderWidth: 4,
     borderColor: BG,
-  },
-  centerNavGlow: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: PRIMARY_BLUE,
-    opacity: 0.3,
-    top: '50%',
-    left: '50%',
-    marginTop: -50,
-    marginLeft: -50,
   },
   centerNavLabel: {
     marginTop: 8,
@@ -2189,15 +2209,39 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     lineHeight: 16,
   },
+  sectionPidyonCompact: {
+    marginBottom: 12,
+  },
+  sectionHeaderCompact: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  sectionTitleCompact: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+  },
+  sectionLinkTextCompact: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: PRIMARY_BLUE,
+  },
   pidyonLoadingContainer: {
     paddingVertical: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pidyonLoadingContainerCompact: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pidyonContainer: {
     overflow: 'hidden',
-    borderRadius: 14,
-    height: 60,
+    borderRadius: 10,
+    height: 44,
   },
   pidyonScrollView: {
     flexGrow: 0,
@@ -2205,31 +2249,31 @@ const styles = StyleSheet.create({
   pidyonScrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingRight: 16,
-    paddingLeft: 16,
+    gap: 8,
+    paddingRight: 12,
+    paddingLeft: 12,
   },
   pidyonCardInline: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    minWidth: 140,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    minWidth: 110,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(11,27,58,0.1)',
+    borderColor: 'rgba(11,27,58,0.08)',
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-    gap: 10,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+    gap: 6,
   },
   pidyonIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: 'rgba(30,58,138,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2237,16 +2281,16 @@ const styles = StyleSheet.create({
   pidyonTextInline: {
     flex: 1,
     alignItems: 'flex-end',
-    gap: 2,
+    gap: 0,
   },
   pidyonNameInline: {
-    fontSize: 13,
+    fontSize: 10,
     fontFamily: 'Poppins_600SemiBold',
     color: DEEP_BLUE,
     textAlign: 'right',
   },
   pidyonMotherNameInline: {
-    fontSize: 11,
+    fontSize: 9,
     fontFamily: 'Poppins_400Regular',
     color: '#6b7280',
     textAlign: 'right',
@@ -2257,8 +2301,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
+  pidyonEmptyContainerCompact: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pidyonEmptyText: {
     fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+  },
+  pidyonEmptyTextCompact: {
+    fontSize: 12,
     fontFamily: 'Poppins_400Regular',
     color: '#6b7280',
   },

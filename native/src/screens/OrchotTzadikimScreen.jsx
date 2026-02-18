@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import AppHeader from '../components/AppHeader'
 import db from '../services/database'
 import { auth } from '../config/firebase'
+import orhotData from '../data/orhot_tzadikim_data.json'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -40,15 +41,33 @@ function renderRtlParagraphs(text, textStyle) {
   ))
 }
 
+// Get Hebrew day numeric (1-30)
+function getHebrewDayNumeric() {
+  const date = new Date()
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    calendar: 'hebrew',
+    day: 'numeric'
+  })
+  return parseInt(formatter.format(date), 10)
+}
+
 export default function OrchotTzadikimScreen({ navigation, userRole }) {
   const [loading, setLoading] = useState(true)
   const [dailyContent, setDailyContent] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
+  
+  // Content Editing State
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [editImageUrl, setEditImageUrl] = useState('')
+  
+  // Cycle Management State
+  const [cycleOffset, setCycleOffset] = useState(0)
+  const [effectiveDay, setEffectiveDay] = useState(1)
   const [saving, setSaving] = useState(false)
+  const [showIntroModal, setShowIntroModal] = useState(false)
+  const introContent = orhotData.find(item => item.day === 1) || null
 
   useEffect(() => {
     checkAdmin()
@@ -62,38 +81,126 @@ export default function OrchotTzadikimScreen({ navigation, userRole }) {
   const loadDailyContent = async () => {
     try {
       setLoading(true)
-      // Load today's Orchot Tzadikim content from database
-      const content = await db.getDocument('dailyOrchotTzadikim', 'current')
-
-      if (content) {
-        setDailyContent(content)
-        setEditTitle(content.title || '')
-        setEditContent(content.content || '')
-        setEditImageUrl(content.imageUrl || '')
-      } else {
-        // Initialize with default
-        const hebrewDate = getHebrewDate()
-        setDailyContent({
-          title: `אורחות צדיקים - ${hebrewDate}`,
-          content: '',
-          imageUrl: '',
-          updatedAt: new Date().toISOString()
-        })
-        setEditTitle(`אורחות צדיקים - ${hebrewDate}`)
+      
+      const hebrewDay = getHebrewDayNumeric()
+      const hebrewDateStr = getHebrewDate()
+      
+      // 1. Fetch Cycle Configuration (Offset)
+      let currentOffset = 0
+      try {
+        const configDoc = await db.getDocument('dailyOrchotTzadikim', 'config')
+        if (configDoc && typeof configDoc.offset === 'number') {
+          currentOffset = configDoc.offset
+        }
+      } catch (e) {
+        console.log('No cycle config found, using default.')
       }
+      setCycleOffset(currentOffset)
+
+      // 2. Calculate Effective Day
+      // Formula ensures result is 1-30
+      // If hebrewDay is 5 and offset is 4 (started 4 days ago), effective is 1.
+      let calculatedDay = ((hebrewDay - currentOffset - 1 + 30) % 30) + 1
+      setEffectiveDay(calculatedDay)
+
+      // 3. Gates only (skip intro day 1) – day 1 of cycle = first gate
+      const gates = orhotData.filter(item => item.day !== 1).sort((a, b) => a.day - b.day)
+      const gateIndex = (calculatedDay - 1) % Math.max(gates.length, 1)
+      const autoContent = gates[gateIndex] || gates[0]
+      
+      const defaultContent = {
+        title: `אורחות צדיקים - ${hebrewDateStr}`,
+        content: autoContent ? `${autoContent.title}\n\n${autoContent.content}` : '',
+        imageUrl: '',
+        updatedAt: new Date().toISOString()
+      }
+
+      // 4. Check for Manual Override in DB
+      try {
+        const dbContent = await db.getDocument('dailyOrchotTzadikim', 'current')
+        
+        // If DB has content and it seems fresh (title contains today's date)
+        // OR if the admin explicitly set it to override regardless of date.
+        // For simplicity, we check if the title matches today's hebrew date string.
+        // But if we just reset the cycle, we want the JSON content.
+        
+        // We prioritize the manual override ONLY if it matches the current context or was recently updated.
+        // However, the simplest logic is: Display DB content if it exists. 
+        // But the user wants "Cycle" to work.
+        
+        // Strategy: We load the JSON content as the baseline.
+        // We map the DB content to the edit fields.
+        // If the DB content title matches today's date, we assume it's a manual override for TODAY.
+        
+        if (dbContent && dbContent.title && dbContent.title.includes(hebrewDateStr)) {
+          setDailyContent(dbContent)
+          setEditTitle(dbContent.title)
+          setEditContent(dbContent.content)
+          setEditImageUrl(dbContent.imageUrl || '')
+        } else {
+          // No manual override for today -> Use Automatic Content
+          setDailyContent(defaultContent)
+          // Pre-fill edit fields with the automatic content so admin can edit "on top" of it
+          setEditTitle(defaultContent.title)
+          setEditContent(defaultContent.content)
+          setEditImageUrl('')
+        }
+      } catch (dbError) {
+        setDailyContent(defaultContent)
+        setEditTitle(defaultContent.title)
+        setEditContent(defaultContent.content)
+      }
+
     } catch (error) {
       console.error('Error loading daily Orchot Tzadikim:', error)
-      // Initialize with default
       const hebrewDate = getHebrewDate()
       setDailyContent({
         title: `אורחות צדיקים - ${hebrewDate}`,
+        content: 'טוען תוכן...',
+        imageUrl: '',
+        updatedAt: new Date().toISOString()
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResetCycle = async (resetToStart) => {
+    setSaving(true)
+    try {
+      const hebrewDay = getHebrewDayNumeric()
+      let newOffset = 0
+      
+      if (resetToStart) {
+        // Set Offset so that (hebrewDay - offset) = 1
+        // offset = hebrewDay - 1
+        newOffset = hebrewDay - 1
+      } else {
+        // Reset to natural cycle (offset 0)
+        newOffset = 0
+      }
+
+      await db.setDocument('dailyOrchotTzadikim', 'config', { offset: newOffset })
+      
+      Alert.alert('הצלחה', resetToStart ? 'הסבב אופס להתחלה' : 'הסבב סונכרן לתאריך העברי')
+      
+      // Reload content to reflect change
+      // Also clear any manual override for "current" so the new cycle takes precedence immediately
+      await db.updateDocument('dailyOrchotTzadikim', 'current', {
+        title: '', // Clearing title signals "no manual override"
         content: '',
         imageUrl: '',
         updatedAt: new Date().toISOString()
       })
-      setEditTitle(`אורחות צדיקים - ${hebrewDate}`)
+      
+      await loadDailyContent()
+      setEditModalVisible(false)
+
+    } catch (error) {
+      console.error('Error resetting cycle:', error)
+      Alert.alert('שגיאה', 'לא ניתן לעדכן את הסבב')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -204,6 +311,15 @@ export default function OrchotTzadikimScreen({ navigation, userRole }) {
           <Text style={styles.mainTitle}>אורחות צדיקים</Text>
           <Text style={styles.subtitle}>קטע יומי מספר המוסר המפורסם</Text>
           <Text style={styles.hebrewDate}>{getHebrewDate()}</Text>
+          {introContent ? (
+            <Pressable
+              style={styles.introButton}
+              onPress={() => setShowIntroModal(true)}
+            >
+              <Ionicons name="book-outline" size={20} color={PRIMARY_BLUE} />
+              <Text style={styles.introButtonText}>הצג הקדמה</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Daily Content Card */}
@@ -254,10 +370,36 @@ export default function OrchotTzadikimScreen({ navigation, userRole }) {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle-outline" size={24} color={PRIMARY_BLUE} />
           <Text style={styles.infoText}>
-            תוכן זה מתעדכן יומית על ידי האדמין ומציג קטע רלוונטי מספר אורחות צדיקים
+            תוכן זה מתחלף אוטומטית מדי יום לפי הלוח העברי (יום בחודש) ומציג שער מספר אורחות צדיקים
           </Text>
         </View>
       </ScrollView>
+
+      {/* Intro Modal */}
+      {introContent && (
+        <Modal
+          visible={showIntroModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowIntroModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Pressable onPress={() => setShowIntroModal(false)}>
+                  <Ionicons name="close" size={24} color={DEEP_BLUE} />
+                </Pressable>
+                <Text style={styles.modalTitle}>{introContent.title}</Text>
+              </View>
+              <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 24 }}>
+                <View style={[styles.contentContainer, styles.contentContainerRtl]}>
+                  {renderRtlParagraphs(introContent.content, styles.contentText)}
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Edit Modal */}
       <Modal
@@ -277,6 +419,39 @@ export default function OrchotTzadikimScreen({ navigation, userRole }) {
             </View>
 
             <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+              
+              {/* Cycle Management Section */}
+              <View style={styles.cycleSection}>
+                <Text style={styles.sectionTitle}>ניהול מחזור הלימוד</Text>
+                <Text style={styles.cycleInfo}>
+                  היום הנוכחי במחזור: {effectiveDay} (מתוך 30)
+                </Text>
+                
+                <View style={styles.cycleButtons}>
+                  <Pressable 
+                    style={[styles.cycleButton, styles.resetButton]}
+                    onPress={() => handleResetCycle(true)}
+                    disabled={saving}
+                  >
+                    <Ionicons name="refresh" size={18} color="#fff" />
+                    <Text style={styles.cycleButtonText}>התחל סבב מחדש מהיום</Text>
+                  </Pressable>
+                  
+                  <Pressable 
+                    style={[styles.cycleButton, styles.syncButton]}
+                    onPress={() => handleResetCycle(false)}
+                    disabled={saving}
+                  >
+                    <Ionicons name="calendar" size={18} color={DEEP_BLUE} />
+                    <Text style={styles.syncButtonText}>סנכרן לתאריך העברי</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <Text style={styles.sectionTitle}>עריכת תוכן ידנית (דריסה)</Text>
+
               <View style={styles.formGroup}>
                 <Text style={styles.label}>כותרת</Text>
                 <TextInput
@@ -405,6 +580,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: '#6b7280',
     textAlign: 'center',
+  },
+  introButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30,58,138,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.25)',
+  },
+  introButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: PRIMARY_BLUE,
   },
   contentCard: {
     backgroundColor: '#ffffff',
@@ -544,6 +737,62 @@ const styles = StyleSheet.create({
   modalBody: {
     padding: 20,
     maxHeight: 400,
+  },
+  cycleSection: {
+    marginBottom: 20,
+    backgroundColor: '#f8fafc',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Heebo_700Bold',
+    color: DEEP_BLUE,
+    textAlign: 'right',
+    marginBottom: 12,
+  },
+  cycleInfo: {
+    fontSize: 14,
+    fontFamily: 'Heebo_400Regular',
+    color: '#64748b',
+    textAlign: 'right',
+    marginBottom: 12,
+  },
+  cycleButtons: {
+    gap: 8,
+  },
+  cycleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  resetButton: {
+    backgroundColor: PRIMARY_BLUE,
+  },
+  syncButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  cycleButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: 'Heebo_600SemiBold',
+  },
+  syncButtonText: {
+    color: DEEP_BLUE,
+    fontSize: 14,
+    fontFamily: 'Heebo_600SemiBold',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 20,
   },
   formGroup: {
     marginBottom: 20,

@@ -882,7 +882,7 @@ const styles = StyleSheet.create({
   },
   storyContent: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
   storyInfo: { flex: 1, alignItems: 'flex-end' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  titleRow: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginBottom: 6 },
   motzeiBadge: {
     flexDirection: 'row',
     alignItems: 'center',

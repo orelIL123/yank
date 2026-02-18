@@ -10,6 +10,7 @@ import { collection, getDocs } from 'firebase/firestore'
 import db from '../services/database'
 import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath, pickPDF, uploadPDFToStorage, generatePrayerPDFPath, uploadFileToSupabaseStorage } from '../utils/storage'
 import { sendPushNotifications } from '../utils/notifications'
+import { BUNDLED_PRAYERS } from '../data/bundledPrayers'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'cards', label: 'כרטיסיות', icon: 'grid-outline' },
   { id: 'books', label: 'ספרים', icon: 'book-outline' },
   { id: 'prayers', label: 'תפילות', icon: 'heart-outline' },
+  { id: 'bundled_prayers', label: 'תפילות מובנות', icon: 'albums-outline' },
   { id: 'news', label: 'חדשות', icon: 'newspaper-outline' },
   { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline' },
   { id: 'dailyLearning', label: 'לימוד יומי', icon: 'school-outline' },
@@ -28,6 +30,7 @@ const TABS = [
   { id: 'hoduLaHashem', label: 'הודו לה\'', icon: 'sparkles-outline' },
   { id: 'music', label: 'ניגונים', icon: 'musical-notes-outline' },
   { id: 'notifications', label: 'התראות', icon: 'notifications-outline' },
+  { id: 'parasha', label: 'פרשת השבוע', icon: 'book-outline' },
 ]
 
 export default function AdminScreen({ navigation, route, userRole, userPermissions }) {
@@ -117,6 +120,7 @@ export default function AdminScreen({ navigation, route, userRole, userPermissio
         {activeTab === 'cards' && <CardsForm />}
         {activeTab === 'books' && <BooksForm />}
         {activeTab === 'prayers' && <PrayersForm />}
+        {activeTab === 'bundled_prayers' && <BundledPrayersForm />}
         {activeTab === 'news' && <NewsForm />}
         {activeTab === 'newsletters' && <NewslettersForm />}
         {activeTab === 'dailyLearning' && <DailyLearningForm />}
@@ -125,6 +129,7 @@ export default function AdminScreen({ navigation, route, userRole, userPermissio
         {activeTab === 'hoduLaHashem' && <HoduLaHashemForm />}
         {activeTab === 'music' && <MusicForm />}
         {activeTab === 'notifications' && <NotificationsForm />}
+        {activeTab === 'parasha' && <ParashaForm />}
       </ScrollView>
     </SafeAreaView>
   )
@@ -799,35 +804,112 @@ function BooksForm() {
   })
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [adminBooksList, setAdminBooksList] = useState([])
+  const [loadingBooks, setLoadingBooks] = useState(false)
+  const [editingBook, setEditingBook] = useState(null)
+  const [editForm, setEditForm] = useState({ title: '', note: '', price: '', link: '', imageUrl: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
 
-  const handlePickImage = async () => {
-    const image = await pickImage({ aspect: [16, 9] })
-    if (image) {
-      setForm({ ...form, imageUri: image.uri })
+  const fetchAdminBooks = async () => {
+    setLoadingBooks(true)
+    try {
+      const list = await db.getCollection('books', { orderBy: { field: 'createdAt', direction: 'desc' } })
+      setAdminBooksList(list)
+    } catch (e) {
+      console.error('Error fetching books for admin:', e)
+    } finally {
+      setLoadingBooks(false)
     }
   }
 
-  const handleUploadImage = async () => {
-    if (!form.imageUri) {
-      Alert.alert('שגיאה', 'אנא בחר תמונה תחילה')
+  useEffect(() => {
+    fetchAdminBooks()
+  }, [])
+
+  const handlePickImage = async () => {
+    try {
+      const image = await pickImage({ aspect: [3, 4], quality: 0.85 })
+      if (!image?.uri) return
+      setUploading(true)
+      setForm(prev => ({ ...prev, imageUri: image.uri, imageUrl: '' }))
+      try {
+        const timestamp = Date.now()
+        const path = `books/${timestamp}/image.jpg`
+        let url
+        try {
+          url = await uploadImageToStorage(image.uri, path)
+        } catch (firebaseErr) {
+          console.warn('Firebase upload failed, trying Supabase:', firebaseErr?.message)
+          url = await uploadFileToSupabaseStorage(image.uri, 'newsletters', `book-images/${path}`, () => {})
+        }
+        setForm(prev => ({ ...prev, imageUrl: url }))
+        Alert.alert('הצלחה!', 'התמונה הועלתה בהצלחה ✅')
+      } catch (error) {
+        Alert.alert('שגיאה', 'לא ניתן להעלות את התמונה. נסה שנית.')
+        console.error('Book image upload error:', error)
+        setForm(prev => ({ ...prev, imageUri: null, imageUrl: '' }))
+      } finally {
+        setUploading(false)
+      }
+    } catch (e) {
+      console.error('Image pick error:', e)
+    }
+  }
+
+  const handleEditBook = (book) => {
+    setEditingBook(book)
+    setEditForm({
+      title: book.title || '',
+      note: book.note || '',
+      price: book.price || '',
+      link: book.link || '',
+      imageUrl: book.imageUrl || '',
+    })
+  }
+
+  const handleSaveEditBook = async () => {
+    if (!editingBook || !editForm.title.trim()) {
+      Alert.alert('שגיאה', 'כותרת חובה')
       return
     }
-
-    setUploading(true)
+    setSavingEdit(true)
     try {
-      const timestamp = Date.now()
-      const path = `books/${timestamp}/image.jpg`
-      const url = await uploadImageToStorage(form.imageUri, path, (progress) => {
-        console.log(`Upload progress: ${progress}%`)
+      await db.updateDocument('books', editingBook.id, {
+        title: editForm.title.trim(),
+        note: editForm.note || '',
+        price: editForm.price || '',
+        link: editForm.link || '',
+        imageUrl: editForm.imageUrl || '',
       })
-      setForm({ ...form, imageUrl: url })
-      Alert.alert('הצלחה!', 'התמונה הועלתה בהצלחה')
-    } catch (error) {
-      Alert.alert('שגיאה', 'לא ניתן להעלות את התמונה')
-      console.error(error)
+      setEditingBook(null)
+      fetchAdminBooks()
+    } catch (e) {
+      Alert.alert('שגיאה', 'לא ניתן לשמור שינויים')
     } finally {
-      setUploading(false)
+      setSavingEdit(false)
     }
+  }
+
+  const handleDeleteBook = (book) => {
+    Alert.alert(
+      'מחיקת מוצר',
+      `למחוק את "${book.title}"?`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await db.deleteDocument('books', book.id)
+              fetchAdminBooks()
+            } catch (e) {
+              Alert.alert('שגיאה', 'לא ניתן למחוק')
+            }
+          },
+        },
+      ]
+    )
   }
 
   const handleSubmit = async () => {
@@ -836,8 +918,8 @@ function BooksForm() {
       return
     }
 
-    if (form.imageUri && !form.imageUrl) {
-      Alert.alert('שים לב', 'אנא העלה את התמונה לפני השמירה')
+    if (uploading) {
+      Alert.alert('שים לב', 'ממתין לסיום העלאת התמונה...')
       return
     }
 
@@ -867,6 +949,7 @@ function BooksForm() {
                 imageUri: null,
                 imageUrl: '',
               })
+              fetchAdminBooks()
             }
           }
         ]
@@ -881,10 +964,10 @@ function BooksForm() {
 
   return (
     <View style={styles.formContainer}>
-      <Text style={styles.formTitle}>📚 הוספת ספר</Text>
+      <Text style={styles.formTitle}>📚 הוספת ספר/מוצר</Text>
 
       <View style={styles.formGroup}>
-        <Text style={styles.label}>כותרת הספר *</Text>
+        <Text style={styles.label}>כותרת הספר/מוצר *</Text>
         <TextInput
           style={styles.input}
           value={form.title}
@@ -930,46 +1013,38 @@ function BooksForm() {
       </View>
 
       <View style={styles.formGroup}>
-        <Text style={styles.label}>תמונת הספר (אופציונלי)</Text>
-        {form.imageUri && (
+        <Text style={styles.label}>תמונת הספר/מוצר (אופציונלי)</Text>
+        {form.imageUri ? (
           <View style={styles.imagePreview}>
             <Image source={{ uri: form.imageUri }} style={styles.previewImage} />
-            {form.imageUrl && (
+            {uploading && (
+              <View style={[styles.uploadedBadge, { backgroundColor: 'rgba(30,58,138,0.12)' }]}>
+                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+                <Text style={[styles.uploadedText, { color: PRIMARY_BLUE }]}>מעלה...</Text>
+              </View>
+            )}
+            {form.imageUrl && !uploading && (
               <View style={styles.uploadedBadge}>
                 <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
-                <Text style={styles.uploadedText}>הועלה</Text>
+                <Text style={styles.uploadedText}>הועלה ✅</Text>
               </View>
             )}
           </View>
-        )}
-        <View style={styles.uploadSection}>
-          <Pressable
-            style={styles.uploadButton}
-            onPress={handlePickImage}
-            disabled={uploading}
-          >
+        ) : null}
+        <Pressable
+          style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
+          onPress={handlePickImage}
+          disabled={uploading}
+        >
+          {uploading ? (
+            <ActivityIndicator color={PRIMARY_BLUE} />
+          ) : (
             <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
-            <Text style={styles.uploadButtonText}>
-              {form.imageUri ? 'בחר תמונה אחרת' : 'בחר תמונה'}
-            </Text>
-          </Pressable>
-          {form.imageUri && !form.imageUrl && (
-            <Pressable
-              style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-              onPress={handleUploadImage}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator color={PRIMARY_BLUE} />
-              ) : (
-                <Ionicons name="cloud-upload-outline" size={24} color={PRIMARY_BLUE} />
-              )}
-              <Text style={styles.uploadButtonText}>
-                {uploading ? 'מעלה...' : 'העלה תמונה'}
-              </Text>
-            </Pressable>
           )}
-        </View>
+          <Text style={styles.uploadButtonText}>
+            {uploading ? 'מעלה תמונה...' : form.imageUri ? 'החלף תמונה' : 'בחר ועלה תמונה'}
+          </Text>
+        </Pressable>
       </View>
 
       <Pressable
@@ -984,13 +1059,71 @@ function BooksForm() {
           <Ionicons name="book" size={20} color="#fff" />
         )}
         <Text style={styles.submitButtonText}>
-          {saving ? 'שומר...' : 'הוסף ספר'}
+          {saving ? 'שומר...' : 'הוסף ספר/מוצר'}
         </Text>
       </Pressable>
 
       <Text style={styles.note}>
         💡 הספר יישמר ב-Firestore ויופיע באפליקציה במסך "ספרים".
       </Text>
+
+      {/* רשימת ספרים קיימים - עריכה ומחיקה */}
+      <Text style={[styles.formTitle, { marginTop: 24, marginBottom: 12 }]}>📋 ספרים קיימים</Text>
+      {loadingBooks ? (
+        <ActivityIndicator size="small" color={PRIMARY_BLUE} style={{ marginVertical: 16 }} />
+      ) : adminBooksList.length === 0 ? (
+        <Text style={[styles.note, { marginTop: 0 }]}>אין ספרים עדיין.</Text>
+      ) : (
+        <View style={styles.adminBooksList}>
+          {adminBooksList.map((book) => (
+            <View key={book.id} style={styles.adminBookRow}>
+              <Text style={styles.adminBookTitle} numberOfLines={1}>{book.title}</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable onPress={() => handleEditBook(book)} style={styles.adminBookBtn}>
+                  <Ionicons name="pencil" size={18} color={PRIMARY_BLUE} />
+                </Pressable>
+                <Pressable onPress={() => handleDeleteBook(book)} style={[styles.adminBookBtn, { backgroundColor: 'rgba(220,38,38,0.1)' }]}>
+                  <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* מודל עריכת ספר */}
+      <Modal visible={!!editingBook} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>עריכת מוצר</Text>
+              <Pressable onPress={() => setEditingBook(null)}>
+                <Ionicons name="close" size={28} color={DEEP_BLUE} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <Text style={styles.label}>כותרת *</Text>
+              <TextInput style={styles.input} value={editForm.title} onChangeText={(t) => setEditForm((f) => ({ ...f, title: t }))} placeholder="כותרת" placeholderTextColor="#9ca3af" />
+              <Text style={styles.label}>הערה</Text>
+              <TextInput style={[styles.input, styles.textArea]} value={editForm.note} onChangeText={(t) => setEditForm((f) => ({ ...f, note: t }))} placeholder="הערה" placeholderTextColor="#9ca3af" multiline />
+              <Text style={styles.label}>מחיר</Text>
+              <TextInput style={styles.input} value={editForm.price} onChangeText={(t) => setEditForm((f) => ({ ...f, price: t }))} placeholder="מחיר" placeholderTextColor="#9ca3af" />
+              <Text style={styles.label}>קישור לרכישה</Text>
+              <TextInput style={styles.input} value={editForm.link} onChangeText={(t) => setEditForm((f) => ({ ...f, link: t }))} placeholder="https://..." placeholderTextColor="#9ca3af" autoCapitalize="none" />
+              <Text style={styles.label}>כתובת תמונה</Text>
+              <TextInput style={styles.input} value={editForm.imageUrl} onChangeText={(t) => setEditForm((f) => ({ ...f, imageUrl: t }))} placeholder="https://..." placeholderTextColor="#9ca3af" autoCapitalize="none" />
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <Pressable style={styles.modalCancelBtn} onPress={() => setEditingBook(null)}>
+                <Text style={styles.modalCancelText}>ביטול</Text>
+              </Pressable>
+              <Pressable style={styles.modalSaveBtn} onPress={handleSaveEditBook} disabled={savingEdit}>
+                <Text style={styles.modalSaveText}>{savingEdit ? 'שומר...' : 'שמור'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -1004,6 +1137,8 @@ function NewslettersForm() {
     fileType: 'pdf',
     fileUri: null,
     fileUrl: null,
+    thumbnailUri: null,
+    thumbnailUrl: null,
   })
   const [uploading, setUploading] = useState(false)
 
@@ -1058,6 +1193,27 @@ function NewslettersForm() {
     }
   }
 
+  const handlePickThumbnail = async () => {
+    const image = await pickImage({ aspect: [4, 3] })
+    if (image) setForm({ ...form, thumbnailUri: image.uri, thumbnailUrl: null })
+  }
+
+  const handleUploadThumbnail = async () => {
+    if (!form.thumbnailUri) return
+    setUploading(true)
+    try {
+      const path = `thumbnails/${Date.now()}_thumb.jpg`
+      const url = await uploadFileToSupabaseStorage(form.thumbnailUri, 'newsletters', path, () => {})
+      setForm({ ...form, thumbnailUrl: url })
+      Alert.alert('הצלחה!', 'תמונת התצוגה המקדימה הועלתה')
+    } catch (error) {
+      Alert.alert('שגיאה', 'לא ניתן להעלות את התמונה')
+      console.error(error)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!form.title) {
       Alert.alert('שגיאה', 'אנא הזן כותרת')
@@ -1079,7 +1235,7 @@ function NewslettersForm() {
         category: form.category,
         fileType: form.fileType,
         fileUrl: form.fileUrl || '',
-        thumbnailUrl: form.fileType === 'image' ? form.fileUrl : '',
+        thumbnailUrl: form.thumbnailUrl || (form.fileType === 'image' ? form.fileUrl : '') || '',
         publishDate: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       })
@@ -1099,6 +1255,8 @@ function NewslettersForm() {
                 fileType: 'pdf',
                 fileUri: null,
                 fileUrl: null,
+                thumbnailUri: null,
+                thumbnailUrl: null,
               })
             }
           }
@@ -1220,6 +1378,46 @@ function NewslettersForm() {
               <Text style={styles.uploadButtonText}>
                 {uploading ? 'מעלה...' : 'העלה קובץ'}
               </Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>תצוגה מקדימה (אופציונלי)</Text>
+        {(form.thumbnailUri || form.thumbnailUrl) && (
+          <View style={styles.imagePreview}>
+            <Image
+              source={{ uri: form.thumbnailUrl || form.thumbnailUri }}
+              style={styles.previewImage}
+            />
+            {form.thumbnailUrl && (
+              <View style={styles.uploadedBadge}>
+                <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
+                <Text style={styles.uploadedText}>הועלה</Text>
+              </View>
+            )}
+          </View>
+        )}
+        <View style={styles.uploadSection}>
+          <Pressable style={styles.uploadButton} onPress={handlePickThumbnail} disabled={uploading}>
+            <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
+            <Text style={styles.uploadButtonText}>
+              {form.thumbnailUri || form.thumbnailUrl ? 'בחר תמונה אחרת' : 'בחר תמונת תצוגה מקדימה'}
+            </Text>
+          </Pressable>
+          {form.thumbnailUri && !form.thumbnailUrl && (
+            <Pressable
+              style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
+              onPress={handleUploadThumbnail}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <ActivityIndicator color={PRIMARY_BLUE} />
+              ) : (
+                <Ionicons name="cloud-upload-outline" size={24} color={PRIMARY_BLUE} />
+              )}
+              <Text style={styles.uploadButtonText}>{uploading ? 'מעלה...' : 'העלה תצוגה מקדימה'}</Text>
             </Pressable>
           )}
         </View>
@@ -2001,6 +2199,72 @@ function PrayersForm() {
   const [uploadingPDF, setUploadingPDF] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // תפילה שבועית מהעלון (app_config)
+  const [weeklyPrayerTitle, setWeeklyPrayerTitle] = useState('')
+  const [weeklyPrayerPdfUrl, setWeeklyPrayerPdfUrl] = useState('')
+  const [weeklyPrayerPdfUri, setWeeklyPrayerPdfUri] = useState(null)
+  const [weeklyPrayerPdfName, setWeeklyPrayerPdfName] = useState('')
+  const [loadingWeekly, setLoadingWeekly] = useState(true)
+  const [savingWeekly, setSavingWeekly] = useState(false)
+  const [uploadingWeeklyPdf, setUploadingWeeklyPdf] = useState(false)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const config = await db.getAppConfig()
+        if (config) {
+          setWeeklyPrayerTitle(config.weekly_prayer_title || '')
+          setWeeklyPrayerPdfUrl(config.weekly_prayer_pdf_url || '')
+        }
+      } catch (e) {
+        console.error('Error loading weekly prayer config:', e)
+      } finally {
+        setLoadingWeekly(false)
+      }
+    }
+    load()
+  }, [])
+
+  const handlePickWeeklyPdf = async () => {
+    const pdf = await pickPDF()
+    if (pdf) {
+      setWeeklyPrayerPdfUri(pdf.uri)
+      setWeeklyPrayerPdfName(pdf.name || '')
+    }
+  }
+
+  const handleSaveWeeklyPrayer = async () => {
+    let pdfUrl = weeklyPrayerPdfUrl
+    if (weeklyPrayerPdfUri) {
+      setUploadingWeeklyPdf(true)
+      try {
+        const path = `weekly-prayer/${Date.now()}_${weeklyPrayerPdfName || 'prayer.pdf'}`
+        pdfUrl = await uploadFileToSupabaseStorage(weeklyPrayerPdfUri, 'newsletters', path, () => {})
+        setWeeklyPrayerPdfUrl(pdfUrl)
+        setWeeklyPrayerPdfUri(null)
+      } catch (err) {
+        console.error(err)
+        Alert.alert('שגיאה', 'לא ניתן להעלות את קובץ ה-PDF')
+        setUploadingWeeklyPdf(false)
+        return
+      }
+      setUploadingWeeklyPdf(false)
+    }
+    setSavingWeekly(true)
+    try {
+      await db.updateAppConfig({
+        weekly_prayer_title: weeklyPrayerTitle.trim() || 'תפילה שבועית מהעלון',
+        weekly_prayer_pdf_url: pdfUrl || '',
+      })
+      Alert.alert('הצלחה', 'תפילה שבועית נשמרה בהצלחה')
+    } catch (err) {
+      console.error(err)
+      Alert.alert('שגיאה', 'לא ניתן לשמור')
+    } finally {
+      setSavingWeekly(false)
+    }
+  }
+
   const handlePickImage = async () => {
     const image = await pickImage({ aspect: [16, 9] })
     if (image) {
@@ -2119,7 +2383,76 @@ function PrayersForm() {
 
   return (
     <View style={styles.formContainer}>
-      <Text style={styles.formTitle}>💜 הוספת תפילה</Text>
+      {/* תפילה שבועית מהעלון */}
+      <Text style={styles.formTitle}>📿 תפילה שבועית מהעלון</Text>
+      <Text style={styles.formSubtitle}>
+        התפילה שמוצגת כשמשתמש לוחץ על "תפילה שבועית מהעלון" במסך התפילות
+      </Text>
+      {loadingWeekly ? (
+        <View style={styles.formGroup}>
+          <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+        </View>
+      ) : (
+        <>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>כותרת התפילה השבועית</Text>
+            <TextInput
+              style={styles.input}
+              value={weeklyPrayerTitle}
+              onChangeText={setWeeklyPrayerTitle}
+              placeholder="תפילה שבועית מהעלון"
+              textAlign="right"
+            />
+          </View>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>קובץ PDF</Text>
+            {(weeklyPrayerPdfUri || weeklyPrayerPdfUrl) && (
+              <View style={styles.imagePreview}>
+                {weeklyPrayerPdfUri ? (
+                  <View style={{ padding: 12, alignItems: 'center' }}>
+                    <Ionicons name="document-text" size={40} color={PRIMARY_BLUE} />
+                    <Text style={styles.pdfName} numberOfLines={1}>{weeklyPrayerPdfName || 'PDF'}</Text>
+                  </View>
+                ) : (
+                  <View style={{ padding: 12, alignItems: 'center' }}>
+                    <Ionicons name="document-text" size={40} color={PRIMARY_BLUE} />
+                    <Text style={styles.pdfName}>קובץ קיים</Text>
+                  </View>
+                )}
+              </View>
+            )}
+            <View style={styles.uploadSection}>
+              <Pressable
+                style={styles.uploadButton}
+                onPress={handlePickWeeklyPdf}
+                disabled={uploadingWeeklyPdf || savingWeekly}
+              >
+                <Ionicons name="document-text-outline" size={24} color={PRIMARY_BLUE} />
+                <Text style={styles.uploadButtonText}>
+                  {weeklyPrayerPdfUri ? 'בחר קובץ אחר' : 'בחר קובץ PDF'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.uploadButton, (savingWeekly || uploadingWeeklyPdf) && styles.uploadButtonDisabled]}
+                onPress={handleSaveWeeklyPrayer}
+                disabled={savingWeekly || uploadingWeeklyPdf}
+              >
+                {savingWeekly || uploadingWeeklyPdf ? (
+                  <ActivityIndicator color={PRIMARY_BLUE} size="small" />
+                ) : (
+                  <Ionicons name="checkmark-circle-outline" size={24} color={PRIMARY_BLUE} />
+                )}
+                <Text style={styles.uploadButtonText}>
+                  {savingWeekly ? 'שומר...' : uploadingWeeklyPdf ? 'מעלה...' : 'שמור תפילה שבועית'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </>
+      )}
+
+      <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.08)', marginTop: 20, paddingTop: 20 }} />
+      <Text style={[styles.formTitle, { marginTop: 8 }]}>💜 הוספת תפילה</Text>
 
       <View style={styles.formGroup}>
         <Text style={styles.label}>כותרת התפילה *</Text>
@@ -2401,6 +2734,9 @@ function NotificationsForm() {
     link: '',
   })
   const [saving, setSaving] = useState(false)
+  const [isScheduled, setIsScheduled] = useState(false)
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [scheduledTime, setScheduledTime] = useState('')
 
   const iconOptions = [
     { value: 'notifications', label: 'התראה כללית', icon: 'notifications' },
@@ -2424,6 +2760,23 @@ function NotificationsForm() {
       return
     }
 
+    // Validate scheduled date/time if scheduling is enabled
+    let scheduledAt = null
+    if (isScheduled) {
+      if (!scheduledDate || !scheduledTime) {
+        Alert.alert('שגיאה', 'יש להזין תאריך ושעה לתזמון ההתראה')
+        return
+      }
+      // Parse date: DD/MM/YYYY and time: HH:MM
+      const [day, month, year] = scheduledDate.split('/')
+      const [hours, minutes] = scheduledTime.split(':')
+      scheduledAt = new Date(year, month - 1, day, hours, minutes)
+      if (isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) {
+        Alert.alert('שגיאה', 'יש להזין תאריך ושעה עתידיים תקינים')
+        return
+      }
+    }
+
     try {
       setSaving(true)
 
@@ -2433,13 +2786,31 @@ function NotificationsForm() {
         message: form.message,
         icon: form.icon,
         link: form.link?.trim() || null,
-        isActive: true,
+        isActive: !isScheduled, // Not active until scheduled time if scheduled
         readBy: [],
         createdAt: new Date().toISOString(),
         createdBy: auth.currentUser?.uid || 'admin',
+        ...(scheduledAt && { scheduledAt: scheduledAt.toISOString(), isScheduled: true }),
       }
 
       const savedNotification = await db.addDocument('notifications', notificationData)
+
+      const resetForm = () => {
+        setForm({ title: '', message: '', icon: 'notifications', link: '' })
+        setIsScheduled(false)
+        setScheduledDate('')
+        setScheduledTime('')
+      }
+
+      // If scheduled, don't send push now - just save and inform
+      if (isScheduled) {
+        Alert.alert(
+          'התראה תוזמנה ✅',
+          `ההתראה נשמרה ותשלח בתאריך ${scheduledDate} בשעה ${scheduledTime}.\nניתן לראות ולמחוק התראות מתוזמנות במסך ניהול ההתראות.`,
+          [{ text: 'אישור', onPress: resetForm }]
+        )
+        return
+      }
 
       // Get all users with push tokens from Firestore
       console.log('📱 Collecting push tokens from all users...')
@@ -2475,38 +2846,14 @@ function NotificationsForm() {
         Alert.alert(
           'הצלחה! 🔔',
           `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}`,
-          [
-            {
-              text: 'אישור',
-              onPress: () => {
-                setForm({
-                  title: '',
-                  message: '',
-                  icon: 'notifications',
-                  link: '',
-                })
-              }
-            }
-          ]
+          [{ text: 'אישור', onPress: resetForm }]
         )
       } else {
         // No push tokens found, but notification was saved
         Alert.alert(
           'התראה נשמרה ⚠️',
           'ההתראה נשמרה בהצלחה, אבל לא נמצאו push tokens לשליחה.\nהמשתמשים יראו את ההתראה כשהם יפתחו את האפליקציה.',
-          [
-            {
-              text: 'אישור',
-              onPress: () => {
-                setForm({
-                  title: '',
-                  message: '',
-                  icon: 'notifications',
-                  link: '',
-                })
-              }
-            }
-          ]
+          [{ text: 'אישור', onPress: resetForm }]
         )
       }
     } catch (error) {
@@ -2591,6 +2938,47 @@ function NotificationsForm() {
         </View>
       </View>
 
+      {/* Scheduling section */}
+      <View style={styles.formGroup}>
+        <Pressable
+          style={styles.scheduleToggleRow}
+          onPress={() => setIsScheduled(!isScheduled)}
+        >
+          <View style={[styles.scheduleToggleBox, isScheduled && styles.scheduleToggleBoxActive]}>
+            {isScheduled && <Ionicons name="checkmark" size={14} color="#fff" />}
+          </View>
+          <Text style={styles.label}>תזמן התראה לתאריך/שעה עתידי</Text>
+        </Pressable>
+
+        {isScheduled && (
+          <View style={styles.scheduleInputsRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.scheduleInputLabel}>תאריך (DD/MM/YYYY)</Text>
+              <TextInput
+                style={styles.input}
+                value={scheduledDate}
+                onChangeText={setScheduledDate}
+                placeholder="27/05/2025"
+                keyboardType="numbers-and-punctuation"
+                textAlign="center"
+                maxLength={10}
+              />
+            </View>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={styles.scheduleInputLabel}>שעה (HH:MM)</Text>
+              <TextInput
+                style={styles.input}
+                value={scheduledTime}
+                onChangeText={setScheduledTime}
+                placeholder="20:00"
+                keyboardType="numbers-and-punctuation"
+                textAlign="center"
+                maxLength={5}
+              />
+            </View>
+          </View>
+        )}
+      </View>
 
       <Pressable
         style={[styles.submitButton, saving && styles.submitButtonDisabled]}
@@ -2601,16 +2989,87 @@ function NotificationsForm() {
         {saving ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Ionicons name="send" size={20} color="#fff" />
+          <Ionicons name={isScheduled ? 'time' : 'send'} size={20} color="#fff" />
         )}
         <Text style={styles.submitButtonText}>
-          {saving ? 'שולח...' : 'שלח התראה'}
+          {saving ? (isScheduled ? 'מתזמן...' : 'שולח...') : (isScheduled ? 'תזמן התראה' : 'שלח התראה')}
         </Text>
       </Pressable>
 
       <Text style={styles.note}>
         💡 ההתראה תישלח לכל המשתמשים ותופיע במסך ההתראות. משתמשים יוכלו לראות אותה כשלוחצים על אייקון הפעמון.
       </Text>
+    </View>
+  )
+}
+
+// ========== PARASHA FORM (manual override for פרשת השבוע) ==========
+function ParashaForm() {
+  const [parashaName, setParashaName] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    loadConfig()
+  }, [])
+
+  const loadConfig = async () => {
+    try {
+      const config = await db.getAppConfig()
+      setParashaName(config?.parasha_override_he || '')
+    } catch (_) {
+      setParashaName('')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await db.updateAppConfig({ parasha_override_he: parashaName.trim() || null })
+      Alert.alert('הצלחה', 'שם הפרשה עודכן. יוצג במסך כלי עזר.')
+    } catch (e) {
+      console.error(e)
+      Alert.alert('שגיאה', 'לא ניתן לשמור')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.formContainer}>
+        <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>📖 פרשת השבוע – שינוי ידני</Text>
+      <Text style={[styles.note, { marginBottom: 16 }]}>
+        אם מוזן כאן – במסך "כלי עזר" יוצג השם הזה במקום הפרשה האוטומטית מ-HebCal. השאר ריק כדי להציג אוטומטית.
+      </Text>
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>שם הפרשה (עברית)</Text>
+        <TextInput
+          style={styles.input}
+          value={parashaName}
+          onChangeText={setParashaName}
+          placeholder="לדוגמה: ויקהל-פקודי"
+          textAlign="right"
+        />
+      </View>
+      <Pressable
+        style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+        onPress={handleSave}
+        disabled={saving}
+      >
+        <LinearGradient colors={[PRIMARY_BLUE, '#1e40af']} style={StyleSheet.absoluteFill} />
+        {saving ? <ActivityIndicator color="#fff" /> : <Ionicons name="save-outline" size={20} color="#fff" />}
+        <Text style={styles.submitButtonText}>{saving ? 'שומר...' : 'שמור'}</Text>
+      </Pressable>
     </View>
   )
 }
@@ -2976,6 +3435,188 @@ function HoduLaHashemForm() {
   )
 }
 
+// ============================================
+// Bundled Prayers Form (תפילות מובנות)
+// ============================================
+function BundledPrayersForm() {
+  const [prayers, setPrayers] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(null) // Track which prayer is uploading
+
+  useEffect(() => {
+    loadBundledPrayers()
+  }, [])
+
+  const loadBundledPrayers = async () => {
+    try {
+      // Load bundled prayers images from app_config
+      const config = await db.getAppConfig()
+      setPrayers(config?.bundled_prayers || {})
+    } catch (err) {
+      console.error('Error loading bundled prayers:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePickImages = async (prayerId) => {
+    try {
+      // Allow multiple image selection without cropping
+      const images = await pickImage({
+        allowsMultipleSelection: true,
+        allowsEditing: false,
+        quality: 0.9
+      })
+      if (!images || images.length === 0) return
+
+      setUploading(prayerId)
+
+      // Upload all images to Supabase
+      const uploadedUrls = []
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i]
+        const path = `bundled-prayers/${prayerId}/${Date.now()}_${i}.jpg`
+        const url = await uploadFileToSupabaseStorage(img.uri, 'newsletters', path, () => {})
+        uploadedUrls.push(url)
+      }
+
+      // Update app_config with new images
+      const currentPrayer = prayers[prayerId] || {}
+      const existingImages = currentPrayer.images || []
+      const updatedImages = [...existingImages, ...uploadedUrls]
+
+      const updatedPrayers = {
+        ...prayers,
+        [prayerId]: {
+          ...currentPrayer,
+          images: updatedImages,
+        }
+      }
+
+      await db.updateAppConfig({
+        bundled_prayers: updatedPrayers
+      })
+
+      setPrayers(updatedPrayers)
+      Alert.alert('הצלחה!', `${uploadedUrls.length} תמונות הועלו בהצלחה`)
+    } catch (err) {
+      console.error('Error uploading images:', err)
+      Alert.alert('שגיאה', 'לא ניתן להעלות את התמונות')
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  const handleDeleteImage = async (prayerId, imageIndex) => {
+    Alert.alert(
+      'מחיקת תמונה',
+      'האם אתה בטוח שברצונך למחוק תמונה זו?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const currentPrayer = prayers[prayerId] || {}
+              const updatedImages = [...(currentPrayer.images || [])]
+              updatedImages.splice(imageIndex, 1)
+
+              const updatedPrayers = {
+                ...prayers,
+                [prayerId]: {
+                  ...currentPrayer,
+                  images: updatedImages,
+                }
+              }
+
+              await db.updateAppConfig({
+                bundled_prayers: updatedPrayers
+              })
+
+              setPrayers(updatedPrayers)
+              Alert.alert('הצלחה', 'התמונה נמחקה')
+            } catch (err) {
+              console.error('Error deleting image:', err)
+              Alert.alert('שגיאה', 'לא ניתן למחוק את התמונה')
+            }
+          }
+        }
+      ]
+    )
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+        <Text style={styles.loadingText}>טוען...</Text>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.formContainer}>
+      <Text style={styles.formTitle}>📿 ניהול תפילות מובנות</Text>
+      <Text style={styles.formSubtitle}>
+        העלה תמונות לכל תפילה. ניתן להעלות מספר תמונות לכל תפילה.
+      </Text>
+
+      {BUNDLED_PRAYERS.map((prayer) => {
+        const prayerData = prayers[prayer.id] || {}
+        const images = prayerData.images || []
+        const isUploading = uploading === prayer.id
+
+        return (
+          <View key={prayer.id} style={styles.bundledPrayerCard}>
+            <View style={styles.bundledPrayerHeader}>
+              <Text style={styles.bundledPrayerTitle}>{prayer.title}</Text>
+              {prayer.gender && prayer.gender !== 'global' && (
+                <Text style={styles.bundledPrayerGender}>
+                  {prayer.gender === 'man' ? '(לאיש)' : '(לאישה)'}
+                </Text>
+              )}
+            </View>
+
+            {/* Images grid */}
+            {images.length > 0 && (
+              <View style={styles.imagesGrid}>
+                {images.map((imageUrl, index) => (
+                  <View key={index} style={styles.imageGridItem}>
+                    <Image source={{ uri: imageUrl }} style={styles.gridImage} />
+                    <Pressable
+                      style={styles.deleteImageBtn}
+                      onPress={() => handleDeleteImage(prayer.id, index)}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#ef4444" />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Upload button */}
+            <Pressable
+              style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]}
+              onPress={() => handlePickImages(prayer.id)}
+              disabled={isUploading}
+            >
+              {isUploading ? (
+                <ActivityIndicator color={PRIMARY_BLUE} size="small" />
+              ) : (
+                <Ionicons name="images-outline" size={24} color={PRIMARY_BLUE} />
+              )}
+              <Text style={styles.uploadButtonText}>
+                {isUploading ? 'מעלה...' : images.length > 0 ? 'הוסף תמונות נוספות' : 'העלה תמונות'}
+              </Text>
+            </Pressable>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -3115,6 +3756,38 @@ const styles = StyleSheet.create({
   },
   radioTextActive: {
     color: PRIMARY_BLUE,
+  },
+  scheduleToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  scheduleToggleBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scheduleToggleBoxActive: {
+    backgroundColor: PRIMARY_BLUE,
+    borderColor: PRIMARY_BLUE,
+  },
+  scheduleInputsRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginTop: 12,
+  },
+  scheduleInputLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    textAlign: 'right',
+    marginBottom: 4,
+    fontFamily: 'Poppins_400Regular',
   },
   checkboxGroup: {
     gap: 12,
@@ -3336,6 +4009,35 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(11,27,58,0.1)',
   },
+  modalCancelBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  modalCancelText: { fontSize: 16, color: DEEP_BLUE, fontFamily: 'Poppins_600SemiBold' },
+  modalSaveBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: PRIMARY_BLUE,
+    alignItems: 'center',
+  },
+  modalSaveText: { fontSize: 16, color: '#fff', fontFamily: 'Poppins_600SemiBold' },
+  adminBooksList: { marginTop: 8, gap: 8 },
+  adminBookRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.06)',
+  },
+  adminBookTitle: { flex: 1, fontSize: 15, color: DEEP_BLUE, marginLeft: 12 },
+  adminBookBtn: { padding: 8, borderRadius: 8, backgroundColor: 'rgba(30,58,138,0.1)' },
   cancelButton: {
     flex: 1,
     paddingVertical: 14,
@@ -3608,5 +4310,54 @@ const styles = StyleSheet.create({
   articleActions: {
     flexDirection: 'row',
     gap: 8,
+  },
+  bundledPrayerCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(11,27,58,0.1)',
+  },
+  bundledPrayerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  bundledPrayerTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: DEEP_BLUE,
+  },
+  bundledPrayerGender: {
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: PRIMARY_BLUE,
+  },
+  imagesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  imageGridItem: {
+    width: '31%',
+    minHeight: 150,
+    position: 'relative',
+    marginBottom: 8,
+  },
+  gridImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  deleteImageBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#fff',
+    borderRadius: 12,
   },
 })

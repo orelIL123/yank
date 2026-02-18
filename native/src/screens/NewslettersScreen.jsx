@@ -171,20 +171,68 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
         navigation.navigate('AddNewsletter', { newsletter })
     }
 
-    const renderNewsletter = ({ item, index }) => {
-        const isLatest = index === 0
-        return (
+    const renderHeroCard = (item) => (
         <Pressable
-            style={[styles.newsletterCard, isLatest && styles.newsletterCardLatest]}
+            style={styles.heroCard}
+            onPress={() => handleNewsletterPress(item)}
+            onLongPress={canManage ? () => handleEditNewsletter(item) : undefined}
+        >
+            <View style={styles.heroImageContainer} pointerEvents="box-none">
+                <View style={styles.latestBadgeHero} pointerEvents="none">
+                    <Text style={styles.latestBadgeText}>העלון השבועי</Text>
+                </View>
+                {item.thumbnailUrl || item.fileType === 'image' ? (
+                    <Image
+                        source={{ uri: item.thumbnailUrl || item.fileUrl }}
+                        style={styles.heroImage}
+                        resizeMode="cover"
+                        pointerEvents="none"
+                    />
+                ) : (
+                    <View style={styles.heroPdfPlaceholder} pointerEvents="none">
+                        <Ionicons name="document-text" size={72} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+                    </View>
+                )}
+                <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.8)']}
+                    style={styles.heroGradient}
+                    pointerEvents="none"
+                />
+                <View style={styles.newsletterBadge} pointerEvents="none">
+                    <Ionicons
+                        name={item.fileType === 'pdf' ? 'document-text' : 'image'}
+                        size={16}
+                        color="#fff"
+                    />
+                    <Text style={styles.badgeText}>{item.fileType === 'pdf' ? 'PDF' : 'תמונה'}</Text>
+                </View>
+            </View>
+            <View style={styles.heroContent}>
+                <Text style={styles.heroTitle} numberOfLines={2}>{item.title}</Text>
+                {item.description && (
+                    <Text style={styles.heroDescription} numberOfLines={2}>{item.description}</Text>
+                )}
+                <View style={styles.heroActions}>
+                    <Pressable style={styles.heroActionBtn} onPress={(e) => { e.stopPropagation(); handleDownload(item) }}>
+                        <Ionicons name="download-outline" size={20} color={PRIMARY_BLUE} />
+                        <Text style={styles.actionButtonText}>הורדה</Text>
+                    </Pressable>
+                    <Pressable style={styles.heroActionBtn} onPress={(e) => { e.stopPropagation(); handleShare(item) }}>
+                        <Ionicons name="share-outline" size={20} color={PRIMARY_BLUE} />
+                        <Text style={styles.actionButtonText}>שיתוף</Text>
+                    </Pressable>
+                </View>
+            </View>
+        </Pressable>
+    )
+
+    const renderNewsletter = ({ item }) => (
+        <Pressable
+            style={styles.newsletterCard}
             onPress={() => handleNewsletterPress(item)}
             onLongPress={canManage ? () => handleEditNewsletter(item) : undefined}
         >
             <View style={styles.newsletterImageContainer} pointerEvents="box-none">
-                {isLatest && (
-                    <View style={styles.latestBadge} pointerEvents="none">
-                        <Text style={styles.latestBadgeText}>חדש</Text>
-                    </View>
-                )}
                 {item.thumbnailUrl || item.fileType === 'image' ? (
                     <Image
                         source={{ uri: item.thumbnailUrl || item.fileUrl }}
@@ -203,74 +251,38 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
                     pointerEvents="none"
                 />
                 <View style={styles.newsletterBadge} pointerEvents="none">
-                    <Ionicons
-                        name={item.fileType === 'pdf' ? 'document-text' : 'image'}
-                        size={16}
-                        color="#fff"
-                    />
-                    <Text style={styles.badgeText}>
-                        {item.fileType === 'pdf' ? 'PDF' : 'תמונה'}
-                    </Text>
+                    <Ionicons name={item.fileType === 'pdf' ? 'document-text' : 'image'} size={16} color="#fff" />
+                    <Text style={styles.badgeText}>{item.fileType === 'pdf' ? 'PDF' : 'תמונה'}</Text>
                 </View>
             </View>
-
             <View style={styles.newsletterContent}>
                 <Text style={styles.newsletterTitle} numberOfLines={2}>{item.title}</Text>
                 {item.description && (
-                    <Text style={styles.newsletterDescription} numberOfLines={2}>
-                        {item.description}
-                    </Text>
+                    <Text style={styles.newsletterDescription} numberOfLines={2}>{item.description}</Text>
                 )}
                 {item.category && (
                     <View style={styles.categoryBadge}>
                         <Text style={styles.categoryText}>{item.category}</Text>
                     </View>
                 )}
-
                 <View style={styles.actionButtons}>
                     <View style={styles.actionButtonsRow}>
-                        <Pressable
-                            style={styles.actionButton}
-                            onPress={(e) => {
-                                e.stopPropagation()
-                                handleDownload(item)
-                            }}
-                        >
+                        <Pressable style={styles.actionButton} onPress={(e) => { e.stopPropagation(); handleDownload(item) }}>
                             <Ionicons name="download-outline" size={18} color={PRIMARY_BLUE} />
                             <Text style={styles.actionButtonText}>הורדה</Text>
                         </Pressable>
-
-                        <Pressable
-                            style={styles.actionButton}
-                            onPress={(e) => {
-                                e.stopPropagation()
-                                handleShare(item)
-                            }}
-                        >
+                        <Pressable style={styles.actionButton} onPress={(e) => { e.stopPropagation(); handleShare(item) }}>
                             <Ionicons name="share-outline" size={18} color={PRIMARY_BLUE} />
                             <Text style={styles.actionButtonText}>שיתוף</Text>
                         </Pressable>
                     </View>
-
                     {canManage && (
                         <View style={[styles.actionButtonsRow, styles.adminButtonsRow]}>
-                            <Pressable
-                                style={[styles.actionButton, styles.editButton]}
-                                onPress={(e) => {
-                                    e.stopPropagation()
-                                    handleEditNewsletter(item)
-                                }}
-                            >
+                            <Pressable style={[styles.actionButton, styles.editButton]} onPress={(e) => { e.stopPropagation(); handleEditNewsletter(item) }}>
                                 <Ionicons name="create-outline" size={18} color={PRIMARY_BLUE} />
                                 <Text style={styles.actionButtonText}>ערוך</Text>
                             </Pressable>
-                            <Pressable
-                                style={[styles.actionButton, styles.deleteButton]}
-                                onPress={(e) => {
-                                    e.stopPropagation()
-                                    handleDeleteNewsletter(item)
-                                }}
-                            >
+                            <Pressable style={[styles.actionButton, styles.deleteButton]} onPress={(e) => { e.stopPropagation(); handleDeleteNewsletter(item) }}>
                                 <Ionicons name="trash-outline" size={18} color="#ef4444" />
                                 <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>מחק</Text>
                             </Pressable>
@@ -279,8 +291,7 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
                 </View>
             </View>
         </Pressable>
-        )
-    }
+    )
 
     return (
         <SafeAreaView style={styles.container}>
@@ -351,21 +362,28 @@ export default function NewslettersScreen({ navigation, userRole, userPermission
                     <ActivityIndicator size="large" color={PRIMARY_BLUE} />
                     <Text style={styles.loadingText}>טוען עלונים...</Text>
                 </View>
+            ) : newsletters.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                    <Ionicons name="document-text-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
+                    <Text style={styles.emptyText}>אין עלונים זמינים</Text>
+                    <Text style={styles.emptySubtext}>העלונים יתווספו בקרוב</Text>
+                </View>
             ) : (
                 <FlatList
-                    data={newsletters}
+                    data={newsletters.slice(1)}
                     renderItem={renderNewsletter}
                     keyExtractor={item => item.id}
                     contentContainerStyle={styles.listContent}
                     numColumns={2}
                     columnWrapperStyle={styles.row}
                     showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={
-                        <View style={styles.emptyContainer}>
-                            <Ionicons name="document-text-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-                            <Text style={styles.emptyText}>אין עלונים זמינים</Text>
-                            <Text style={styles.emptySubtext}>העלונים יתווספו בקרוב</Text>
-                        </View>
+                    ListHeaderComponent={
+                        <>
+                            {renderHeroCard(newsletters[0])}
+                            <View style={styles.archiveSectionHeader}>
+                                <Text style={styles.archiveSectionTitle}>עלונים נוספים</Text>
+                            </View>
+                        </>
                     }
                 />
             )}
@@ -415,9 +433,99 @@ const styles = StyleSheet.create({
     },
     listContent: {
         padding: 12,
+        paddingTop: 8,
     },
     row: {
         justifyContent: 'space-between',
+    },
+    heroCard: {
+        width: '100%',
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        marginBottom: 16,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 6,
+        borderWidth: 2,
+        borderColor: PRIMARY_BLUE,
+    },
+    heroImageContainer: {
+        width: '100%',
+        height: 240,
+        backgroundColor: '#f5f5f5',
+        position: 'relative',
+    },
+    heroImage: {
+        width: '100%',
+        height: '100%',
+    },
+    heroPdfPlaceholder: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f0f9ff',
+    },
+    heroGradient: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 80,
+    },
+    latestBadgeHero: {
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        zIndex: 2,
+        backgroundColor: PRIMARY_BLUE,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 10,
+    },
+    heroContent: {
+        padding: 16,
+    },
+    heroTitle: {
+        fontSize: 20,
+        fontFamily: 'Heebo_700Bold',
+        color: DEEP_BLUE,
+        textAlign: 'right',
+        marginBottom: 8,
+    },
+    heroDescription: {
+        fontSize: 14,
+        fontFamily: 'Poppins_400Regular',
+        color: '#6b7280',
+        textAlign: 'right',
+        marginBottom: 12,
+    },
+    heroActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+    },
+    heroActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        backgroundColor: 'rgba(30,58,138,0.1)',
+    },
+    archiveSectionHeader: {
+        marginBottom: 12,
+        marginTop: 4,
+    },
+    archiveSectionTitle: {
+        fontSize: 18,
+        fontFamily: 'Poppins_700Bold',
+        color: DEEP_BLUE,
+        textAlign: 'right',
     },
     newsletterCard: {
         flex: 1,

@@ -10,6 +10,30 @@ import { t } from '../utils/i18n'
 import db from '../services/database'
 import { canManageNews } from '../utils/permissions'
 
+function deleteNewsArticle(article, loadNews) {
+  Alert.alert(
+    'מחיקת עדכון',
+    `למחוק את "${article.title}"?`,
+    [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: 'מחק',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await db.deleteDocument('news', article.id)
+            Alert.alert('הצלחה', 'העדכון נמחק')
+            loadNews()
+          } catch (e) {
+            console.error('Error deleting news:', e)
+            Alert.alert('שגיאה', 'לא ניתן למחוק את העדכון')
+          }
+        }
+      }
+    ]
+  )
+}
+
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
@@ -111,7 +135,13 @@ export default function NewsScreen({ navigation, userRole, userPermissions }) {
               key={article.id}
               style={[styles.articleCard, idx === 0 && styles.articleCardFirst]}
               onPress={() => navigation.navigate('NewsArticle', { articleId: article.id })}
-              onLongPress={canManage ? () => navigation.navigate('AddNews', { article }) : undefined}
+              onLongPress={canManage ? () => {
+                Alert.alert('עדכון', '', [
+                  { text: 'ביטול', style: 'cancel' },
+                  { text: 'ערוך', onPress: () => navigation.navigate('AddNews', { article }) },
+                  { text: 'מחק', style: 'destructive', onPress: () => deleteNewsArticle(article, loadNews) }
+                ])
+              } : undefined}
               accessibilityRole="button"
               accessibilityLabel={`כתבה ${article.title}`}
             >

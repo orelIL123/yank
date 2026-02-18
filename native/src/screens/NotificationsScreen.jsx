@@ -18,21 +18,25 @@ import { auth } from '../config/firebase'
 import db from '../services/database'
 import AppHeader from '../components/AppHeader'
 import NotificationModal from '../components/NotificationModal'
+import { setBadgeCount } from '../utils/notifications'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 const GOLD = '#FFD700'
 
-export default function NotificationsScreen({ navigation }) {
+export default function NotificationsScreen({ navigation, userRole }) {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [notificationModalVisible, setNotificationModalVisible] = useState(false)
   const [selectedNotification, setSelectedNotification] = useState(null)
+  const isAdmin = userRole === 'admin'
 
   useEffect(() => {
     loadNotifications()
+    // Clear app icon badge when user opens notifications screen
+    setBadgeCount(0).catch(() => {})
   }, [])
 
   const loadNotifications = async () => {
@@ -88,10 +92,33 @@ export default function NotificationsScreen({ navigation }) {
 
   const handleNotificationPress = (notification) => {
     markAsRead(notification.id)
-    
+
     // Show modal with notification
     setSelectedNotification(notification)
     setNotificationModalVisible(true)
+  }
+
+  const handleDeleteNotification = (notification) => {
+    Alert.alert(
+      'מחיקת התראה',
+      `האם למחוק את ההתראה "${notification.title}"?`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await db.deleteDocument('notifications', notification.id)
+              setNotifications(prev => prev.filter(n => n.id !== notification.id))
+            } catch (error) {
+              console.error('Error deleting notification:', error)
+              Alert.alert('שגיאה', 'לא ניתן למחוק את ההתראה')
+            }
+          }
+        }
+      ]
+    )
   }
 
   const formatDate = (timestamp) => {
@@ -124,7 +151,7 @@ export default function NotificationsScreen({ navigation }) {
 
   const renderNotification = ({ item }) => {
     const unread = isUnread(item)
-    
+
     return (
       <TouchableOpacity
         style={[styles.notificationItem, unread && styles.notificationItemUnread]}
@@ -147,6 +174,15 @@ export default function NotificationsScreen({ navigation }) {
               </Text>
               <Text style={styles.notificationTime}>{formatDate(item.createdAt)}</Text>
             </View>
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={(e) => { e.stopPropagation(); handleDeleteNotification(item) }}
+                hitSlop={8}
+              >
+                <Ionicons name="trash-outline" size={18} color="#dc2626" />
+              </TouchableOpacity>
+            )}
           </View>
           {item.message && (
             <Text style={styles.notificationMessage} numberOfLines={3}>
@@ -297,6 +333,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'right',
     marginTop: 8,
+  },
+  deleteButton: {
+    padding: 6,
+    marginLeft: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(220,38,38,0.08)',
   },
   emptyContainer: {
     flex: 1,

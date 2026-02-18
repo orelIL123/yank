@@ -372,9 +372,72 @@ CREATE TABLE IF NOT EXISTS app_config (
   id TEXT PRIMARY KEY DEFAULT 'config',
   daily_quote TEXT NOT NULL DEFAULT 'ציטוט יומי - הרב הינוקא',
   quote_author TEXT DEFAULT 'הרב הינוקא',
+  weekly_prayer_pdf_url TEXT,
+  weekly_prayer_title TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add weekly prayer columns if table already exists (run once per deployment)
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS weekly_prayer_pdf_url TEXT;
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS weekly_prayer_title TEXT;
+
+-- Add bundled prayers column (JSONB to store prayer images)
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS bundled_prayers JSONB DEFAULT '{}'::jsonb;
+
+-- Add quote_image column for daily quote image (ציטוט יומי)
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS quote_image TEXT;
+
+-- Daily Orchot Tzadikim collection (for daily content and cycle management)
+CREATE TABLE IF NOT EXISTS daily_orchot_tzadikim (
+  id TEXT PRIMARY KEY,
+  data JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE daily_orchot_tzadikim ENABLE ROW LEVEL SECURITY;
+
+-- Public read access
+CREATE POLICY "Public read access for daily_orchot_tzadikim" ON daily_orchot_tzadikim FOR SELECT USING (true);
+
+-- Admin write access
+CREATE POLICY "Authenticated users can insert daily_orchot_tzadikim" ON daily_orchot_tzadikim FOR INSERT WITH CHECK (true);
+CREATE POLICY "Authenticated users can update daily_orchot_tzadikim" ON daily_orchot_tzadikim FOR UPDATE USING (true);
+CREATE POLICY "Authenticated users can delete daily_orchot_tzadikim" ON daily_orchot_tzadikim FOR DELETE USING (true);
+
+-- Video Names collection (temporary storage, deleted after 24 hours)
+CREATE TABLE IF NOT EXISTS video_names (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  news_id TEXT REFERENCES news(id) ON DELETE CASCADE,
+  video_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create index for better performance on cleanup queries
+CREATE INDEX IF NOT EXISTS idx_video_names_created_at ON video_names(created_at);
+CREATE INDEX IF NOT EXISTS idx_video_names_news_id ON video_names(news_id);
+
+-- Enable RLS
+ALTER TABLE video_names ENABLE ROW LEVEL SECURITY;
+
+-- Public read access
+CREATE POLICY "Public read access for video_names" ON video_names FOR SELECT USING (true);
+
+-- Admin write access
+CREATE POLICY "Authenticated users can insert video_names" ON video_names FOR INSERT WITH CHECK (true);
+CREATE POLICY "Authenticated users can update video_names" ON video_names FOR UPDATE USING (true);
+CREATE POLICY "Authenticated users can delete video_names" ON video_names FOR DELETE USING (true);
+
+-- Function to delete old video names (older than 24 hours)
+CREATE OR REPLACE FUNCTION cleanup_old_video_names()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM video_names
+  WHERE created_at < NOW() - INTERVAL '24 hours';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Insert default config
 INSERT INTO app_config (id, daily_quote, quote_author) 

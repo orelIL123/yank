@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -15,20 +16,25 @@ import {
   Image,
   KeyboardAvoidingView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-;
-;
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
-import db from '../services/database'
-import { canManageLearning } from '../utils/permissions'
+import db from '../services/database';
+import { canManageLearning } from '../utils/permissions';
+import { auth } from '../config/firebase';
+
+const VIEWED_LESSONS_KEY_PREFIX = 'shortLessons_viewed_';
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 const { width, height } = Dimensions.get('window');
+
+// Required for scrollToIndex: approximate height per lesson card (content + marginBottom 8)
+const LESSON_ITEM_HEIGHT = 100;
 
 // Helper function to extract YouTube video ID from URL
 function extractYouTubeId(url) {
@@ -67,6 +73,8 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
+  const [viewedLessonIds, setViewedLessonIds] = useState(new Set());
+  const [isRegistered, setIsRegistered] = useState(false);
   const canManage = canManageLearning(userRole, userPermissions);
   const flatListRef = useRef(null);
 
@@ -81,6 +89,46 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
     console.log('ShortLessonsScreen - userRole:', userRole, 'canManage:', canManage);
     loadLessons();
   }, [userRole, userPermissions]);
+
+  // Load viewed-lessons for registered users (only for logged-in users)
+  const loadViewedLessons = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      setIsRegistered(false);
+      setViewedLessonIds(new Set());
+      return;
+    }
+    setIsRegistered(true);
+    try {
+      const key = VIEWED_LESSONS_KEY_PREFIX + user.uid;
+      const raw = await AsyncStorage.getItem(key);
+      const ids = raw ? JSON.parse(raw) : [];
+      setViewedLessonIds(new Set(Array.isArray(ids) ? ids : []));
+    } catch (e) {
+      console.warn('Failed to load viewed lessons:', e);
+      setViewedLessonIds(new Set());
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadViewedLessons();
+    }, [loadViewedLessons])
+  );
+
+  const markLessonViewed = useCallback(async (lessonId) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setViewedLessonIds((prev) => {
+      const next = new Set(prev);
+      next.add(lessonId);
+      const key = VIEWED_LESSONS_KEY_PREFIX + user.uid;
+      AsyncStorage.setItem(key, JSON.stringify([...next])).catch((e) =>
+        console.warn('Failed to save viewed lesson:', e)
+      );
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     // When lessons load, update shuffled list
@@ -154,6 +202,25 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
       });
     }
   };
+
+  const getItemLayout = useCallback((_, index) => ({
+    length: LESSON_ITEM_HEIGHT,
+    offset: LESSON_ITEM_HEIGHT * index,
+    index,
+  }), []);
+
+  const onScrollToIndexFailed = useCallback((info) => {
+    // Fallback: scroll by offset when scrollToIndex fails (e.g. index offscreen)
+    const wait = new Promise(resolve => setTimeout(resolve, 100));
+    wait.then(() => {
+      if (flatListRef.current) {
+        flatListRef.current.scrollToOffset({
+          offset: info.averageItemLength * info.index,
+          animated: true,
+        });
+      }
+    });
+  }, []);
 
   const handleAddLesson = () => {
     setShowAddModal(true);
@@ -251,11 +318,15 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
   const renderLesson = ({ item }) => {
     const thumbnailUrl = getYouTubeThumbnail(item.youtubeId, 'hqdefault');
     const isNew = item.createdAt && (new Date() - new Date(item.createdAt)) < 72 * 60 * 60 * 1000;
+    const isViewed = isRegistered && viewedLessonIds.has(item.id);
 
     return (
       <TouchableOpacity
         style={styles.lessonCard}
-        onPress={() => setSelectedLesson(item)}
+        onPress={() => {
+          markLessonViewed(item.id);
+          setSelectedLesson(item);
+        }}
         activeOpacity={0.8}
       >
         <View style={styles.lessonContent}>
@@ -263,6 +334,11 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
             {isNew && (
               <View style={styles.newBadge}>
                 <Text style={styles.newBadgeText}>חדש</Text>
+              </View>
+            )}
+            {isViewed && (
+              <View style={styles.viewedBadge}>
+                <Text style={styles.viewedBadgeText}>נצפה</Text>
               </View>
             )}
             {thumbnailUrl ? (
@@ -352,6 +428,9 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
           onBackPress={() => navigation.goBack()}
         />
 
+        {isRegistered && (
+          <Text style={styles.viewedHint}>(סימון "נצפה" — רק למשתמשים רשומים)</Text>
+        )}
         <View style={styles.controlsBar}>
           <TouchableOpacity
             style={[styles.controlPill, isShuffled && styles.controlPillActive]}
@@ -392,6 +471,8 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
             data={currentLessons}
             keyExtractor={(item) => item.id}
             renderItem={renderLesson}
+            getItemLayout={getItemLayout}
+            onScrollToIndexFailed={onScrollToIndexFailed}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
@@ -903,6 +984,14 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     lineHeight: 24,
   },
+  viewedHint: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 0,
+  },
   controlsBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1049,6 +1138,21 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   newBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontFamily: 'Heebo_700Bold',
+  },
+  viewedBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(30,58,138,0.9)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 10,
+  },
+  viewedBadgeText: {
     color: '#fff',
     fontSize: 10,
     fontFamily: 'Heebo_700Bold',

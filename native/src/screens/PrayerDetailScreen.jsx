@@ -213,8 +213,8 @@ export default function PrayerDetailScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* PDF View Button */}
-        {pdfUrl ? (
+        {/* PDF View Button – only when no images (same format as תפילות הינוקא = images first) */}
+        {pdfUrl && images.length === 0 ? (
           <Pressable
             style={styles.pdfButton}
             onPress={() => {

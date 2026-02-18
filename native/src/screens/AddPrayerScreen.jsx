@@ -16,6 +16,9 @@ export default function AddPrayerScreen({ navigation, route }) {
 
   const [form, setForm] = useState({
     title: prayer?.title || '',
+    title_en: prayer?.title_en || '',
+    title_ru: prayer?.title_ru || '',
+    title_fr: prayer?.title_fr || '',
     content: prayer?.content || '',
     description: prayer?.description || '',
     category: prayer?.category || 'תפילה',
@@ -217,6 +220,9 @@ export default function AddPrayerScreen({ navigation, route }) {
         // Update existing prayer
         await db.updateDocument('prayers', prayer.id, {
           title: trimmedTitle,
+          title_en: form.title_en?.trim() || null,
+          title_ru: form.title_ru?.trim() || null,
+          title_fr: form.title_fr?.trim() || null,
           content: trimmedContent,
           description: form.description?.trim() || '',
           category: form.category,
@@ -242,6 +248,9 @@ export default function AddPrayerScreen({ navigation, route }) {
         // Create new prayer
         await db.addDocument('prayers', {
           title: trimmedTitle,
+          title_en: form.title_en?.trim() || null,
+          title_ru: form.title_ru?.trim() || null,
+          title_fr: form.title_fr?.trim() || null,
           content: trimmedContent,
           description: form.description?.trim() || '',
           category: form.category,
@@ -308,12 +317,43 @@ export default function AddPrayerScreen({ navigation, route }) {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>כותרת התפילה *</Text>
+          <Text style={styles.label}>שם / כותרת התפילה (עברית) *</Text>
           <TextInput
             style={styles.input}
             value={form.title}
             onChangeText={text => setForm({ ...form, title: text })}
             placeholder="לדוגמה: תפילה לשלום עם ישראל"
+            placeholderTextColor="#9ca3af"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>שם באנגלית (אופציונלי)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.title_en}
+            onChangeText={text => setForm({ ...form, title_en: text })}
+            placeholder="Prayer name in English"
+            placeholderTextColor="#9ca3af"
+          />
+        </View>
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>שם ברוסית (אופציונלי)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.title_ru}
+            onChangeText={text => setForm({ ...form, title_ru: text })}
+            placeholder="Название на русском"
+            placeholderTextColor="#9ca3af"
+          />
+        </View>
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>שם בצרפתית (אופציונלי)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.title_fr}
+            onChangeText={text => setForm({ ...form, title_fr: text })}
+            placeholder="Nom en français"
             placeholderTextColor="#9ca3af"
           />
         </View>

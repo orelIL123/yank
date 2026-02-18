@@ -27,10 +27,14 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.hayanuka.app",
+      "versionCode": 12,
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE"
-      ]
+        "android.permission.VIBRATE",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "notification": {
       "color": "#1e3a8a",
@@ -52,6 +56,7 @@
     "scheme": "hayanuka",
     "plugins": [
       "./plugins/with-firebase-modular-headers",
+      "./plugins/with-google-services",
       "expo-localization"
     ]
   }

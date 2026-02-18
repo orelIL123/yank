@@ -38,7 +38,7 @@ function extractYouTubeId(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
     /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
-    /youtube\.com\/shorts\/([^&\n?#]+)/, // YouTube Shorts support
+    /youtube\.com\/shorts\/([^&\n?#/]+)/, // YouTube Shorts - avoid trailing slash in id
   ]
 
   for (const pattern of patterns) {
@@ -540,7 +540,7 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                         style={styles.formInput}
                         value={formYoutubeUrl}
                         onChangeText={setFormYoutubeUrl}
-                        placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
+                        placeholder="קישור YouTube או Shorts: youtube.com/watch?v=... או youtube.com/shorts/..."
                         placeholderTextColor="#9ca3af"
                         autoCapitalize="none"
                         keyboardType="url"
@@ -758,7 +758,7 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
                         style={styles.formInput}
                         value={formYoutubeUrl}
                         onChangeText={setFormYoutubeUrl}
-                        placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
+                        placeholder="קישור YouTube או Shorts: youtube.com/watch?v=... או youtube.com/shorts/..."
                         placeholderTextColor="#9ca3af"
                         autoCapitalize="none"
                         keyboardType="url"
