@@ -145,19 +145,57 @@ export async function clearAllNotifications() {
 export async function sendPushNotifications(tokens, title, body, data = {}) {
   if (!tokens || tokens.length === 0) {
     console.warn('No push tokens provided')
-    return { success: false, sent: 0 }
+    return { success: false, sent: 0, failed: 0, total: 0 }
+  }
+
+  // Keep only valid Expo push token shapes and remove duplicates
+  const validTokens = Array.from(
+    new Set(
+      tokens
+        .filter((token) => typeof token === 'string')
+        .map((token) => token.trim())
+        .filter((token) => /^Expo(nent)?PushToken\[[^\]]+\]$/.test(token))
+    )
+  )
+
+  const invalidCount = tokens.length - validTokens.length
+
+  if (validTokens.length === 0) {
+    console.warn('No valid Expo push tokens after validation')
+    return { success: false, sent: 0, failed: invalidCount, total: tokens.length }
   }
 
   // Expo Push API accepts up to 100 tokens per request
   const CHUNK_SIZE = 100
   const chunks = []
   
-  for (let i = 0; i < tokens.length; i += CHUNK_SIZE) {
-    chunks.push(tokens.slice(i, i + CHUNK_SIZE))
+  for (let i = 0; i < validTokens.length; i += CHUNK_SIZE) {
+    chunks.push(validTokens.slice(i, i + CHUNK_SIZE))
   }
 
   let totalSent = 0
-  let totalFailed = 0
+  let totalFailed = invalidCount
+
+  const postMessages = async (messages) => {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate'
+      },
+      body: JSON.stringify(messages)
+    })
+
+    let result = null
+    try {
+      result = await response.json()
+    } catch {
+      result = null
+    }
+
+    return { response, result }
+  }
 
   for (const chunk of chunks) {
     const messages = chunk.map(token => ({
@@ -171,28 +209,57 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
     }))
 
     try {
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Accept-Encoding': 'gzip, deflate'
-        },
-        body: JSON.stringify(messages)
-      })
+      const { response, result } = await postMessages(messages)
 
-      const result = await response.json()
-      
-      // Expo returns an array of results, one per message
-      if (Array.isArray(result.data)) {
+      // Common happy path: result.data is array
+      if (Array.isArray(result?.data)) {
         result.data.forEach((item, index) => {
-          if (item.status === 'ok') {
-            totalSent++
-          } else {
+          if (item?.status === 'ok') totalSent++
+          else {
             totalFailed++
             console.error(`Failed to send to token ${chunk[index]}:`, item)
           }
         })
+        continue
+      }
+
+      // Some responses return a single object in data
+      if (result?.data && typeof result.data === 'object') {
+        if (result.data.status === 'ok') totalSent += chunk.length
+        else totalFailed += chunk.length
+        continue
+      }
+
+      // If we got here, response is ambiguous/errored; retry token-by-token to salvage valids
+      console.error('Chunk push response not standard, retrying individually:', {
+        status: response?.status,
+        result,
+      })
+
+      for (const singleToken of chunk) {
+        const singleMessage = [{
+          to: singleToken,
+          sound: 'default',
+          title,
+          body,
+          data,
+          priority: 'high',
+          channelId: 'default'
+        }]
+
+        try {
+          const { result: singleResult } = await postMessages(singleMessage)
+          const singleData = Array.isArray(singleResult?.data) ? singleResult.data[0] : singleResult?.data
+          if (singleData?.status === 'ok') {
+            totalSent++
+          } else {
+            totalFailed++
+            console.error(`Failed to send to token ${singleToken}:`, singleData || singleResult)
+          }
+        } catch (singleError) {
+          totalFailed++
+          console.error(`Error sending to token ${singleToken}:`, singleError)
+        }
       }
     } catch (error) {
       console.error('Error sending push notifications:', error)
