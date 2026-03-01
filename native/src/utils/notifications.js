@@ -175,6 +175,8 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
 
   let totalSent = 0
   let totalFailed = invalidCount
+  const errorReasons = {}
+  const pushErrorSamples = []
 
   const postMessages = async (messages) => {
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -218,6 +220,11 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
           else {
             totalFailed++
             console.error(`Failed to send to token ${chunk[index]}:`, item)
+            const reason = item?.details?.error || item?.message || 'UnknownError'
+            errorReasons[reason] = (errorReasons[reason] || 0) + 1
+            if (pushErrorSamples.length < 5) {
+              pushErrorSamples.push({ token: chunk[index], reason, item })
+            }
           }
         })
         continue
@@ -226,7 +233,14 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
       // Some responses return a single object in data
       if (result?.data && typeof result.data === 'object') {
         if (result.data.status === 'ok') totalSent += chunk.length
-        else totalFailed += chunk.length
+        else {
+          totalFailed += chunk.length
+          const reason = result?.data?.details?.error || result?.data?.message || 'UnknownError'
+          errorReasons[reason] = (errorReasons[reason] || 0) + chunk.length
+          if (pushErrorSamples.length < 5) {
+            pushErrorSamples.push({ reason, item: result.data })
+          }
+        }
         continue
       }
 
@@ -255,15 +269,30 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
           } else {
             totalFailed++
             console.error(`Failed to send to token ${singleToken}:`, singleData || singleResult)
+            const reason = singleData?.details?.error || singleData?.message || 'UnknownError'
+            errorReasons[reason] = (errorReasons[reason] || 0) + 1
+            if (pushErrorSamples.length < 5) {
+              pushErrorSamples.push({ token: singleToken, reason, item: singleData || singleResult })
+            }
           }
         } catch (singleError) {
           totalFailed++
           console.error(`Error sending to token ${singleToken}:`, singleError)
+          const reason = singleError?.message || 'NetworkError'
+          errorReasons[reason] = (errorReasons[reason] || 0) + 1
+          if (pushErrorSamples.length < 5) {
+            pushErrorSamples.push({ token: singleToken, reason })
+          }
         }
       }
     } catch (error) {
       console.error('Error sending push notifications:', error)
       totalFailed += chunk.length
+      const reason = error?.message || 'NetworkError'
+      errorReasons[reason] = (errorReasons[reason] || 0) + chunk.length
+      if (pushErrorSamples.length < 5) {
+        pushErrorSamples.push({ reason })
+      }
     }
   }
 
@@ -271,6 +300,8 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
     success: totalSent > 0,
     sent: totalSent,
     failed: totalFailed,
-    total: tokens.length
+    total: tokens.length,
+    errorReasons,
+    pushErrorSamples,
   }
 }

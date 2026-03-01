@@ -2880,10 +2880,15 @@ function NotificationsForm() {
         )
 
         console.log(`✅ Push notifications sent: ${pushResult.sent} successful, ${pushResult.failed} failed`)
+        const reasonsText = pushResult?.errorReasons
+          ? Object.entries(pushResult.errorReasons)
+              .map(([reason, count]) => `${reason}: ${count}`)
+              .join('\n')
+          : ''
 
         Alert.alert(
           'הצלחה! 🔔',
-          `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}\n\nטוקנים: Firestore ${firestoreTokenCount}, Supabase ${supabaseTokenCount}, Expo ${expoFormatTokens.length}`,
+          `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}\n\nטוקנים: Firestore ${firestoreTokenCount}, Supabase ${supabaseTokenCount}, Expo ${expoFormatTokens.length}${reasonsText ? `\n\nסיבות כשל:\n${reasonsText}` : ''}`,
           [{ text: 'אישור', onPress: resetForm }]
         )
       } else {
