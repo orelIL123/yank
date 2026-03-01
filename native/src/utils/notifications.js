@@ -165,6 +165,11 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
     return { success: false, sent: 0, failed: invalidCount, total: tokens.length }
   }
 
+  const expoAccessToken =
+    process.env.EXPO_PUBLIC_EXPO_ACCESS_TOKEN ||
+    Constants?.expoConfig?.extra?.expoPushAccessToken ||
+    ''
+
   // Expo Push API accepts up to 100 tokens per request
   const CHUNK_SIZE = 100
   const chunks = []
@@ -179,13 +184,18 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
   const pushErrorSamples = []
 
   const postMessages = async (messages) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Accept-Encoding': 'gzip, deflate'
+    }
+    if (expoAccessToken) {
+      headers.Authorization = `Bearer ${expoAccessToken}`
+    }
+
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip, deflate'
-      },
+      headers,
       body: JSON.stringify(messages)
     })
 
@@ -301,6 +311,7 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
     sent: totalSent,
     failed: totalFailed,
     total: tokens.length,
+    usingExpoAccessToken: Boolean(expoAccessToken),
     errorReasons,
     pushErrorSamples,
   }

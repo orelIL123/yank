@@ -2885,10 +2885,14 @@ function NotificationsForm() {
               .map(([reason, count]) => `${reason}: ${count}`)
               .join('\n')
           : ''
+        const unauthorizedHint = pushResult?.errorReasons?.UNAUTHORIZED
+          ? '\n\nנדרש Expo Access Token או ביטול Push Security בפרויקט Expo.'
+          : ''
+        const authModeText = `\nמצב אימות Expo: ${pushResult?.usingExpoAccessToken ? 'Bearer Token' : 'ללא טוקן'}`
 
         Alert.alert(
           'הצלחה! 🔔',
-          `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}\n\nטוקנים: Firestore ${firestoreTokenCount}, Supabase ${supabaseTokenCount}, Expo ${expoFormatTokens.length}${reasonsText ? `\n\nסיבות כשל:\n${reasonsText}` : ''}`,
+          `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}\n\nטוקנים: Firestore ${firestoreTokenCount}, Supabase ${supabaseTokenCount}, Expo ${expoFormatTokens.length}${authModeText}${reasonsText ? `\n\nסיבות כשל:\n${reasonsText}` : ''}${unauthorizedHint}`,
           [{ text: 'אישור', onPress: resetForm }]
         )
       } else {
