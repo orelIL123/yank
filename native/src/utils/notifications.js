@@ -3,9 +3,6 @@ import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 
-// Emergency fallback token (user provided explicitly) in case env injection fails on OTA.
-const EXPO_PUSH_ACCESS_TOKEN_FALLBACK = 'VnrhB1PDnq76c5I9FRkW8iJacAceksPKuBCsRFdj'
-
 // Set notification handler
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -148,70 +145,19 @@ export async function clearAllNotifications() {
 export async function sendPushNotifications(tokens, title, body, data = {}) {
   if (!tokens || tokens.length === 0) {
     console.warn('No push tokens provided')
-    return { success: false, sent: 0, failed: 0, total: 0 }
+    return { success: false, sent: 0 }
   }
-
-  // Keep only valid Expo push token shapes and remove duplicates
-  const validTokens = Array.from(
-    new Set(
-      tokens
-        .filter((token) => typeof token === 'string')
-        .map((token) => token.trim())
-        .filter((token) => /^Expo(nent)?PushToken\[[^\]]+\]$/.test(token))
-    )
-  )
-
-  const invalidCount = tokens.length - validTokens.length
-
-  if (validTokens.length === 0) {
-    console.warn('No valid Expo push tokens after validation')
-    return { success: false, sent: 0, failed: invalidCount, total: tokens.length }
-  }
-
-  const expoAccessToken =
-    process.env.EXPO_PUBLIC_EXPO_ACCESS_TOKEN ||
-    Constants?.expoConfig?.extra?.expoPushAccessToken ||
-    EXPO_PUSH_ACCESS_TOKEN_FALLBACK ||
-    ''
 
   // Expo Push API accepts up to 100 tokens per request
   const CHUNK_SIZE = 100
   const chunks = []
   
-  for (let i = 0; i < validTokens.length; i += CHUNK_SIZE) {
-    chunks.push(validTokens.slice(i, i + CHUNK_SIZE))
+  for (let i = 0; i < tokens.length; i += CHUNK_SIZE) {
+    chunks.push(tokens.slice(i, i + CHUNK_SIZE))
   }
 
   let totalSent = 0
-  let totalFailed = invalidCount
-  const errorReasons = {}
-  const pushErrorSamples = []
-
-  const postMessages = async (messages) => {
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Accept-Encoding': 'gzip, deflate'
-    }
-    if (expoAccessToken) {
-      headers.Authorization = `Bearer ${expoAccessToken}`
-    }
-
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(messages)
-    })
-
-    let result = null
-    try {
-      result = await response.json()
-    } catch {
-      result = null
-    }
-
-    return { response, result }
-  }
+  let totalFailed = 0
 
   for (const chunk of chunks) {
     const messages = chunk.map(token => ({
@@ -225,88 +171,32 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
     }))
 
     try {
-      const { response, result } = await postMessages(messages)
-
-      // Common happy path: result.data is array
-      if (Array.isArray(result?.data)) {
-        result.data.forEach((item, index) => {
-          if (item?.status === 'ok') totalSent++
-          else {
-            totalFailed++
-            console.error(`Failed to send to token ${chunk[index]}:`, item)
-            const reason = item?.details?.error || item?.message || 'UnknownError'
-            errorReasons[reason] = (errorReasons[reason] || 0) + 1
-            if (pushErrorSamples.length < 5) {
-              pushErrorSamples.push({ token: chunk[index], reason, item })
-            }
-          }
-        })
-        continue
-      }
-
-      // Some responses return a single object in data
-      if (result?.data && typeof result.data === 'object') {
-        if (result.data.status === 'ok') totalSent += chunk.length
-        else {
-          totalFailed += chunk.length
-          const reason = result?.data?.details?.error || result?.data?.message || 'UnknownError'
-          errorReasons[reason] = (errorReasons[reason] || 0) + chunk.length
-          if (pushErrorSamples.length < 5) {
-            pushErrorSamples.push({ reason, item: result.data })
-          }
-        }
-        continue
-      }
-
-      // If we got here, response is ambiguous/errored; retry token-by-token to salvage valids
-      console.error('Chunk push response not standard, retrying individually:', {
-        status: response?.status,
-        result,
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip, deflate'
+        },
+        body: JSON.stringify(messages)
       })
 
-      for (const singleToken of chunk) {
-        const singleMessage = [{
-          to: singleToken,
-          sound: 'default',
-          title,
-          body,
-          data,
-          priority: 'high',
-          channelId: 'default'
-        }]
-
-        try {
-          const { result: singleResult } = await postMessages(singleMessage)
-          const singleData = Array.isArray(singleResult?.data) ? singleResult.data[0] : singleResult?.data
-          if (singleData?.status === 'ok') {
+      const result = await response.json()
+      
+      // Expo returns an array of results, one per message
+      if (Array.isArray(result.data)) {
+        result.data.forEach((item, index) => {
+          if (item.status === 'ok') {
             totalSent++
           } else {
             totalFailed++
-            console.error(`Failed to send to token ${singleToken}:`, singleData || singleResult)
-            const reason = singleData?.details?.error || singleData?.message || 'UnknownError'
-            errorReasons[reason] = (errorReasons[reason] || 0) + 1
-            if (pushErrorSamples.length < 5) {
-              pushErrorSamples.push({ token: singleToken, reason, item: singleData || singleResult })
-            }
+            console.error(`Failed to send to token ${chunk[index]}:`, item)
           }
-        } catch (singleError) {
-          totalFailed++
-          console.error(`Error sending to token ${singleToken}:`, singleError)
-          const reason = singleError?.message || 'NetworkError'
-          errorReasons[reason] = (errorReasons[reason] || 0) + 1
-          if (pushErrorSamples.length < 5) {
-            pushErrorSamples.push({ token: singleToken, reason })
-          }
-        }
+        })
       }
     } catch (error) {
       console.error('Error sending push notifications:', error)
       totalFailed += chunk.length
-      const reason = error?.message || 'NetworkError'
-      errorReasons[reason] = (errorReasons[reason] || 0) + chunk.length
-      if (pushErrorSamples.length < 5) {
-        pushErrorSamples.push({ reason })
-      }
     }
   }
 
@@ -314,9 +204,6 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
     success: totalSent > 0,
     sent: totalSent,
     failed: totalFailed,
-    total: tokens.length,
-    usingExpoAccessToken: Boolean(expoAccessToken),
-    errorReasons,
-    pushErrorSamples,
+    total: tokens.length
   }
 }
