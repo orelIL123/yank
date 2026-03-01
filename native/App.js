@@ -6,11 +6,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
 import * as Updates from 'expo-updates'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { arrayUnion, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { auth, db as firestoreDb } from './src/config/firebase'
 import { getRememberMe } from './src/utils/preferences'
 import supaDb from './src/services/database'
+import { refreshPushToken } from './src/services/pushTokenService'
 import HomeScreen from './src/HomeScreen'
 import DailyInsightScreen from './src/screens/DailyInsightScreen'
 import CoursesScreen from './src/screens/CoursesScreen'
@@ -59,7 +60,6 @@ import OrchotTzadikimScreen from './src/screens/OrchotTzadikimScreen'
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
 import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-google-fonts/cinzel-decorative'
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
-import { registerForPushNotificationsAsync } from './src/utils/notifications'
 import analytics from './src/services/analytics'
 import { LinearGradient } from 'expo-linear-gradient'
 
@@ -488,47 +488,13 @@ export default function App() {
               )
             })
           }
-          const token = await registerForPushNotificationsAsync()
-          if (token) {
-            console.log('📱 Push Token received:', token)
-            try {
-              await setDoc(
-                doc(firestoreDb, 'users', user.uid),
-                {
-                  email: user.email || null,
-                  expoPushTokens: arrayUnion(token),
-                  lastPushTokenAt: serverTimestamp(),
-                  updatedAt: serverTimestamp(),
-                },
-                { merge: true }
-              )
-              console.log('✅ Push token saved to Firestore users collection')
-            } catch (saveError) {
-              console.error('❌ Failed to save push token:', saveError)
+          try {
+            const result = await refreshPushToken(user, { sendTestPush: false })
+            if (!result?.ok) {
+              console.log('Push token refresh skipped:', result?.reason || 'unknown')
             }
-
-            // Best-effort mirror to Supabase users table for push fanout fallback.
-            try {
-              let existingTokens = []
-              try {
-                const supaUser = await supaDb.getDocument('users', user.uid)
-                if (Array.isArray(supaUser?.expoPushTokens)) {
-                  existingTokens = supaUser.expoPushTokens.filter(Boolean)
-                } else if (typeof supaUser?.expoPushToken === 'string' && supaUser.expoPushToken) {
-                  existingTokens = [supaUser.expoPushToken]
-                }
-              } catch (_) {}
-
-              const mergedTokens = Array.from(new Set([...existingTokens, token]))
-              await supaDb.updateDocument('users', user.uid, {
-                email: user.email || null,
-                expoPushTokens: mergedTokens,
-                lastPushTokenAt: new Date().toISOString(),
-              })
-              console.log('✅ Push token saved to Supabase users table')
-            } catch (supaSaveError) {
-              console.log('Could not mirror push token to Supabase:', supaSaveError?.message || supaSaveError)
-            }
+          } catch (refreshError) {
+            console.error('❌ Failed to refresh push token:', refreshError)
           }
         } catch (error) {
           console.error('❌ Error registering for push notifications:', error)

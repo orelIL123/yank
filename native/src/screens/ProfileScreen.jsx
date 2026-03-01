@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert, ActivityIndicator, Linking } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { signOut, deleteUser } from 'firebase/auth'
 import { auth, db as firestoreDb } from '../config/firebase'
 import { doc, deleteDoc } from 'firebase/firestore'
 import db from '../services/database'
+import { refreshPushToken } from '../services/pushTokenService'
+import { t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -14,25 +16,26 @@ const DEEP_BLUE = '#0b1b3a'
 export default function ProfileScreen({ navigation, user, userRole }) {
   const isAdmin = userRole === 'admin'
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isRefreshingPush, setIsRefreshingPush] = useState(false)
 
   const handleLogout = () => {
     Alert.alert(
-      'התנתקות',
-      'האם אתה בטוח שברצונך להתנתק?',
+      t('התנתקות'),
+      t('האם אתה בטוח שברצונך להתנתק?'),
       [
         {
-          text: 'ביטול',
+          text: t('ביטול'),
           style: 'cancel'
         },
         {
-          text: 'התנתק',
+          text: t('התנתק'),
           style: 'destructive',
           onPress: async () => {
             try {
               await signOut(auth)
             } catch (error) {
               console.error('Logout error:', error)
-              Alert.alert('שגיאה', 'אירעה שגיאה בהתנתקות')
+              Alert.alert(t('שגיאה'), t('אירעה שגיאה בהתנתקות'))
             }
           }
         }
@@ -42,15 +45,15 @@ export default function ProfileScreen({ navigation, user, userRole }) {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'מחיקת חשבון',
-      'האם אתה בטוח שברצונך למחוק את החשבון שלך? פעולה זו אינה הפיכה וכל הנתונים שלך יימחקו לצמיתות.',
+      t('מחיקת חשבון'),
+      t('האם אתה בטוח שברצונך למחוק את החשבון שלך? פעולה זו אינה הפיכה וכל הנתונים שלך יימחקו לצמיתות.'),
       [
         {
-          text: 'ביטול',
+          text: t('ביטול'),
           style: 'cancel'
         },
         {
-          text: 'מחק חשבון',
+          text: t('מחק חשבון'),
           style: 'destructive',
           onPress: async () => {
             if (!user) return
@@ -91,22 +94,64 @@ export default function ProfileScreen({ navigation, user, userRole }) {
               // Delete Firebase Auth account
               await deleteUser(user)
 
-              Alert.alert('החשבון נמחק', 'החשבון שלך נמחק בהצלחה')
+              Alert.alert(t('החשבון נמחק'), t('החשבון שלך נמחק בהצלחה'))
             } catch (error) {
               console.error('Delete account error:', error)
-              let errorMessage = 'אירעה שגיאה במחיקת החשבון'
+              let errorMessage = t('אירעה שגיאה במחיקת החשבון')
               
               if (error.code === 'auth/requires-recent-login') {
-                errorMessage = 'נדרש להתחבר מחדש כדי למחוק את החשבון. אנא התנתק והתחבר שוב.'
+                errorMessage = t('נדרש להתחבר מחדש כדי למחוק את החשבון. אנא התנתק והתחבר שוב.')
               }
               
-              Alert.alert('שגיאה', errorMessage)
+              Alert.alert(t('שגיאה'), errorMessage)
               setIsDeleting(false)
             }
           }
         }
       ]
     )
+  }
+
+  const handleRefreshPush = async () => {
+    if (!user) {
+      Alert.alert(t('נדרש התחברות'), t('יש להתחבר כדי לרענן התראות Push'))
+      return
+    }
+
+    try {
+      setIsRefreshingPush(true)
+      const result = await refreshPushToken(user, { sendTestPush: true })
+
+      if (!result?.ok) {
+        Alert.alert(
+          t('הרשאת התראות נדרשת'),
+          t('כדי לקבל התראות Push יש לאשר התראות בהגדרות המכשיר.'),
+          [
+            { text: t('ביטול'), style: 'cancel' },
+            {
+              text: t('פתח הגדרות'),
+              onPress: () => {
+                try { Linking.openSettings() } catch (_) {}
+              },
+            },
+          ]
+        )
+        return
+      }
+
+      const sentCount = Number(result?.testResult?.sent || 0)
+      Alert.alert(
+        t('הצלחה'),
+        sentCount > 0
+          ? t('טוקן ההתראות רוענן ונשלחה הודעת Push לבדיקה.')
+          : t('הטוקן רוענן. יתכן שהבדיקה לא נשלחה, נסה שוב בעוד דקה.'),
+      )
+    } catch (error) {
+      console.error('Push refresh error:', error)
+      Alert.alert(t('שגיאה'), t('לא הצלחנו לרענן התראות Push'))
+    } finally {
+      setIsRefreshingPush(false)
+    }
   }
 
   return (
@@ -121,7 +166,7 @@ export default function ProfileScreen({ navigation, user, userRole }) {
         >
           <Ionicons name="arrow-forward" size={28} color={DEEP_BLUE} />
         </Pressable>
-        <Text style={styles.headerTitle}>פרופיל</Text>
+        <Text style={styles.headerTitle}>{t('פרופיל')}</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -138,25 +183,25 @@ export default function ProfileScreen({ navigation, user, userRole }) {
           </View>
           {user ? (
             <>
-              <Text style={styles.userName}>{user?.displayName || 'משתמש'}</Text>
+              <Text style={styles.userName}>{user?.displayName || t('משתמש')}</Text>
               <Text style={styles.userEmail}>{user?.email}</Text>
               {isAdmin && (
                 <View style={styles.adminBadge}>
                   <Ionicons name="shield-checkmark" size={16} color={PRIMARY_BLUE} />
-                  <Text style={styles.adminBadgeText}>מנהל</Text>
+                  <Text style={styles.adminBadgeText}>{t('מנהל')}</Text>
                 </View>
               )}
             </>
           ) : (
             <>
-              <Text style={styles.userName}>אורח</Text>
-              <Text style={styles.userEmail}>אינך מחובר</Text>
+              <Text style={styles.userName}>{t('אורח')}</Text>
+              <Text style={styles.userEmail}>{t('אינך מחובר')}</Text>
               <Pressable
                 style={styles.loginPromptButton}
                 onPress={() => navigation?.navigate('Login')}
                 accessibilityRole="button"
               >
-                <Text style={styles.loginPromptText}>התחבר לחשבון</Text>
+                <Text style={styles.loginPromptText}>{t('התחבר לחשבון')}</Text>
               </Pressable>
             </>
           )}
@@ -164,7 +209,7 @@ export default function ProfileScreen({ navigation, user, userRole }) {
 
         {/* Profile Options */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>הגדרות חשבון</Text>
+          <Text style={styles.sectionTitle}>{t('הגדרות חשבון')}</Text>
 
           {user && (
             <Pressable 
@@ -176,8 +221,8 @@ export default function ProfileScreen({ navigation, user, userRole }) {
                 <View style={styles.optionRight}>
                   <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                   <View style={styles.optionText}>
-                    <Text style={styles.optionTitle}>פרטים אישיים</Text>
-                    <Text style={styles.optionDesc}>שם, אימייל ופרטי התקשרות</Text>
+                    <Text style={styles.optionTitle}>{t('פרטים אישיים')}</Text>
+                    <Text style={styles.optionDesc}>{t('שם, אימייל ופרטי התקשרות')}</Text>
                   </View>
                 </View>
                 <View style={styles.optionIcon}>
@@ -197,8 +242,8 @@ export default function ProfileScreen({ navigation, user, userRole }) {
                 <View style={styles.optionRight}>
                   <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                   <View style={styles.optionText}>
-                    <Text style={styles.optionTitle}>אבטחה וסיסמה</Text>
-                    <Text style={styles.optionDesc}>שינוי סיסמה והגדרות אבטחה</Text>
+                    <Text style={styles.optionTitle}>{t('אבטחה וסיסמה')}</Text>
+                    <Text style={styles.optionDesc}>{t('שינוי סיסמה והגדרות אבטחה')}</Text>
                   </View>
                 </View>
                 <View style={styles.optionIcon}>
@@ -217,8 +262,8 @@ export default function ProfileScreen({ navigation, user, userRole }) {
               <View style={styles.optionRight}>
                 <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                 <View style={styles.optionText}>
-                  <Text style={styles.optionTitle}>התראות</Text>
-                  <Text style={styles.optionDesc}>העדפות התראות ופוש</Text>
+                  <Text style={styles.optionTitle}>{t('התראות')}</Text>
+                  <Text style={styles.optionDesc}>{t('העדפות התראות ופוש')}</Text>
                 </View>
               </View>
               <View style={styles.optionIcon}>
@@ -226,13 +271,41 @@ export default function ProfileScreen({ navigation, user, userRole }) {
               </View>
             </View>
           </Pressable>
+
+          {user && (
+            <Pressable
+              style={styles.optionCard}
+              accessibilityRole="button"
+              onPress={handleRefreshPush}
+              disabled={isRefreshingPush}
+            >
+              <View style={styles.optionContent}>
+                <View style={styles.optionRight}>
+                  <Ionicons name="chevron-back" size={20} color="#9ca3af" />
+                  <View style={styles.optionText}>
+                    <Text style={styles.optionTitle}>{t('רענון ובדיקת Push')}</Text>
+                    <Text style={styles.optionDesc}>
+                      {isRefreshingPush ? t('מרענן טוקן ושולח בדיקה...') : t('רענון טוקן ושליחת התראת בדיקה')}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.optionIcon}>
+                  {isRefreshingPush ? (
+                    <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+                  ) : (
+                    <Ionicons name="notifications-circle-outline" size={22} color={PRIMARY_BLUE} />
+                  )}
+                </View>
+              </View>
+            </Pressable>
+          )}
         </View>
 
 
         {/* Admin Section - Only visible to admins */}
         {isAdmin && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🔐 ניהול</Text>
+            <Text style={styles.sectionTitle}>🔐 {t('ניהול')}</Text>
 
             <Pressable 
               style={styles.optionCard} 
@@ -243,8 +316,8 @@ export default function ProfileScreen({ navigation, user, userRole }) {
                 <View style={styles.optionRight}>
                   <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                   <View style={styles.optionText}>
-                    <Text style={styles.optionTitle}>עריכת כרטיסיות</Text>
-                    <Text style={styles.optionDesc}>ערוך כרטיסיות ראשיות, חדשות, קורסים והתראות</Text>
+                    <Text style={styles.optionTitle}>{t('עריכת כרטיסיות')}</Text>
+                    <Text style={styles.optionDesc}>{t('ערוך כרטיסיות ראשיות, חדשות, קורסים והתראות')}</Text>
                   </View>
                 </View>
                 <View style={[styles.optionIcon, { backgroundColor: 'rgba(212,175,55,0.2)' }]}>
@@ -262,8 +335,8 @@ export default function ProfileScreen({ navigation, user, userRole }) {
                 <View style={styles.optionRight}>
                   <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                   <View style={styles.optionText}>
-                    <Text style={styles.optionTitle}>פאנל אדמין</Text>
-                    <Text style={styles.optionDesc}>ניהול מלא של התוכן וההגדרות</Text>
+                    <Text style={styles.optionTitle}>{t('פאנל אדמין')}</Text>
+                    <Text style={styles.optionDesc}>{t('ניהול מלא של התוכן וההגדרות')}</Text>
                   </View>
                 </View>
                 <View style={[styles.optionIcon, { backgroundColor: 'rgba(212,175,55,0.2)' }]}>
@@ -276,7 +349,7 @@ export default function ProfileScreen({ navigation, user, userRole }) {
 
         {/* Additional Options */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>נוספים</Text>
+          <Text style={styles.sectionTitle}>{t('נוספים')}</Text>
 
           <Pressable 
             style={styles.optionCard} 
@@ -287,8 +360,8 @@ export default function ProfileScreen({ navigation, user, userRole }) {
               <View style={styles.optionRight}>
                 <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                 <View style={styles.optionText}>
-                  <Text style={styles.optionTitle}>עזרה ותמיכה</Text>
-                  <Text style={styles.optionDesc}>שאלות נפוצות וצור קשר</Text>
+                  <Text style={styles.optionTitle}>{t('עזרה ותמיכה')}</Text>
+                  <Text style={styles.optionDesc}>{t('שאלות נפוצות וצור קשר')}</Text>
                 </View>
               </View>
               <View style={styles.optionIcon}>
@@ -306,8 +379,8 @@ export default function ProfileScreen({ navigation, user, userRole }) {
               <View style={styles.optionRight}>
                 <Ionicons name="chevron-back" size={20} color="#9ca3af" />
                 <View style={styles.optionText}>
-                  <Text style={styles.optionTitle}>אודות</Text>
-                  <Text style={styles.optionDesc}>גרסה ותנאי שימוש</Text>
+                  <Text style={styles.optionTitle}>{t('אודות')}</Text>
+                  <Text style={styles.optionDesc}>{t('גרסה ותנאי שימוש')}</Text>
                 </View>
               </View>
               <View style={styles.optionIcon}>
@@ -328,7 +401,7 @@ export default function ProfileScreen({ navigation, user, userRole }) {
                 disabled={isDeleting}
               >
                 <Ionicons name="log-out-outline" size={22} color="#dc2626" />
-                <Text style={styles.logoutText}>התנתק</Text>
+                <Text style={styles.logoutText}>{t('התנתק')}</Text>
               </Pressable>
               
               <Pressable 
@@ -343,7 +416,7 @@ export default function ProfileScreen({ navigation, user, userRole }) {
                   <Ionicons name="trash-outline" size={22} color="#ffffff" />
                 )}
                 <Text style={styles.deleteButtonText}>
-                  {isDeleting ? 'מוחק...' : 'מחק חשבון'}
+                  {isDeleting ? t('מוחק...') : t('מחק חשבון')}
                 </Text>
               </Pressable>
             </>
@@ -354,7 +427,7 @@ export default function ProfileScreen({ navigation, user, userRole }) {
               onPress={() => navigation?.navigate('Login')}
             >
               <Ionicons name="log-in-outline" size={22} color={PRIMARY_BLUE} />
-              <Text style={styles.loginButtonText}>התחבר לחשבון</Text>
+              <Text style={styles.loginButtonText}>{t('התחבר לחשבון')}</Text>
             </Pressable>
           )}
         </View>
