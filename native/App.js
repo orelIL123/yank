@@ -491,6 +491,7 @@ export default function App() {
           const token = await registerForPushNotificationsAsync()
           if (token) {
             console.log('📱 Push Token received:', token)
+            // Save to Firestore - primary push token store
             try {
               await setDoc(
                 doc(firestoreDb, 'users', user.uid),
@@ -504,31 +505,10 @@ export default function App() {
               )
               console.log('✅ Push token saved to Firestore users collection')
             } catch (saveError) {
-              console.error('❌ Failed to save push token:', saveError)
+              console.error('❌ Failed to save push token to Firestore:', saveError)
             }
-
-            // Best-effort mirror to Supabase users table for push fanout fallback.
-            try {
-              let existingTokens = []
-              try {
-                const supaUser = await supaDb.getDocument('users', user.uid)
-                if (Array.isArray(supaUser?.expoPushTokens)) {
-                  existingTokens = supaUser.expoPushTokens.filter(Boolean)
-                } else if (typeof supaUser?.expoPushToken === 'string' && supaUser.expoPushToken) {
-                  existingTokens = [supaUser.expoPushToken]
-                }
-              } catch (_) {}
-
-              const mergedTokens = Array.from(new Set([...existingTokens, token]))
-              await supaDb.updateDocument('users', user.uid, {
-                email: user.email || null,
-                expoPushTokens: mergedTokens,
-                lastPushTokenAt: new Date().toISOString(),
-              })
-              console.log('✅ Push token saved to Supabase users table')
-            } catch (supaSaveError) {
-              console.log('Could not mirror push token to Supabase:', supaSaveError?.message || supaSaveError)
-            }
+          } else {
+            console.log('⚠️ No push token received (permissions denied or simulator)')
           }
         } catch (error) {
           console.error('❌ Error registering for push notifications:', error)

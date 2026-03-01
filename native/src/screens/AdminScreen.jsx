@@ -6,10 +6,10 @@ import { Ionicons } from '@expo/vector-icons'
 // DocumentPicker will be imported dynamically when needed
 
 import { auth, db as firestoreDb } from '../config/firebase'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, doc, setDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
 import db from '../services/database'
 import { pickImage, uploadImageToStorage, generateCardImagePath, generateNewsImagePath, pickPDF, uploadPDFToStorage, generatePrayerPDFPath, uploadFileToSupabaseStorage } from '../utils/storage'
-import { sendPushNotifications } from '../utils/notifications'
+import { sendPushNotifications, registerForPushNotificationsAsync } from '../utils/notifications'
 import { BUNDLED_PRAYERS } from '../data/bundledPrayers'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -2744,6 +2744,38 @@ function NotificationsForm() {
   const [isScheduled, setIsScheduled] = useState(false)
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
+  const [refreshingToken, setRefreshingToken] = useState(false)
+
+  const handleRefreshMyToken = async () => {
+    setRefreshingToken(true)
+    try {
+      const token = await registerForPushNotificationsAsync()
+      if (!token) {
+        Alert.alert('שגיאה', 'לא הצלחנו לקבל טוקן. ודא שהרשאות התראות מאושרות במכשיר.')
+        return
+      }
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        Alert.alert('שגיאה', 'לא מחובר.')
+        return
+      }
+      await setDoc(
+        doc(firestoreDb, 'users', currentUser.uid),
+        {
+          email: currentUser.email || null,
+          expoPushTokens: arrayUnion(token),
+          lastPushTokenAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      )
+      Alert.alert('✅ הצלחה', `הטוקן שלך עודכן בהצלחה!\n\n${token}`)
+    } catch (err) {
+      Alert.alert('שגיאה', err?.message || 'שגיאה בעדכון הטוקן')
+    } finally {
+      setRefreshingToken(false)
+    }
+  }
 
   const iconOptions = [
     { value: 'notifications', label: 'התראה כללית', icon: 'notifications' },
@@ -2823,15 +2855,20 @@ function NotificationsForm() {
       console.log('📱 Collecting push tokens from all users...')
       const usersSnapshot = await getDocs(collection(firestoreDb, 'users'))
       const pushTokens = []
+      let firestoreTokenCount = 0
+      let supabaseTokenCount = 0
 
       usersSnapshot.forEach((doc) => {
         const userData = doc.data()
         // Get all expo push tokens for this user
         if (userData.expoPushTokens && Array.isArray(userData.expoPushTokens)) {
-          pushTokens.push(...userData.expoPushTokens.filter(token => token && token.length > 0))
+          const valid = userData.expoPushTokens.filter(token => token && token.length > 0)
+          pushTokens.push(...valid)
+          firestoreTokenCount += valid.length
         }
         if (typeof userData.expoPushToken === 'string' && userData.expoPushToken.trim()) {
           pushTokens.push(userData.expoPushToken.trim())
+          firestoreTokenCount += 1
         }
       })
 
@@ -2840,10 +2877,13 @@ function NotificationsForm() {
         const supaUsers = await db.getCollection('users', { limit: 10000 })
         supaUsers.forEach((userData) => {
           if (Array.isArray(userData?.expoPushTokens)) {
-            pushTokens.push(...userData.expoPushTokens.filter(token => token && token.length > 0))
+            const valid = userData.expoPushTokens.filter(token => token && token.length > 0)
+            pushTokens.push(...valid)
+            supabaseTokenCount += valid.length
           }
           if (typeof userData?.expoPushToken === 'string' && userData.expoPushToken.trim()) {
             pushTokens.push(userData.expoPushToken.trim())
+            supabaseTokenCount += 1
           }
         })
       } catch (supaErr) {
@@ -2851,8 +2891,11 @@ function NotificationsForm() {
       }
 
       const uniquePushTokens = Array.from(new Set(pushTokens))
+      const expoFormatTokens = uniquePushTokens.filter(token =>
+        typeof token === 'string' && /^Expo(nent)?PushToken\[[^\]]+\]$/.test(token.trim())
+      )
 
-      console.log(`📱 Found ${uniquePushTokens.length} unique push tokens`)
+      console.log(`📱 Found tokens: Firestore=${firestoreTokenCount}, Supabase=${supabaseTokenCount}, Unique=${uniquePushTokens.length}, ExpoFormat=${expoFormatTokens.length}`)
 
       // Send push notifications to all users
       if (uniquePushTokens.length > 0) {
@@ -2869,17 +2912,26 @@ function NotificationsForm() {
         )
 
         console.log(`✅ Push notifications sent: ${pushResult.sent} successful, ${pushResult.failed} failed`)
+        const reasonsText = pushResult?.errorReasons
+          ? Object.entries(pushResult.errorReasons)
+              .map(([reason, count]) => `${reason}: ${count}`)
+              .join('\n')
+          : ''
+        const unauthorizedHint = pushResult?.errorReasons?.UNAUTHORIZED
+          ? '\n\nנדרש Expo Access Token או ביטול Push Security בפרויקט Expo.'
+          : ''
+        const authModeText = `\nמצב אימות Expo: ${pushResult?.usingExpoAccessToken ? 'Bearer Token' : 'ללא טוקן'}`
 
         Alert.alert(
           'הצלחה! 🔔',
-          `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}`,
+          `ההתראה נשלחה בהצלחה!\n\nנשלחו ${pushResult.sent} התראות push\n${pushResult.failed > 0 ? `${pushResult.failed} נכשלו` : 'כולן הצליחו'}\n\nטוקנים: Firestore ${firestoreTokenCount}, Supabase ${supabaseTokenCount}, Expo ${expoFormatTokens.length}${authModeText}${reasonsText ? `\n\nסיבות כשל:\n${reasonsText}` : ''}${unauthorizedHint}`,
           [{ text: 'אישור', onPress: resetForm }]
         )
       } else {
         // No push tokens found, but notification was saved
         Alert.alert(
           'התראה נשמרה ⚠️',
-          'ההתראה נשמרה בהצלחה, אבל לא נמצאו push tokens לשליחה.\nהמשתמשים יראו את ההתראה כשהם יפתחו את האפליקציה.',
+          `ההתראה נשמרה בהצלחה, אבל לא נמצאו push tokens לשליחה.\n\nטוקנים: Firestore ${firestoreTokenCount}, Supabase ${supabaseTokenCount}, Expo ${expoFormatTokens.length}\n\nהמשתמשים יראו את ההתראה כשהם יפתחו את האפליקציה.`,
           [{ text: 'אישור', onPress: resetForm }]
         )
       }
@@ -2894,6 +2946,19 @@ function NotificationsForm() {
   return (
     <View style={styles.formContainer}>
       <Text style={styles.formTitle}>🔔 שליחת התראה חדשה</Text>
+
+      {/* Refresh my push token button */}
+      <Pressable
+        style={[styles.submitButton, { backgroundColor: '#0f766e', marginBottom: 16 }]}
+        onPress={handleRefreshMyToken}
+        disabled={refreshingToken}
+      >
+        {refreshingToken
+          ? <ActivityIndicator color="#fff" size="small" />
+          : <Text style={styles.submitButtonText}>🔄 רענן טוקן Push שלי</Text>
+        }
+      </Pressable>
+
 
       <View style={styles.formGroup}>
         <Text style={styles.label}>כותרת ההתראה *</Text>
