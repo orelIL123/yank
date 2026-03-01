@@ -19,10 +19,12 @@ const ANALYTICS_EVENTS = 'analytics_events'
 const ANALYTICS_SESSIONS = 'analytics_sessions'
 const ANALYTICS_STATS = 'analytics_stats'
 const ANALYTICS_SCREEN_STATS = 'analytics_screen_stats'
+const SCREEN_VIEW_DEDUP_MS = 15000
 
 // Session tracking
 let currentSessionId = null
 let sessionStartTime = null
+let lastScreenView = { name: null, at: 0 }
 
 /**
  * Generate a simple unique ID
@@ -104,6 +106,12 @@ export const endSession = async () => {
  */
 export const trackScreenView = async (screenName, userId = null) => {
   try {
+    const now = Date.now()
+    if (lastScreenView.name === screenName && now - lastScreenView.at < SCREEN_VIEW_DEDUP_MS) {
+      return
+    }
+    lastScreenView = { name: screenName, at: now }
+
     const deviceId = await getDeviceId()
 
     // Log the event
@@ -297,22 +305,9 @@ export const trackError = async (errorMessage, errorStack, screen = null, userId
  * Update active users count (called periodically while app is open)
  */
 export const heartbeat = async (userId = null) => {
-  try {
-    if (!currentSessionId) return
-    const deviceId = await getDeviceId()
-
-    const activeRef = doc(firestoreDb, ANALYTICS_STATS, 'active_users')
-    await setDoc(activeRef, {
-      [`devices.${deviceId}`]: {
-        lastSeen: serverTimestamp(),
-        userId,
-        sessionId: currentSessionId,
-      },
-      lastUpdated: serverTimestamp(),
-    }, { merge: true })
-  } catch (e) {
-    // silent
-  }
+  // Disabled to avoid single-document hotspot at scale.
+  // Keep function for backwards compatibility with current callers.
+  return
 }
 
 export default {

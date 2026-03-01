@@ -23,7 +23,7 @@ const BLACK = '#000000'
 // Default cards fallback (HomeScreen)
 // Keep this list aligned with the HomeScreen grid + key navigation.
 const DEFAULT_CARDS = [
-  { key: 'music', title: 'ניגונים', desc: 'ניגונים ושירים', icon: 'musical-notes-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
+  { key: 'music', title: 'ניגונים', desc: 'ניגונים של מורנו הרב', icon: 'musical-notes-outline', image: require('../assets/photos/cards/hinuka.png'), gradient: ['#4facfe', '#00f2fe'], size: 'small' },
   { key: 'learningLibrary', title: 'שיעורים', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#667eea', '#764ba2'], size: 'small' },
   { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/prayer.png'), gradient: ['#f093fb', '#f5576c'], size: 'small' },
   { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/books.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
@@ -304,9 +304,10 @@ export default function HomeScreen({ navigation, userRole }) {
                 ? data.title.trim()
                 : (defaultCard?.title || '')
 
-              const desc = (typeof data?.desc === 'string' && data.desc.trim())
+              const rawDesc = (typeof data?.desc === 'string' && data.desc.trim())
                 ? data.desc.trim()
                 : (defaultCard?.desc || '')
+              const desc = key === 'music' ? 'ניגונים של מורנו הרב' : rawDesc
 
               const icon = (typeof data?.icon === 'string' && data.icon.trim())
                 ? data.icon.trim()

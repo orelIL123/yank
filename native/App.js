@@ -6,7 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
 import * as Updates from 'expo-updates'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { arrayUnion, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { auth, db as firestoreDb } from './src/config/firebase'
 import { getRememberMe } from './src/utils/preferences'
@@ -491,8 +491,21 @@ export default function App() {
           const token = await registerForPushNotificationsAsync()
           if (token) {
             console.log('📱 Push Token received:', token)
-            // NOTE: We no longer persist push tokens to Firestore (Firebase is auth-only).
-            // If we need server-side pushes later, we'll store tokens in Supabase via Edge Function.
+            try {
+              await setDoc(
+                doc(firestoreDb, 'users', user.uid),
+                {
+                  email: user.email || null,
+                  expoPushTokens: arrayUnion(token),
+                  lastPushTokenAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              )
+              console.log('✅ Push token saved to Firestore users collection')
+            } catch (saveError) {
+              console.error('❌ Failed to save push token:', saveError)
+            }
           }
         } catch (error) {
           console.error('❌ Error registering for push notifications:', error)
