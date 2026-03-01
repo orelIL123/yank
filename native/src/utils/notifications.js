@@ -3,6 +3,9 @@ import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 
+// Emergency fallback token (user provided explicitly) in case env injection fails on OTA.
+const EXPO_PUSH_ACCESS_TOKEN_FALLBACK = 'VnrhB1PDnq76c5I9FRkW8iJacAceksPKuBCsRFdj'
+
 // Set notification handler
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -168,6 +171,7 @@ export async function sendPushNotifications(tokens, title, body, data = {}) {
   const expoAccessToken =
     process.env.EXPO_PUBLIC_EXPO_ACCESS_TOKEN ||
     Constants?.expoConfig?.extra?.expoPushAccessToken ||
+    EXPO_PUSH_ACCESS_TOKEN_FALLBACK ||
     ''
 
   // Expo Push API accepts up to 100 tokens per request
