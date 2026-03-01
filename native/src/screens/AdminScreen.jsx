@@ -25,7 +25,7 @@ const TABS = [
   { id: 'news', label: 'חדשות', icon: 'newspaper-outline' },
   { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline' },
   { id: 'dailyLearning', label: 'לימוד יומי', icon: 'school-outline' },
-  { id: 'shortLessons', label: 'שיעורים קצרים', icon: 'videocam-outline' },
+  { id: 'shortLessons', label: 'קטעי לימוד קצרים', icon: 'videocam-outline' },
   { id: 'longLessons', label: 'שיעורים ארוכים', icon: 'film-outline' },
   { id: 'hoduLaHashem', label: 'הודו לה\'', icon: 'sparkles-outline' },
   { id: 'music', label: 'ניגונים', icon: 'musical-notes-outline' },
@@ -33,10 +33,17 @@ const TABS = [
   { id: 'parasha', label: 'פרשת השבוע', icon: 'book-outline' },
 ]
 
+const PRAYER_LANGUAGES = [
+  { code: 'he', label: 'עברית' },
+  { code: 'en', label: 'English' },
+  { code: 'fr', label: 'Français' },
+  { code: 'ru', label: 'Русский' },
+]
+
 export default function AdminScreen({ navigation, route, userRole, userPermissions }) {
 
   // Guard: allow access only to admins (role is computed in App.js without Firestore)
-  if (userRole !== 'admin') {
+  if (userRole !== 'admin' && userRole !== 'superadmin') {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f7f7f7']} style={StyleSheet.absoluteFill} />
@@ -2823,15 +2830,35 @@ function NotificationsForm() {
         if (userData.expoPushTokens && Array.isArray(userData.expoPushTokens)) {
           pushTokens.push(...userData.expoPushTokens.filter(token => token && token.length > 0))
         }
+        if (typeof userData.expoPushToken === 'string' && userData.expoPushToken.trim()) {
+          pushTokens.push(userData.expoPushToken.trim())
+        }
       })
 
-      console.log(`📱 Found ${pushTokens.length} push tokens`)
+      // Fallback: also pull tokens from Supabase users table (for users not synced to Firestore)
+      try {
+        const supaUsers = await db.getCollection('users', { limit: 10000 })
+        supaUsers.forEach((userData) => {
+          if (Array.isArray(userData?.expoPushTokens)) {
+            pushTokens.push(...userData.expoPushTokens.filter(token => token && token.length > 0))
+          }
+          if (typeof userData?.expoPushToken === 'string' && userData.expoPushToken.trim()) {
+            pushTokens.push(userData.expoPushToken.trim())
+          }
+        })
+      } catch (supaErr) {
+        console.log('Could not collect push tokens from Supabase:', supaErr?.message || supaErr)
+      }
+
+      const uniquePushTokens = Array.from(new Set(pushTokens))
+
+      console.log(`📱 Found ${uniquePushTokens.length} unique push tokens`)
 
       // Send push notifications to all users
-      if (pushTokens.length > 0) {
+      if (uniquePushTokens.length > 0) {
         console.log('📤 Sending push notifications...')
         const pushResult = await sendPushNotifications(
-          pushTokens,
+          uniquePushTokens,
           form.title,
           form.message,
           {
@@ -3201,7 +3228,7 @@ function ShortLessonsForm() {
       </Pressable>
 
       <Text style={styles.note}>
-        💡 השיעור הקצר יישמר ב-Firestore ויופיע באפליקציה במסך "שיעורים קצרים".
+        💡 השיעור הקצר יישמר ב-Firestore ויופיע באפליקציה במסך "קטעי לימוד קצרים".
       </Text>
     </View>
   )
@@ -3442,6 +3469,7 @@ function BundledPrayersForm() {
   const [prayers, setPrayers] = useState({})
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(null) // Track which prayer is uploading
+  const [selectedLanguage, setSelectedLanguage] = useState('he')
 
   useEffect(() => {
     loadBundledPrayers()
@@ -3482,14 +3510,20 @@ function BundledPrayersForm() {
 
       // Update app_config with new images
       const currentPrayer = prayers[prayerId] || {}
-      const existingImages = currentPrayer.images || []
-      const updatedImages = [...existingImages, ...uploadedUrls]
+      const existingByLanguage = currentPrayer.imagesByLanguage || {}
+      const existingLanguageImages = existingByLanguage[selectedLanguage] || []
+      const updatedLanguageImages = [...existingLanguageImages, ...uploadedUrls]
+      const updatedByLanguage = {
+        ...existingByLanguage,
+        [selectedLanguage]: updatedLanguageImages,
+      }
 
       const updatedPrayers = {
         ...prayers,
         [prayerId]: {
           ...currentPrayer,
-          images: updatedImages,
+          imagesByLanguage: updatedByLanguage,
+          ...(selectedLanguage === 'he' ? { images: updatedLanguageImages } : {}),
         }
       }
 
@@ -3519,14 +3553,20 @@ function BundledPrayersForm() {
           onPress: async () => {
             try {
               const currentPrayer = prayers[prayerId] || {}
-              const updatedImages = [...(currentPrayer.images || [])]
-              updatedImages.splice(imageIndex, 1)
+              const existingByLanguage = currentPrayer.imagesByLanguage || {}
+              const updatedLanguageImages = [...(existingByLanguage[selectedLanguage] || [])]
+              updatedLanguageImages.splice(imageIndex, 1)
+              const updatedByLanguage = {
+                ...existingByLanguage,
+                [selectedLanguage]: updatedLanguageImages,
+              }
 
               const updatedPrayers = {
                 ...prayers,
                 [prayerId]: {
                   ...currentPrayer,
-                  images: updatedImages,
+                  imagesByLanguage: updatedByLanguage,
+                  ...(selectedLanguage === 'he' ? { images: updatedLanguageImages } : {}),
                 }
               }
 
@@ -3559,12 +3599,36 @@ function BundledPrayersForm() {
     <View style={styles.formContainer}>
       <Text style={styles.formTitle}>📿 ניהול תפילות מובנות</Text>
       <Text style={styles.formSubtitle}>
-        העלה תמונות לכל תפילה. ניתן להעלות מספר תמונות לכל תפילה.
+        העלה תמונות לכל תפילה לפי שפה. ניתן להעלות מספר תמונות לכל תפילה.
       </Text>
+      <View style={styles.bundledLangRow}>
+        {PRAYER_LANGUAGES.map((lang) => (
+          <Pressable
+            key={lang.code}
+            style={[
+              styles.bundledLangChip,
+              selectedLanguage === lang.code && styles.bundledLangChipActive
+            ]}
+            onPress={() => setSelectedLanguage(lang.code)}
+          >
+            <Text
+              style={[
+                styles.bundledLangChipText,
+                selectedLanguage === lang.code && styles.bundledLangChipTextActive
+              ]}
+            >
+              {lang.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       {BUNDLED_PRAYERS.map((prayer) => {
         const prayerData = prayers[prayer.id] || {}
-        const images = prayerData.images || []
+        const imagesByLanguage = prayerData.imagesByLanguage || {}
+        const images =
+          imagesByLanguage[selectedLanguage] ||
+          (selectedLanguage === 'he' ? prayerData.images || [] : [])
         const isUploading = uploading === prayer.id
 
         return (
@@ -3607,7 +3671,11 @@ function BundledPrayersForm() {
                 <Ionicons name="images-outline" size={24} color={PRIMARY_BLUE} />
               )}
               <Text style={styles.uploadButtonText}>
-                {isUploading ? 'מעלה...' : images.length > 0 ? 'הוסף תמונות נוספות' : 'העלה תמונות'}
+                {isUploading
+                  ? 'מעלה...'
+                  : images.length > 0
+                    ? 'הוסף תמונות נוספות'
+                    : 'העלה תמונות'}
               </Text>
             </Pressable>
           </View>
@@ -4334,6 +4402,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_500Medium',
     color: PRIMARY_BLUE,
+  },
+  bundledLangRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  bundledLangChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.25)',
+  },
+  bundledLangChipActive: {
+    backgroundColor: PRIMARY_BLUE,
+    borderColor: PRIMARY_BLUE,
+  },
+  bundledLangChipText: {
+    color: PRIMARY_BLUE,
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  bundledLangChipTextActive: {
+    color: '#fff',
   },
   imagesGrid: {
     flexDirection: 'row',

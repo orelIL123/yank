@@ -506,6 +506,29 @@ export default function App() {
             } catch (saveError) {
               console.error('❌ Failed to save push token:', saveError)
             }
+
+            // Best-effort mirror to Supabase users table for push fanout fallback.
+            try {
+              let existingTokens = []
+              try {
+                const supaUser = await supaDb.getDocument('users', user.uid)
+                if (Array.isArray(supaUser?.expoPushTokens)) {
+                  existingTokens = supaUser.expoPushTokens.filter(Boolean)
+                } else if (typeof supaUser?.expoPushToken === 'string' && supaUser.expoPushToken) {
+                  existingTokens = [supaUser.expoPushToken]
+                }
+              } catch (_) {}
+
+              const mergedTokens = Array.from(new Set([...existingTokens, token]))
+              await supaDb.updateDocument('users', user.uid, {
+                email: user.email || null,
+                expoPushTokens: mergedTokens,
+                lastPushTokenAt: new Date().toISOString(),
+              })
+              console.log('✅ Push token saved to Supabase users table')
+            } catch (supaSaveError) {
+              console.log('Could not mirror push token to Supabase:', supaSaveError?.message || supaSaveError)
+            }
           }
         } catch (error) {
           console.error('❌ Error registering for push notifications:', error)
