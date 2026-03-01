@@ -13,35 +13,87 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import db from '../services/database';
+import { collection, doc, getDocs, updateDoc } from 'firebase/firestore'
+import { db as firestoreDb } from '../config/firebase'
 import { PERMISSIONS, PERMISSION_LABELS } from '../utils/permissions';
+
+const PAGE_SIZE = 100;
 
 export default function ManagePermissionsScreen({ navigation }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [usingFirestoreFallback, setUsingFirestoreFallback] = useState(false);
 
   useEffect(() => {
-    loadUsers();
+    loadUsers(true);
   }, []);
 
-  const loadUsers = async () => {
+  const loadUsers = async (reset = false) => {
     try {
-      setLoading(true);
-      const usersSnapshot = await getDocs(collection(db, 'users'));
-      const usersData = usersSnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(user => user.role !== 'admin'); // Don't show admins
+      if (reset) {
+        setLoading(true);
+      } else {
+        if (!hasMore || loadingMore) return;
+        setLoadingMore(true);
+      }
 
-      setUsers(usersData);
+      let usersData = []
+      const nextOffset = reset ? 0 : offset;
+
+      if (usingFirestoreFallback) {
+        // Firestore fallback: load all once, no pagination
+        const usersSnapshot = await getDocs(collection(firestoreDb, 'users'))
+        usersData = usersSnapshot.docs
+          .map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }))
+          .filter(user => user.role !== 'admin')
+        setHasMore(false)
+      } else {
+        try {
+          usersData = (await db.getCollectionPaginated('users', {
+            orderBy: { field: 'createdAt', direction: 'desc' },
+            limit: PAGE_SIZE,
+            startAfter: nextOffset,
+          }))
+            .filter(user => user.role !== 'admin') // Don't show admins
+        } catch (error) {
+          if (error?.code === 'PGRST205') {
+            const usersSnapshot = await getDocs(collection(firestoreDb, 'users'))
+            usersData = usersSnapshot.docs
+              .map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }))
+              .filter(user => user.role !== 'admin')
+            setUsingFirestoreFallback(true)
+            setHasMore(false)
+          } else {
+            throw error
+          }
+        }
+      }
+
+      if (reset) {
+        setUsers(usersData);
+      } else {
+        setUsers(prev => [...prev, ...usersData]);
+      }
+
+      setOffset(nextOffset + usersData.length);
+      if (!usingFirestoreFallback) {
+        setHasMore(usersData.length === PAGE_SIZE);
+      }
     } catch (error) {
       console.error('Error loading users:', error);
+      // Prevent endless onEndReached retries on repeated failure
+      setHasMore(false);
       Alert.alert('שגיאה', 'לא הצלחנו לטעון את רשימת המשתמשים');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -61,10 +113,26 @@ export default function ManagePermissionsScreen({ navigation }) {
         ? currentPermissions.filter(p => p !== permission)
         : [...currentPermissions, permission];
 
-      // Update in Firestore
-      await updateDoc(doc(db, 'users', selectedUser.id), {
-        permissions: newPermissions
-      });
+      // Update in Supabase users table, fallback to Firestore when users table is missing
+      try {
+        if (usingFirestoreFallback) {
+          await updateDoc(doc(firestoreDb, 'users', selectedUser.id), {
+            permissions: newPermissions
+          });
+        } else {
+          await db.updateDocument('users', selectedUser.id, { permissions: newPermissions });
+        }
+      } catch (error) {
+        if (error?.code === 'PGRST205') {
+          await updateDoc(doc(firestoreDb, 'users', selectedUser.id), {
+            permissions: newPermissions
+          });
+          setUsingFirestoreFallback(true)
+          setHasMore(false)
+        } else {
+          throw error
+        }
+      }
 
       // Update local state
       setSelectedUser({ ...selectedUser, permissions: newPermissions });
@@ -187,6 +255,15 @@ export default function ManagePermissionsScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderUserItem}
         contentContainerStyle={styles.listContainer}
+        onEndReached={() => loadUsers(false)}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={styles.loadingMoreContainer}>
+              <ActivityIndicator size="small" color="#FFD700" />
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={64} color="#666" />
@@ -225,10 +302,10 @@ export default function ManagePermissionsScreen({ navigation }) {
                 {renderPermissionItem(PERMISSIONS.MUSIC, PERMISSION_LABELS[PERMISSIONS.MUSIC])}
                 {renderPermissionItem(PERMISSIONS.BOOKS, PERMISSION_LABELS[PERMISSIONS.BOOKS])}
                 {renderPermissionItem(PERMISSIONS.LEARNING, PERMISSION_LABELS[PERMISSIONS.LEARNING])}
+                {renderPermissionItem(PERMISSIONS.HODU_LAHASHEM, PERMISSION_LABELS[PERMISSIONS.HODU_LAHASHEM])}
                 {renderPermissionItem(PERMISSIONS.NEWS, PERMISSION_LABELS[PERMISSIONS.NEWS])}
                 {renderPermissionItem(PERMISSIONS.DAILY_LEARNING, PERMISSION_LABELS[PERMISSIONS.DAILY_LEARNING])}
                 {renderPermissionItem(PERMISSIONS.NEWSLETTERS, PERMISSION_LABELS[PERMISSIONS.NEWSLETTERS])}
-                {renderPermissionItem(PERMISSIONS.TZADIKIM, PERMISSION_LABELS[PERMISSIONS.TZADIKIM])}
                 {renderPermissionItem(PERMISSIONS.NOTIFICATIONS, PERMISSION_LABELS[PERMISSIONS.NOTIFICATIONS])}
               </View>
             </ScrollView>
@@ -288,6 +365,9 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingHorizontal: 20,
     paddingBottom: 20,
+  },
+  loadingMoreContainer: {
+    paddingVertical: 12,
   },
   userCard: {
     flexDirection: 'row-reverse',

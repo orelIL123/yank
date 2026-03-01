@@ -7,7 +7,9 @@ import { Video } from 'expo-av'
 import YoutubePlayer from 'react-native-youtube-iframe'
 
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import db from '../services/database'
+import { canManageNews } from '../utils/permissions'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const VIDEO_ASPECT = 16 / 9
@@ -33,7 +35,7 @@ const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
-export default function NewsArticleScreen({ navigation, route, userRole }) {
+export default function NewsArticleScreen({ navigation, route, userRole, userPermissions }) {
   const articleId = route?.params?.articleId
 
   const [article, setArticle] = useState(null)
@@ -41,7 +43,7 @@ export default function NewsArticleScreen({ navigation, route, userRole }) {
   const [youtubeModalVisible, setYoutubeModalVisible] = useState(false)
   const [youtubeModalId, setYoutubeModalId] = useState(null)
 
-  const canManage = userRole === 'admin'
+  const canManage = canManageNews(userRole, userPermissions)
 
   const formatDate = (date) => {
     if (!date) return ''
@@ -131,7 +133,7 @@ export default function NewsArticleScreen({ navigation, route, userRole }) {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title="כתבה"
+          title={t('כתבה')}
           subtitle={undefined}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
@@ -148,7 +150,7 @@ export default function NewsArticleScreen({ navigation, route, userRole }) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
-        <AppHeader title="כתבה" showBackButton={true} onBackPress={() => navigation.goBack()} />
+        <AppHeader title={t('כתבה')} showBackButton={true} onBackPress={() => navigation.goBack()} />
         <View style={styles.emptyContainer}>
           <Ionicons name="newspaper-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.25 }} />
           <Text style={styles.emptyTitle}>הכתבה לא נמצאה</Text>
@@ -161,7 +163,7 @@ export default function NewsArticleScreen({ navigation, route, userRole }) {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title="מהנעשה בבית המדרש"
+        title={t('מהנעשה בבית המדרש')}
         subtitle={headerSubtitle}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
@@ -504,6 +506,4 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
 })
-
-
 

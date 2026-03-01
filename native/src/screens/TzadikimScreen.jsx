@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import db from '../services/database';
+import { isAdmin as isAdminRole } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a';
 const BG = '#FFFFFF';
@@ -83,7 +84,7 @@ const TzadikCard = ({ item, navigation }) => {
 };
 
 export default function TzadikimScreen({ navigation, userRole }) {
-  const isAdmin = userRole === 'admin';
+  const isAdmin = isAdminRole(userRole);
   const [tzadikim, setTzadikim] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -403,4 +404,3 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
-

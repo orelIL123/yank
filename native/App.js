@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { StatusBar } from 'expo-status-bar'
-import { View, ActivityIndicator, Image, Animated, Alert } from 'react-native'
+import { View, ActivityIndicator, Image, Animated, Alert, Modal, Pressable, Text, StyleSheet, Linking, Platform } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
 import * as Updates from 'expo-updates'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { auth } from './src/config/firebase'
+import { auth, db as firestoreDb } from './src/config/firebase'
 import { getRememberMe } from './src/utils/preferences'
 import supaDb from './src/services/database'
 import HomeScreen from './src/HomeScreen'
@@ -60,8 +61,14 @@ import { CinzelDecorative_400Regular, CinzelDecorative_700Bold } from '@expo-goo
 import { Heebo_400Regular, Heebo_500Medium, Heebo_600SemiBold, Heebo_700Bold } from '@expo-google-fonts/heebo'
 import { registerForPushNotificationsAsync } from './src/utils/notifications'
 import analytics from './src/services/analytics'
+import { LinearGradient } from 'expo-linear-gradient'
 
 const Stack = createNativeStackNavigator()
+const RATE_PROMPT_STATE_KEY = 'rate_prompt_state_v1'
+const MIN_LAUNCHES_BEFORE_FIRST_PROMPT = 4
+const REMIND_AFTER_DAYS = 14
+const APPLE_APP_ID = ''
+const ANDROID_PACKAGE = 'com.hayanuka.app'
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(false)
@@ -69,6 +76,8 @@ export default function App() {
   const [userRole, setUserRole] = useState(null)
   const [userPermissions, setUserPermissions] = useState([])
   const [authLoading, setAuthLoading] = useState(true)
+  const [showRatePrompt, setShowRatePrompt] = useState(false)
+  const [selectedRating, setSelectedRating] = useState(0)
   const fadeAnim = useRef(new Animated.Value(1)).current
   const navigationRef = useRef(null)
 
@@ -173,14 +182,53 @@ export default function App() {
               (Array.isArray(adminEmails) && currentUser.email && adminEmails.includes(currentUser.email))
 
             const role = isAdmin ? 'admin' : 'user'
+            let permissions = []
+
+            // Load granular permissions from Supabase users table (primary source).
+            // Fallback to Firestore users/{uid} for backward compatibility.
+            if (!isAdmin) {
+              try {
+                let userData = null
+
+                try {
+                  userData = await supaDb.getDocument('users', currentUser.uid)
+                } catch (_) {
+                  userData = null
+                }
+
+                if (!userData && currentUser.email) {
+                  const byEmail = await supaDb.getCollection('users', {
+                    where: [['email', '==', currentUser.email]],
+                    limit: 1,
+                  })
+                  userData = byEmail?.[0] || null
+                }
+
+                if (Array.isArray(userData?.permissions)) {
+                  permissions = userData.permissions
+                }
+              } catch (permError) {
+                console.log('Could not load user permissions from Supabase:', permError?.message || permError)
+                try {
+                  const userDoc = await getDoc(doc(firestoreDb, 'users', currentUser.uid))
+                  const userData = userDoc.exists() ? userDoc.data() : null
+                  if (Array.isArray(userData?.permissions)) {
+                    permissions = userData.permissions
+                  }
+                } catch (legacyError) {
+                  console.log('Could not load user permissions from Firestore:', legacyError?.message || legacyError)
+                }
+              }
+            }
+
             console.log('✅ Setting userRole:', role, 'isAdmin:', isAdmin)
             if (mounted) setUserRole(role)
-            if (mounted) setUserPermissions([]) // optional: keep empty for now
+            if (mounted) setUserPermissions(permissions)
 
             try {
               await AsyncStorage.setItem(
                 `user_role_cache_${currentUser.uid}`,
-                JSON.stringify({ role, permissions: [] })
+                JSON.stringify({ role, permissions })
               )
             } catch {}
           } catch (error) {
@@ -319,15 +367,104 @@ export default function App() {
     analytics.trackAppInstall()
   }, [])
 
-  // Analytics heartbeat - keeps active user count accurate
+  // Occasionally prompt users to rate the app
   useEffect(() => {
-    if (!user) return
-    // Send heartbeat every 2 minutes while app is open
-    const interval = setInterval(() => {
-      analytics.heartbeat(user.uid)
-    }, 120000)
-    return () => clearInterval(interval)
-  }, [user])
+    let mounted = true
+    let timer = null
+
+    const maybeShowRatePrompt = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(RATE_PROMPT_STATE_KEY)
+        const current = raw ? JSON.parse(raw) : {}
+        const launchCount = Number(current.launchCount || 0) + 1
+        const now = Date.now()
+        const remindAfterMs = REMIND_AFTER_DAYS * 24 * 60 * 60 * 1000
+        const alreadyRated = Boolean(current.ratedAt)
+        const recentlyPrompted = current.lastPromptAt && now - Number(current.lastPromptAt) < remindAfterMs
+
+        const next = {
+          ...current,
+          launchCount,
+        }
+        await AsyncStorage.setItem(RATE_PROMPT_STATE_KEY, JSON.stringify(next))
+
+        if (alreadyRated || launchCount < MIN_LAUNCHES_BEFORE_FIRST_PROMPT || recentlyPrompted) {
+          return
+        }
+
+        timer = setTimeout(() => {
+          if (mounted) {
+            setSelectedRating(0)
+            setShowRatePrompt(true)
+          }
+        }, 3500)
+      } catch (error) {
+        console.log('Rate prompt check failed:', error)
+      }
+    }
+
+    if (!authLoading) {
+      maybeShowRatePrompt()
+    }
+
+    return () => {
+      mounted = false
+      if (timer) clearTimeout(timer)
+    }
+  }, [authLoading])
+
+  const markRatePromptEvent = async (patch = {}) => {
+    try {
+      const raw = await AsyncStorage.getItem(RATE_PROMPT_STATE_KEY)
+      const current = raw ? JSON.parse(raw) : {}
+      const next = {
+        ...current,
+        ...patch,
+        lastPromptAt: Date.now(),
+      }
+      await AsyncStorage.setItem(RATE_PROMPT_STATE_KEY, JSON.stringify(next))
+    } catch (error) {
+      console.log('Failed updating rate prompt state:', error)
+    }
+  }
+
+  const openStoreRating = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        const marketUrl = `market://details?id=${ANDROID_PACKAGE}`
+        const webUrl = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`
+        const canOpenMarket = await Linking.canOpenURL(marketUrl)
+        await Linking.openURL(canOpenMarket ? marketUrl : webUrl)
+        return
+      }
+
+      if (Platform.OS === 'ios' && APPLE_APP_ID) {
+        await Linking.openURL(`itms-apps://itunes.apple.com/app/viewContentsUserReviews/id${APPLE_APP_ID}?action=write-review`)
+        return
+      }
+
+      await Linking.openURL('https://apps.apple.com/us/search?term=%D7%94%D7%99%D7%A0%D7%95%D7%A7%D7%90')
+    } catch (error) {
+      console.log('Failed opening store link:', error)
+      Alert.alert('שגיאה', 'לא הצלחנו לפתוח את החנות כרגע')
+    }
+  }
+
+  const handleRateDismiss = async () => {
+    setShowRatePrompt(false)
+    setSelectedRating(0)
+    await markRatePromptEvent({ dismissedAt: Date.now() })
+  }
+
+  const handleRatePress = async (rating) => {
+    setSelectedRating(rating)
+    setShowRatePrompt(false)
+    await markRatePromptEvent({
+      ratedAt: Date.now(),
+      rating,
+    })
+    await openStoreRating()
+  }
 
   // Push notifications setup
   useEffect(() => {
@@ -533,7 +670,7 @@ export default function App() {
           </Stack.Screen>
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           <Stack.Screen name="Notifications">
-            {(props) => <NotificationsScreen {...props} userRole={userRole} />}
+            {(props) => <NotificationsScreen {...props} userRole={userRole} userPermissions={userPermissions} />}
           </Stack.Screen>
           <Stack.Screen name="PersonalDetails">
             {(props) => <PersonalDetailsScreen {...props} user={user} />}
@@ -582,6 +719,115 @@ export default function App() {
           />
         </Animated.View>
       )}
+      <Modal
+        visible={showRatePrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={handleRateDismiss}
+      >
+        <View style={styles.rateOverlay}>
+          <LinearGradient
+            colors={['#15305B', '#102447', '#0B1B35']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.rateCard}
+          >
+            <Text style={styles.rateTitle}>דרגו אותנו</Text>
+            <Text style={styles.rateSubtitle}>נשמח לדעת מה חשבתם על האפליקציה</Text>
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Pressable
+                  key={star}
+                  onPress={() => handleRatePress(star)}
+                  style={styles.starButton}
+                >
+                  <Text style={[styles.starText, selectedRating >= star && styles.starTextSelected]}>★</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.rateHint}>לחיצה על כוכב תפתח את עמוד הדירוג בחנות</Text>
+            <Pressable onPress={handleRateDismiss} style={styles.laterButton}>
+              <Text style={styles.laterButtonText}>אולי בפעם אחרת</Text>
+            </Pressable>
+          </LinearGradient>
+        </View>
+      </Modal>
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  rateOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+  },
+  rateCard: {
+    width: '100%',
+    maxWidth: 390,
+    borderRadius: 24,
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  rateTitle: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontFamily: 'Heebo_700Bold',
+    textAlign: 'center',
+  },
+  rateSubtitle: {
+    marginTop: 10,
+    color: '#D8E6FF',
+    fontSize: 16,
+    fontFamily: 'Heebo_500Medium',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  starsRow: {
+    marginTop: 18,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  starText: {
+    fontSize: 42,
+    color: '#B3C8EA',
+  },
+  starTextSelected: {
+    color: '#FFD166',
+  },
+  rateHint: {
+    marginTop: 8,
+    color: '#A9C2E8',
+    fontSize: 13,
+    fontFamily: 'Heebo_400Regular',
+    textAlign: 'center',
+  },
+  laterButton: {
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  laterButtonText: {
+    color: '#E6EFFF',
+    fontSize: 15,
+    fontFamily: 'Heebo_600SemiBold',
+  },
+})

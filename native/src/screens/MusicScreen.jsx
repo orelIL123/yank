@@ -10,6 +10,7 @@ import {
   Image,
   Dimensions,
   Linking,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +20,7 @@ import { db } from '../services/database';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
 import { t } from '../utils/i18n';
+import { canManageMusic } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -33,7 +35,7 @@ function openSocialLink(url) {
   });
 }
 
-export default function MusicScreen({ navigation }) {
+export default function MusicScreen({ navigation, userRole, userPermissions }) {
   const [songs, setSongs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sound, setSound] = useState(null);
@@ -41,7 +43,13 @@ export default function MusicScreen({ navigation }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackStatus, setPlaybackStatus] = useState(null);
   const [youtubeId, setYoutubeId] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const canManage = canManageMusic(userRole, userPermissions);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSongs = songs.filter(song => 
+    song.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    song.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   useEffect(() => {
     loadSongs();
@@ -62,13 +70,6 @@ export default function MusicScreen({ navigation }) {
       }
     };
     setupAudio();
-
-    // Simple admin detection (adjust if you pass userRole into this screen)
-    // Here we assume admin מגיע דרך פרופס navigation (route params) או גלובלית בעתיד
-    const role = navigation?.getParent?.()?.getState?.()?.routes?.[0]?.params?.userRole;
-    if (role === 'admin') {
-      setIsAdmin(true);
-    }
 
     // Cleanup on unmount
     return () => {
@@ -215,30 +216,30 @@ export default function MusicScreen({ navigation }) {
   }, []);
 
   const handleRandomSong = useCallback(() => {
-    if (songs.length === 0) {
-      Alert.alert('אין ניגונים', 'אין ניגונים זמינים כרגע');
+    if (filteredSongs.length === 0) {
+      Alert.alert('אין ניגונים', 'לא נמצאו ניגונים תואמים לחיפוש');
       return;
     }
 
     // Choose a random song
-    const randomIndex = Math.floor(Math.random() * songs.length);
-    const randomSong = songs[randomIndex];
+    const randomIndex = Math.floor(Math.random() * filteredSongs.length);
+    const randomSong = filteredSongs[randomIndex];
     
     console.log('Playing random song:', randomSong.title);
     handlePlaySong(randomSong);
-  }, [songs, handlePlaySong]);
+  }, [filteredSongs, handlePlaySong]);
 
   return (
     <View style={styles.container}>
       <AppHeader
         title={t('ניגונים')}
-        subtitle="ניגוני הגאון הינוקא"
+        subtitle={t('ניגוני הגאון הינוקא')}
         onBackPress={() => navigation.goBack()}
         showBackButton={false}
         leftIcon="shuffle"
         onLeftIconPress={handleRandomSong}
-        rightIcon={isAdmin ? 'add' : undefined}
-        onRightIconPress={isAdmin ? () => navigation?.navigate('Admin') : undefined}
+        rightIcon={canManage ? 'add' : undefined}
+        onRightIconPress={canManage ? () => navigation?.navigate('Admin') : undefined}
       />
 
       {/* Back Button */}
@@ -269,6 +270,24 @@ export default function MusicScreen({ navigation }) {
             </View>
           ) : (
             <>
+              {/* Search Bar */}
+              <View style={styles.searchContainer}>
+                <View style={styles.searchBar}>
+                  <Ionicons name="search" size={20} color={PRIMARY_BLUE} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="חפש ניגון..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    textAlign="right"
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Ionicons name="close-circle" size={20} color="#9ca3af" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
 
               {/* YouTube Player Area */}
               {youtubeId && playingSongId && (
@@ -309,7 +328,7 @@ export default function MusicScreen({ navigation }) {
               )}
 
               {/* Random Song Button */}
-              {songs.length > 0 && (
+              {filteredSongs.length > 0 && (
                 <TouchableOpacity
                   style={styles.randomButton}
                   onPress={handleRandomSong}
@@ -327,7 +346,7 @@ export default function MusicScreen({ navigation }) {
                 </TouchableOpacity>
               )}
 
-              {songs.map((song, index) => (
+              {filteredSongs.map((song, index) => (
                 <TouchableOpacity
                   key={song.id}
                   style={[
@@ -486,6 +505,32 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+  },
+  searchContainer: {
+    marginBottom: 20,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    marginHorizontal: 8,
+    fontSize: 16,
+    fontFamily: 'Heebo_400Regular',
+    color: DEEP_BLUE,
+    height: '100%',
   },
   socialSection: {
     marginBottom: 24,

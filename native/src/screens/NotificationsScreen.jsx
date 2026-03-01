@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -17,48 +17,75 @@ import { Ionicons } from '@expo/vector-icons'
 import { auth } from '../config/firebase'
 import db from '../services/database'
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import NotificationModal from '../components/NotificationModal'
 import { setBadgeCount } from '../utils/notifications'
+import { canManageNotifications } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 const GOLD = '#FFD700'
+const PAGE_SIZE = 30
 
-export default function NotificationsScreen({ navigation, userRole }) {
+export default function NotificationsScreen({ navigation, userRole, userPermissions }) {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
   const [notificationModalVisible, setNotificationModalVisible] = useState(false)
   const [selectedNotification, setSelectedNotification] = useState(null)
-  const isAdmin = userRole === 'admin'
+  const isAdmin = canManageNotifications(userRole, userPermissions)
 
   useEffect(() => {
-    loadNotifications()
+    loadNotifications(true)
     // Clear app icon badge when user opens notifications screen
     setBadgeCount(0).catch(() => {})
   }, [])
 
-  const loadNotifications = async () => {
+  const loadNotifications = async (reset = false) => {
     try {
-      const notificationsData = await db.getCollection('notifications', {
+      if (reset) {
+        setLoading(true)
+      } else {
+        if (!hasMore || loadingMore) return
+        setLoadingMore(true)
+      }
+
+      const nextOffset = reset ? 0 : offset
+      const notificationsData = await db.getCollectionPaginated('notifications', {
         where: [['isActive', '==', true]],
-        orderBy: { field: 'createdAt', direction: 'desc' }
+        orderBy: { field: 'createdAt', direction: 'desc' },
+        limit: PAGE_SIZE,
+        startAfter: nextOffset
       })
-      setNotifications(notificationsData)
+
+      if (reset) {
+        setNotifications(notificationsData)
+      } else {
+        setNotifications(prev => [...prev, ...notificationsData])
+      }
+
+      setOffset(nextOffset + notificationsData.length)
+      setHasMore(notificationsData.length === PAGE_SIZE)
     } catch (error) {
       console.error('Error loading notifications:', error)
       Alert.alert('שגיאה', 'לא ניתן לטעון את ההתראות')
     } finally {
       setLoading(false)
       setRefreshing(false)
+      setLoadingMore(false)
     }
   }
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = () => {
+    setOffset(0)
+    setHasMore(true)
     setRefreshing(true)
-    loadNotifications()
-  }, [])
+    loadNotifications(true)
+  }
 
   const markAsRead = async (notificationId) => {
     try {
@@ -199,7 +226,7 @@ export default function NotificationsScreen({ navigation, userRole }) {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f7f7f7']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title="התראות"
+          title={t('התראות')}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
         />
@@ -215,7 +242,7 @@ export default function NotificationsScreen({ navigation, userRole }) {
       <LinearGradient colors={[BG, '#f7f7f7']} style={StyleSheet.absoluteFill} />
       
       <AppHeader
-        title="התראות"
+        title={t('התראות')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
@@ -232,6 +259,15 @@ export default function NotificationsScreen({ navigation, userRole }) {
           renderItem={renderNotification}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onEndReached={() => loadNotifications(false)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 12 }}>
+                <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+              </View>
+            ) : null
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -360,4 +396,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 })
-

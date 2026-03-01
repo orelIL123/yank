@@ -13,6 +13,7 @@ import { auth } from './config/firebase'
 import db from './services/database'
 import cache from './utils/cache'
 import { setBadgeCount } from './utils/notifications'
+import { t } from './utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -42,6 +43,8 @@ const IMAGES = [
 
 export default function HomeScreen({ navigation, userRole }) {
   const isAdmin = userRole === 'admin'
+  const defaultQuote = t('ציטוט יומי - הרב הינוקא')
+  const defaultQuoteAuthor = t('הרב הינוקא')
 
   // Debug: Log when HomeScreen mounts/unmounts
   React.useEffect(() => {
@@ -103,8 +106,8 @@ export default function HomeScreen({ navigation, userRole }) {
       { scale: glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.12] }) },
     ],
   }
-  const [quote, setQuote] = useState('ציטוט יומי - הרב הינוקא')
-  const [quoteAuthor, setQuoteAuthor] = useState('הרב הינוקא')
+  const [quote, setQuote] = useState(defaultQuote)
+  const [quoteAuthor, setQuoteAuthor] = useState(defaultQuoteAuthor)
   const [quoteImage, setQuoteImage] = useState(null)
   const [quoteLoading, setQuoteLoading] = useState(true)
   const [showQuoteEditModal, setShowQuoteEditModal] = useState(false)
@@ -152,8 +155,8 @@ export default function HomeScreen({ navigation, userRole }) {
         console.log('🔵 Featured topic type:', config?.featured_topic_type)
         
         if (config) {
-          setQuote(config.daily_quote || 'ציטוט יומי - הרב הינוקא')
-          setQuoteAuthor(config.quote_author || 'הרב הינוקא')
+          setQuote(config.daily_quote || defaultQuote)
+          setQuoteAuthor(config.quote_author || defaultQuoteAuthor)
           setQuoteImage(config.quote_image || null)
           setFeaturedConfig(config)
           console.log('🟢 HomeScreen: Featured config set!')
@@ -229,19 +232,21 @@ export default function HomeScreen({ navigation, userRole }) {
   const handlePickQuoteImage = async () => {
     try {
       const { pickImage } = await import('./utils/storage')
-      const image = await pickImage()
+      const image = await pickImage({
+        allowsEditing: false,
+      })
       if (image) {
         setQuoteImage(image.uri)
       }
     } catch (error) {
       console.error('Error picking image:', error)
-      Alert.alert('שגיאה', 'לא ניתן לבחור תמונה')
+      Alert.alert(t('שגיאה'), t('לא ניתן לבחור תמונה'))
     }
   }
 
   const handleSaveQuote = async () => {
     if (!editingQuote.trim()) {
-      Alert.alert('שגיאה', 'יש להזין ציטוט')
+      Alert.alert(t('שגיאה'), t('יש להזין ציטוט'))
       return
     }
 
@@ -264,20 +269,20 @@ export default function HomeScreen({ navigation, userRole }) {
       
       await db.updateAppConfig({
         daily_quote: editingQuote.trim(),
-        quote_author: editingAuthor.trim() || 'הרב הינוקא',
+        quote_author: editingAuthor.trim() || defaultQuoteAuthor,
         quote_image: finalImageUrl || null
       })
       setQuote(editingQuote.trim())
-      setQuoteAuthor(editingAuthor.trim() || 'הרב הינוקא')
+      setQuoteAuthor(editingAuthor.trim() || defaultQuoteAuthor)
       setQuoteImage(finalImageUrl)
       setShowQuoteEditModal(false)
-      Alert.alert('הצלחה', 'הציטוט עודכן בהצלחה')
+      Alert.alert(t('הצלחה'), t('הציטוט עודכן בהצלחה'))
       // Clear cache to force reload
       cache.delete('homeCards')
       cache.delete('homeSongs')
     } catch (error) {
       console.error('Error saving quote:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את הציטוט')
+      Alert.alert(t('שגיאה'), t('לא ניתן לשמור את הציטוט'))
     } finally {
       setSavingQuote(false)
     }
@@ -628,7 +633,7 @@ export default function HomeScreen({ navigation, userRole }) {
       return
     }
     console.warn('⚠️ Unknown card key:', key)
-    Alert.alert('בקרוב', 'המסך הזה עדיין בפיתוח')
+    Alert.alert(t('בקרוב'), t('המסך הזה עדיין בפיתוח'))
   }, [navigation])
 
   const handleNotificationPress = React.useCallback(() => {
@@ -637,15 +642,15 @@ export default function HomeScreen({ navigation, userRole }) {
 
   const openSocialLink = React.useCallback((url) => {
     Linking.openURL(url).catch(() => {
-      Alert.alert('שגיאה', 'לא ניתן לפתוח את הקישור')
+      Alert.alert(t('שגיאה'), t('לא ניתן לפתוח את הקישור'))
     })
   }, [])
 
   return (
     <View style={styles.screen}>
       <AppHeader
-        title="הינוקא"
-        subtitle="הודו לה׳ כי טוב"
+        title={t('הינוקא')}
+        subtitle={t('הודו לה׳ כי טוב')}
         showBackButton={false}
         rightIcon="menu"
         onRightIconPress={() => setMenuVisible(true)}
@@ -725,9 +730,9 @@ export default function HomeScreen({ navigation, userRole }) {
                 onPress={() => navigation?.navigate('PidyonNefesh')}
                 accessibilityRole="button"
               >
-                <Text style={styles.sectionLinkTextCompact}>עוד →</Text>
+                <Text style={styles.sectionLinkTextCompact}>{t('עוד')} →</Text>
               </Pressable>
-              <Text style={styles.sectionTitleCompact}>שמות לברכה (פדיון נפש)</Text>
+              <Text style={styles.sectionTitleCompact}>{t('שמות לברכה (פדיון נפש)')}</Text>
             </View>
 
             {pidyonLoading ? (
@@ -759,7 +764,7 @@ export default function HomeScreen({ navigation, userRole }) {
                         </Text>
                         {pidyon.motherName && (
                           <Text style={styles.pidyonMotherNameInline} numberOfLines={1}>
-                            בן/בת {pidyon.motherName}
+                            {t('בן/בת')} {pidyon.motherName}
                           </Text>
                         )}
                       </View>
@@ -769,7 +774,7 @@ export default function HomeScreen({ navigation, userRole }) {
               </View>
             ) : (
               <View style={styles.pidyonEmptyContainerCompact}>
-                <Text style={styles.pidyonEmptyTextCompact}>עדיין אין שמות להצגה</Text>
+                <Text style={styles.pidyonEmptyTextCompact}>{t('עדיין אין שמות להצגה')}</Text>
               </View>
             )}
           </View>
@@ -789,7 +794,7 @@ export default function HomeScreen({ navigation, userRole }) {
                   }}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={`${item.title} - ${item.desc}`}
+                  accessibilityLabel={`${t(item.title)} - ${t(item.desc)}`}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   {(() => {
@@ -831,8 +836,13 @@ export default function HomeScreen({ navigation, userRole }) {
                         color={item.gradient?.[0] || PRIMARY_BLUE}
                       />
                     </View>
-                    <Text style={styles.flatCardTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.flatCardDesc} numberOfLines={2}>{item.desc}</Text>
+                    <Text
+                      style={[styles.flatCardTitle, item.key === 'yeshiva' && styles.flatCardTitleSmall]}
+                      numberOfLines={2}
+                    >
+                      {t(item.title)}
+                    </Text>
+                    <Text style={styles.flatCardDesc} numberOfLines={2}>{t(item.desc)}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -846,7 +856,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 style={styles.featuredButton}
                 onPress={() => navigation?.navigate('Tools')}
                 accessibilityRole="button"
-                accessibilityLabel="כלי עזר - זמנים, פרשה וגימטריה"
+                accessibilityLabel={t('כלי עזר - זמנים, פרשה וגימטריה')}
               >
                 <LinearGradient
                   colors={['#7c3aed', '#8b5cf6', '#a78bfa']}
@@ -859,8 +869,8 @@ export default function HomeScreen({ navigation, userRole }) {
                       <Ionicons name="construct" size={36} color="#fff" />
                     </View>
                     <View style={styles.featuredText}>
-                      <Text style={styles.featuredTitle}>כלי עזר</Text>
-                      <Text style={styles.featuredSubtitle}>זמנים, פרשה וגימטריה</Text>
+                      <Text style={styles.featuredTitle}>{t('כלי עזר')}</Text>
+                      <Text style={styles.featuredSubtitle}>{t('זמנים, פרשה וגימטריה')}</Text>
                     </View>
                   </View>
                 </LinearGradient>
@@ -871,7 +881,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 style={styles.featuredButton}
                 onPress={() => navigation?.navigate('Newsletters')}
                 accessibilityRole="button"
-                accessibilityLabel="משולחן שלמה - העלון השבועי"
+                accessibilityLabel={t('משולחן שלמה - העלון השבועי')}
               >
                 <LinearGradient
                   colors={['#0ea5e9', '#06b6d4', '#0891b2']}
@@ -884,8 +894,8 @@ export default function HomeScreen({ navigation, userRole }) {
                       <Ionicons name="newspaper" size={36} color="#fff" />
                     </View>
                     <View style={styles.featuredText}>
-                      <Text style={styles.featuredTitle}>משולחן שלמה</Text>
-                      <Text style={styles.featuredSubtitle}>העלון השבועי</Text>
+                      <Text style={styles.featuredTitle}>{t('משולחן שלמה')}</Text>
+                      <Text style={styles.featuredSubtitle}>{t('העלון השבועי')}</Text>
                     </View>
                   </View>
                 </LinearGradient>
@@ -901,7 +911,7 @@ export default function HomeScreen({ navigation, userRole }) {
                   <Ionicons name="create-outline" size={18} color={PRIMARY_BLUE} />
                 </Pressable>
               )}
-              <Text style={styles.sectionTitle}>ציטוט יומי</Text>
+              <Text style={styles.sectionTitle}>{t('ציטוט יומי')}</Text>
             </View>
             {quoteLoading ? (
               <View style={styles.quoteCard}>
@@ -912,7 +922,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 <View style={styles.quoteContent}>
                   <View style={styles.quoteTextContainer}>
                     <Text style={styles.quoteText}>"{quote}"</Text>
-                    {quoteAuthor && quoteAuthor !== 'הרב הינוקא' && (
+                    {quoteAuthor && quoteAuthor !== defaultQuoteAuthor && (
                       <Text style={styles.quoteAuthor}>— {quoteAuthor}</Text>
                     )}
                   </View>
@@ -939,7 +949,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 <View style={styles.quoteFooter}>
                   <Pressable onPress={onShareQuote} style={styles.shareBtn} accessibilityRole="button">
                     <Ionicons name="share-social-outline" size={16} color="#ffffff" />
-                    <Text style={styles.shareBtnText}>שיתוף</Text>
+                    <Text style={styles.shareBtnText}>{t('שיתוף')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -948,7 +958,7 @@ export default function HomeScreen({ navigation, userRole }) {
 
           {/* Social Media Links (under quote) */}
           <View style={styles.socialSection}>
-            <Text style={styles.socialSectionTitle}>עקבו אחרינו</Text>
+            <Text style={styles.socialSectionTitle}>{t('עקבו אחרינו')}</Text>
             <View style={styles.socialRow}>
               <Pressable
                 style={styles.socialButton}
@@ -998,7 +1008,7 @@ export default function HomeScreen({ navigation, userRole }) {
               style={styles.takePartButton}
               onPress={() => Linking.openURL('https://hayanuka.com/contact/')}
               accessibilityRole="button"
-              accessibilityLabel="קח חלק"
+              accessibilityLabel={t('קח חלק')}
             >
               <LinearGradient
                 colors={[PRIMARY_BLUE, '#1e40af']}
@@ -1007,7 +1017,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 style={styles.takePartGradient}
               >
                 <Ionicons name="heart" size={20} color="#fff" />
-                <Text style={styles.takePartText}>קח חלק</Text>
+                <Text style={styles.takePartText}>{t('קח חלק')}</Text>
               </LinearGradient>
             </Pressable>
           </View>
@@ -1023,10 +1033,10 @@ export default function HomeScreen({ navigation, userRole }) {
                 Linking.openURL(`https://wa.me/972523985505?text=${message}`);
               }}
               accessibilityRole="button"
-              accessibilityLabel="פנה למפתח האפליקציה"
+              accessibilityLabel={t('פנה למפתח האפליקציה')}
             >
               <Text style={styles.appCreatorText}>
-                האפליקציה נבנתה ע״י אוראל אהרון
+                {t('האפליקציה נבנתה ע״י אוראל אהרון')}
               </Text>
             </Pressable>
           </View>
@@ -1044,7 +1054,7 @@ export default function HomeScreen({ navigation, userRole }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>עריכת ציטוט יומי</Text>
+              <Text style={styles.modalTitle}>{t('עריכת ציטוט יומי')}</Text>
               <Pressable onPress={() => setShowQuoteEditModal(false)}>
                 <Ionicons name="close" size={24} color={DEEP_BLUE} />
               </Pressable>
@@ -1052,12 +1062,12 @@ export default function HomeScreen({ navigation, userRole }) {
 
             <View style={styles.modalBody}>
               <View style={styles.formGroup}>
-                <Text style={styles.label}>ציטוט *</Text>
+                <Text style={styles.label}>{t('ציטוט')} *</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={editingQuote}
                   onChangeText={setEditingQuote}
-                  placeholder="הזן ציטוט..."
+                  placeholder={t('הזן ציטוט...')}
                   multiline
                   numberOfLines={4}
                   textAlign="right"
@@ -1065,25 +1075,25 @@ export default function HomeScreen({ navigation, userRole }) {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.label}>מחבר (אופציונלי)</Text>
+                <Text style={styles.label}>{t('מחבר (אופציונלי)')}</Text>
                 <TextInput
                   style={styles.input}
                   value={editingAuthor}
                   onChangeText={setEditingAuthor}
-                  placeholder="הרב הינוקא"
+                  placeholder={t('הרב הינוקא')}
                   textAlign="right"
                 />
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.label}>תמונה (אופציונלי)</Text>
+                <Text style={styles.label}>{t('תמונה (אופציונלי)')}</Text>
                 <View style={styles.imagePickerContainer}>
                   {quoteImage ? (
                     <View style={styles.imagePreviewContainer}>
                       <Image
                         source={{ uri: quoteImage }}
                         style={styles.imagePreview}
-                        resizeMode="cover"
+                        resizeMode="contain"
                       />
                       <Pressable
                         style={styles.removeImageButton}
@@ -1098,7 +1108,7 @@ export default function HomeScreen({ navigation, userRole }) {
                       onPress={handlePickQuoteImage}
                     >
                       <Ionicons name="image-outline" size={24} color={PRIMARY_BLUE} />
-                      <Text style={styles.imagePickerText}>בחר תמונה</Text>
+                      <Text style={styles.imagePickerText}>{t('בחר תמונה')}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -1110,7 +1120,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 style={[styles.modalButton, styles.modalButtonCancel]}
                 onPress={() => setShowQuoteEditModal(false)}
               >
-                <Text style={styles.modalButtonTextCancel}>ביטול</Text>
+                <Text style={styles.modalButtonTextCancel}>{t('ביטול')}</Text>
               </Pressable>
               <Pressable
                 style={[styles.modalButton, styles.modalButtonSave, savingQuote && styles.modalButtonDisabled]}
@@ -1120,7 +1130,7 @@ export default function HomeScreen({ navigation, userRole }) {
                 {savingQuote ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.modalButtonTextSave}>שמור</Text>
+                  <Text style={styles.modalButtonTextSave}>{t('שמור')}</Text>
                 )}
               </Pressable>
             </View>
@@ -1148,7 +1158,7 @@ export default function HomeScreen({ navigation, userRole }) {
               color={activeTab === 'home' ? PRIMARY_BLUE : '#9CA3AF'} 
             />
           </View>
-          <Text style={[styles.navLabel, activeTab === 'home' && styles.navLabelActive]}>בית</Text>
+          <Text style={[styles.navLabel, activeTab === 'home' && styles.navLabelActive]}>{t('בית')}</Text>
         </Pressable>
 
         <Pressable
@@ -1167,7 +1177,7 @@ export default function HomeScreen({ navigation, userRole }) {
               color={activeTab === 'lessons' ? PRIMARY_BLUE : '#9CA3AF'} 
             />
           </View>
-          <Text style={[styles.navLabel, activeTab === 'lessons' && styles.navLabelActive]}>שיעורים</Text>
+          <Text style={[styles.navLabel, activeTab === 'lessons' && styles.navLabelActive]}>{t('שיעורים')}</Text>
         </Pressable>
 
         {/* CENTER - Music (Featured Button) */}
@@ -1208,7 +1218,7 @@ export default function HomeScreen({ navigation, userRole }) {
               <Ionicons name="musical-notes" size={28} color="#fff" />
             </LinearGradient>
           </View>
-          <Text style={styles.centerNavLabel} pointerEvents="none">ניגונים</Text>
+          <Text style={styles.centerNavLabel} pointerEvents="none">{t('ניגונים')}</Text>
         </Pressable>
 
         <Pressable
@@ -1227,7 +1237,7 @@ export default function HomeScreen({ navigation, userRole }) {
               color={activeTab === 'news' ? PRIMARY_BLUE : '#9CA3AF'} 
             />
           </View>
-          <Text style={[styles.navLabel, activeTab === 'news' && styles.navLabelActive]}>תיעודים</Text>
+          <Text style={[styles.navLabel, activeTab === 'news' && styles.navLabelActive]}>{t('תיעודים')}</Text>
         </Pressable>
 
         <Pressable
@@ -1246,7 +1256,7 @@ export default function HomeScreen({ navigation, userRole }) {
               color={activeTab === 'profile' ? PRIMARY_BLUE : '#9CA3AF'} 
             />
           </View>
-          <Text style={[styles.navLabel, activeTab === 'profile' && styles.navLabelActive]}>פרופיל</Text>
+          <Text style={[styles.navLabel, activeTab === 'profile' && styles.navLabelActive]}>{t('פרופיל')}</Text>
         </Pressable>
       </View>
     </View>
@@ -1453,6 +1463,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     lineHeight: 20,
   },
+  flatCardTitleSmall: {
+    fontSize: 13.5,
+    lineHeight: 18,
+  },
   flatCardDesc: {
     color: '#6b7280',
     fontSize: 11,
@@ -1574,10 +1588,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     fontFamily: 'Poppins_500Medium',
     letterSpacing: 0.2,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   quoteFooter: {
-    marginTop: 10,
+    marginTop: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1587,7 +1601,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Poppins_500Medium',
     textAlign: 'right',
-    marginBottom: 12,
+    marginBottom: 4,
     fontStyle: 'italic',
   },
   quoteContent: {
@@ -1598,16 +1612,15 @@ const styles = StyleSheet.create({
   },
   quoteImageContainer: {
     alignSelf: 'center',
-    width: '100%',
-    maxHeight: 320,
+    width: '82%',
+    maxWidth: 320,
     borderRadius: 14,
     overflow: 'hidden',
-    marginTop: 10,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    marginTop: 4,
+    backgroundColor: 'transparent',
   },
   quoteImage: {
     width: '100%',
-    maxHeight: 320,
   },
   imagePickerContainer: {
     marginTop: 8,
@@ -1631,10 +1644,11 @@ const styles = StyleSheet.create({
   },
   imagePreviewContainer: {
     position: 'relative',
-    width: 160,
-    aspectRatio: 16 / 9,
+    width: 150,
+    aspectRatio: 9 / 16,
     borderRadius: 12,
     overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.04)',
   },
   imagePreview: {
     width: '100%',
@@ -2222,6 +2236,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
     color: DEEP_BLUE,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    flex: 1,
   },
   sectionLinkTextCompact: {
     fontSize: 12,
@@ -2249,18 +2266,18 @@ const styles = StyleSheet.create({
   pidyonScrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingRight: 12,
-    paddingLeft: 12,
+    gap: 4,
+    paddingRight: 8,
+    paddingLeft: 8,
   },
   pidyonCardInline: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    minWidth: 110,
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    minWidth: 90,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(11,27,58,0.08)',
     shadowColor: '#000',
@@ -2268,12 +2285,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
-    gap: 6,
+    gap: 4,
   },
   pidyonIconWrapper: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: 'rgba(30,58,138,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2284,13 +2301,13 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   pidyonNameInline: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: 'Poppins_600SemiBold',
     color: DEEP_BLUE,
     textAlign: 'right',
   },
   pidyonMotherNameInline: {
-    fontSize: 9,
+    fontSize: 8,
     fontFamily: 'Poppins_400Regular',
     color: '#6b7280',
     textAlign: 'right',
@@ -2492,5 +2509,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 })
-
-

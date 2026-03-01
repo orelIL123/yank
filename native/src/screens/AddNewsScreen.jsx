@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import db from '../services/database'
 import { pickImage, uploadFileToSupabaseStorage, pickVideo } from '../utils/storage'
 import { supabase } from '../config/supabase'
+import { canManageNews } from '../utils/permissions'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -34,11 +35,11 @@ function normalizeFilenameFromUri(uri, type = 'image') {
   return type === 'video' ? `${raw}.mp4` : `${raw}.jpg`
 }
 
-export default function AddNewsScreen({ navigation, route, userRole }) {
+export default function AddNewsScreen({ navigation, route, userRole, userPermissions }) {
   const article = route?.params?.article
   const isEditing = !!article?.id
 
-  const canManage = userRole === 'admin'
+  const canManage = canManageNews(userRole, userPermissions)
 
   const [title, setTitle] = useState(article?.title || '')
   const [summary, setSummary] = useState(article?.summary || '')
@@ -515,6 +516,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
   },
 })
-
 
 

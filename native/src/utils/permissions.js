@@ -14,12 +14,12 @@ export const PERMISSIONS = {
   MUSIC: 'music_manager',            // Can manage music/nigunimם
   BOOKS: 'books_manager',            // Can manage books (תולדות אדם)
   LEARNING: 'learning_manager',      // Can manage learning library (short & long videos)
+  HODU_LAHASHEM: 'hodu_lahashem_manager', // Can manage Hodu LaHashem stories
   NEWS: 'news_manager',              // Can manage news articles
   DAILY_LEARNING: 'daily_learning_manager', // Can manage daily learning content
   
   // Future permissions
   NEWSLETTERS: 'newsletters_manager',
-  TZADIKIM: 'tzadikim_manager',
   NOTIFICATIONS: 'notifications_manager',
 }
 
@@ -31,10 +31,10 @@ export const PERMISSION_LABELS = {
   [PERMISSIONS.MUSIC]: 'אחראי ניגונים',
   [PERMISSIONS.BOOKS]: 'אחראי ספרים',
   [PERMISSIONS.LEARNING]: 'אחראי ספריית לימוד',
+  [PERMISSIONS.HODU_LAHASHEM]: 'אחראי הודו לה׳',
   [PERMISSIONS.NEWS]: 'אחראי חדשות',
   [PERMISSIONS.DAILY_LEARNING]: 'אחראי לימוד יומי',
   [PERMISSIONS.NEWSLETTERS]: 'אחראי עלונים',
-  [PERMISSIONS.TZADIKIM]: 'אחראי צדיקים',
   [PERMISSIONS.NOTIFICATIONS]: 'אחראי התראות',
 }
 
@@ -47,7 +47,7 @@ export const PERMISSION_LABELS = {
  */
 export function hasPermission(userRole, userPermissions = [], requiredPermission) {
   // Admin has all permissions
-  if (userRole === 'admin') {
+  if (userRole === 'admin' || userRole === 'superadmin') {
     return true
   }
   
@@ -91,17 +91,17 @@ export function canManageLearning(userRole, userPermissions) {
 }
 
 /**
+ * Check if user can manage Hodu LaHashem
+ */
+export function canManageHoduLaHashem(userRole, userPermissions) {
+  return hasPermission(userRole, userPermissions, PERMISSIONS.HODU_LAHASHEM)
+}
+
+/**
  * Check if user can manage newsletters
  */
 export function canManageNewsletters(userRole, userPermissions) {
   return hasPermission(userRole, userPermissions, PERMISSIONS.NEWSLETTERS)
-}
-
-/**
- * Check if user can manage tzadikim
- */
-export function canManageTzadikim(userRole, userPermissions) {
-  return hasPermission(userRole, userPermissions, PERMISSIONS.TZADIKIM)
 }
 
 /**
@@ -129,7 +129,7 @@ export function canManageDailyLearning(userRole, userPermissions) {
  * Check if user is admin (full access)
  */
 export function isAdmin(userRole) {
-  return userRole === 'admin'
+  return userRole === 'admin' || userRole === 'superadmin'
 }
 
 /**

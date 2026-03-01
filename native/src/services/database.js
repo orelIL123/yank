@@ -118,7 +118,7 @@ class DatabaseService {
     const { data, error } = await query
 
     if (error) {
-      console.error('Database error:', error)
+      if (!isTableNotFound(error)) console.error('Database error:', error)
       throw error
     }
 

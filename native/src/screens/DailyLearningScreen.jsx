@@ -23,6 +23,7 @@ import { WebView } from 'react-native-webview';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import * as ImagePicker from 'expo-image-picker';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 
 function extractYouTubeId(url) {
   if (!url || typeof url !== 'string') return null;
@@ -40,6 +41,7 @@ function extractYouTubeId(url) {
 import { getText, formatTextForDisplay, formatSefariaContent } from '../services/sefaria';
 import { db } from '../services/database';
 import { auth } from '../config/firebase';
+import { canManageDailyLearning } from '../utils/permissions'
 
 const { width } = Dimensions.get('window');
 
@@ -172,11 +174,12 @@ const LEARNING_CATEGORIES = [
   {
     id: 'weekly-newsletter',
     title: 'לימוד יומי בגליון השבועי',
-    description: 'תוכן שבועי מהעלון',
+    description: 'סרטונים ארוכים מהיוטיוב',
     icon: 'newspaper-outline',
     color: '#06B6D4',
     isEditable: true,
-    type: 'firebase',
+    navigateTo: 'LongLessons',
+    navigateParams: { context: 'weeklyNewsletter' },
   },
   {
     id: 'two-halachot',
@@ -231,7 +234,7 @@ const LEARNING_CATEGORIES = [
   },
 ];
 
-export default function DailyLearningScreen({ navigation, userRole }) {
+export default function DailyLearningScreen({ navigation, userRole, userPermissions }) {
   const [loading, setLoading] = useState({});
   const [content, setContent] = useState({});
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -247,13 +250,10 @@ export default function DailyLearningScreen({ navigation, userRole }) {
   // Check if user is admin
   useEffect(() => {
     const checkAdmin = async () => {
-      const user = auth.currentUser;
-      if (user && userRole) {
-        setIsAdmin(userRole === 'admin' || userRole === 'superadmin');
-      }
+      setIsAdmin(canManageDailyLearning(userRole, userPermissions));
     };
     checkAdmin();
-  }, [userRole]);
+  }, [userRole, userPermissions]);
 
   // Load content from Supabase for editable categories
   useEffect(() => {
@@ -319,13 +319,12 @@ export default function DailyLearningScreen({ navigation, userRole }) {
         title: editTitle,
         text: editText,
         imageUrl: editImageUrl,
+        youtubeUrl: editYoutubeUrl.trim() || null,
+        youtubeId: youtubeId || null,
         updatedAt: new Date().toISOString(),
         updatedBy: auth.currentUser?.uid,
       };
-      if (editingCategory.id === 'weekly-newsletter') {
-        payload.youtubeUrl = editYoutubeUrl.trim() || null;
-        payload.youtubeId = youtubeId || null;
-      }
+      
       await db.updateDocument('dailyLearning', editingCategory.id, payload);
 
       setContent(prev => ({
@@ -334,8 +333,8 @@ export default function DailyLearningScreen({ navigation, userRole }) {
           title: editTitle,
           text: editText,
           imageUrl: editImageUrl,
-          youtubeUrl: editingCategory.id === 'weekly-newsletter' ? (editYoutubeUrl.trim() || '') : (prev[editingCategory.id]?.youtubeUrl || ''),
-          youtubeId: editingCategory.id === 'weekly-newsletter' ? (youtubeId || '') : (prev[editingCategory.id]?.youtubeId || ''),
+          youtubeUrl: editYoutubeUrl.trim() || '',
+          youtubeId: youtubeId || '',
           updatedAt: new Date().toISOString(),
         }
       }));
@@ -419,7 +418,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
 
   const handleCategoryPress = (category) => {
     if (category.navigateTo) {
-      navigation?.navigate(category.navigateTo);
+      navigation?.navigate(category.navigateTo, category.navigateParams || undefined);
       return;
     }
 
@@ -802,24 +801,22 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                   />
                 </View>
 
-                {editingCategory?.id === 'weekly-newsletter' ? (
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>קישור YouTube (סרטון הגליון)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={editYoutubeUrl}
-                      onChangeText={setEditYoutubeUrl}
-                      placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
-                      textAlign="right"
-                      autoCapitalize="none"
-                    />
-                    {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
-                      <Text style={styles.hintOk}>✓ קישור תקין</Text>
-                    ) : editYoutubeUrl.trim() ? (
-                      <Text style={styles.hintError}>קישור לא תקין</Text>
-                    ) : null}
-                  </View>
-                ) : null}
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>קישור YouTube (אופציונלי)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editYoutubeUrl}
+                    onChangeText={setEditYoutubeUrl}
+                    placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
+                    textAlign="right"
+                    autoCapitalize="none"
+                  />
+                  {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
+                    <Text style={styles.hintOk}>✓ קישור תקין</Text>
+                  ) : editYoutubeUrl.trim() ? (
+                    <Text style={styles.hintError}>קישור לא תקין</Text>
+                  ) : null}
+                </View>
 
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>קישור לתמונה</Text>
@@ -967,24 +964,22 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                 />
               </View>
 
-              {editingCategory?.id === 'weekly-newsletter' ? (
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>קישור YouTube (סרטון הגליון)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editYoutubeUrl}
-                    onChangeText={setEditYoutubeUrl}
-                    placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
-                    textAlign="right"
-                    autoCapitalize="none"
-                  />
-                  {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
-                    <Text style={styles.hintOk}>✓ קישור תקין</Text>
-                  ) : editYoutubeUrl.trim() ? (
-                    <Text style={styles.hintError}>קישור לא תקין</Text>
-                  ) : null}
-                </View>
-              ) : null}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>קישור YouTube (אופציונלי)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editYoutubeUrl}
+                  onChangeText={setEditYoutubeUrl}
+                  placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
+                  textAlign="right"
+                  autoCapitalize="none"
+                />
+                {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
+                  <Text style={styles.hintOk}>✓ קישור תקין</Text>
+                ) : editYoutubeUrl.trim() ? (
+                  <Text style={styles.hintError}>קישור לא תקין</Text>
+                ) : null}
+              </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>קישור לתמונה</Text>
@@ -1048,7 +1043,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
       <LinearGradient colors={[COLORS.bg, '#f3f4f6']} style={StyleSheet.absoluteFill} />
       
       <AppHeader
-        title="לימוד יומי "
+        title={t('לימוד יומי')}
         showBackButton={true}
         onBackPress={handleBack}
       />
@@ -1059,15 +1054,18 @@ export default function DailyLearningScreen({ navigation, userRole }) {
       >
         {/* Header Section */}
         <View style={styles.headerSection}>
-          <Text style={styles.mainTitle}>לימוד יומי בתורת רבינו ועוד...</Text>
-          <View style={styles.subtitleRow}>
-            <Text style={styles.subtitle}>תוכנית לימודים יומיים</Text>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerTag}>
+              <Text style={styles.headerTagText}>לימוד יומי</Text>
+            </View>
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>חי</Text>
             </View>
           </View>
-          <Text style={styles.note}>נמחקים אוטומטית לאחר 24 שעות</Text>
+          <Text style={styles.mainTitle}>תוכן יומי קצר לחיזוק, התמדה ובהירות</Text>
+          <Text style={styles.subtitle}>בחרו נושא והמשיכו מהנקודה שלכם</Text>
+          <Text style={styles.note}>תכנים מתעדכנים ונמחקים אוטומטית לאחר 24 שעות</Text>
         </View>
 
         {/* Learning Categories List */}
@@ -1098,7 +1096,7 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                   {loading[category.id] ? (
                     <ActivityIndicator size="small" color={COLORS.textLight} />
                   ) : (
-                    <Ionicons name="chevron-forward" size={24} color={COLORS.textLight} />
+                    <Ionicons name="chevron-forward" size={22} color={COLORS.textLight} />
                   )}
                 </View>
             </View>
@@ -1149,24 +1147,22 @@ export default function DailyLearningScreen({ navigation, userRole }) {
                 />
               </View>
 
-              {editingCategory?.id === 'weekly-newsletter' ? (
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>קישור YouTube (סרטון הגליון)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editYoutubeUrl}
-                    onChangeText={setEditYoutubeUrl}
-                    placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
-                    textAlign="right"
-                    autoCapitalize="none"
-                  />
-                  {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
-                    <Text style={styles.hintOk}>✓ קישור תקין</Text>
-                  ) : editYoutubeUrl.trim() ? (
-                    <Text style={styles.hintError}>קישור לא תקין</Text>
-                  ) : null}
-                </View>
-              ) : null}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>קישור YouTube (אופציונלי)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editYoutubeUrl}
+                  onChangeText={setEditYoutubeUrl}
+                  placeholder="https://www.youtube.com/watch?v=... או youtube.com/shorts/..."
+                  textAlign="right"
+                  autoCapitalize="none"
+                />
+                {editYoutubeUrl.trim() && extractYouTubeId(editYoutubeUrl.trim()) ? (
+                  <Text style={styles.hintOk}>✓ קישור תקין</Text>
+                ) : editYoutubeUrl.trim() ? (
+                  <Text style={styles.hintError}>קישור לא תקין</Text>
+                ) : null}
+              </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>קישור לתמונה</Text>
@@ -1234,29 +1230,48 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   headerSection: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 14,
+    paddingHorizontal: 18,
+    paddingTop: 16,
     paddingBottom: 24,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.08)',
+  },
+  headerTopRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  headerTag: {
+    backgroundColor: 'rgba(11, 27, 58, 0.08)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  headerTagText: {
+    fontSize: 12,
+    fontFamily: 'Heebo_600SemiBold',
+    color: COLORS.deepBlue,
   },
   mainTitle: {
-    fontSize: 20,
-    fontFamily: FONTS.bold,
+    fontSize: 24,
+    fontFamily: 'Heebo_700Bold',
     color: COLORS.deepBlue,
     textAlign: 'right',
-    marginBottom: 12,
-    lineHeight: 28,
-  },
-  subtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
+    lineHeight: 32,
   },
   subtitle: {
-    fontSize: 16,
-    fontFamily: FONTS.medium,
+    fontSize: 15,
+    fontFamily: 'Heebo_500Medium',
     color: COLORS.textLight,
     textAlign: 'right',
+    marginBottom: 8,
   },
   liveIndicator: {
     flexDirection: 'row',

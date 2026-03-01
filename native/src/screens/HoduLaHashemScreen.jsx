@@ -21,8 +21,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 import db from '../services/database'
-import { canManageLearning } from '../utils/permissions'
+import { canManageHoduLaHashem, canManageLearning } from '../utils/permissions'
 import { pickVideo, uploadFileToSupabaseStorage } from '../utils/storage'
 
 const { width } = Dimensions.get('window')
@@ -63,7 +64,9 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingStory, setEditingStory] = useState(null);
-  const canManage = canManageLearning(userRole, userPermissions);
+  const canManage =
+    canManageHoduLaHashem(userRole, userPermissions) ||
+    canManageLearning(userRole, userPermissions);
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
@@ -338,8 +341,8 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
     return (
       <View style={styles.container}>
         <AppHeader
-          title="הודו לה'"
-          subtitle="סיפורי ניסים"
+          title={t('הודו לה׳')}
+          subtitle={t('סיפורי ניסים')}
           onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
@@ -353,8 +356,8 @@ export default function HoduLaHashemScreen({ navigation, userRole, userPermissio
   return (
     <View style={styles.container}>
       <AppHeader
-        title="הודו לה'"
-        subtitle="סיפורי ניסים"
+        title={t('הודו לה׳')}
+        subtitle={t('סיפורי ניסים')}
         onBackPress={() => navigation.goBack()}
       />
 
@@ -1286,4 +1289,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-
