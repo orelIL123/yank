@@ -27,7 +27,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.hayanuka.app",
-      "versionCode": 12,
+      "versionCode": 10,
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
@@ -50,9 +50,7 @@
       "url": "https://u.expo.dev/a3cc4905-828c-479a-93f0-9b255f822bc8",
       "fallbackToCacheTimeout": 0
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.2.1",
     "scheme": "hayanuka",
     "plugins": [
       "./plugins/with-firebase-modular-headers",
