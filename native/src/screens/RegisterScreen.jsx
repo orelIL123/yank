@@ -15,7 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
 export default function RegisterScreen({ navigation }) {
@@ -76,32 +76,6 @@ export default function RegisterScreen({ navigation }) {
 
     setLoading(true);
     try {
-      // Check if phone already registered
-      const phoneQuery = query(
-        collection(db, 'users'),
-        where('phone', '==', normalizedPhone)
-      );
-      const phoneSnapshot = await getDocs(phoneQuery);
-      if (!phoneSnapshot.empty) {
-        Alert.alert('שגיאה', 'מספר הטלפון כבר רשום במערכת');
-        setLoading(false);
-        return;
-      }
-
-      // Check if real email already registered (only if user entered email)
-      if (email.trim()) {
-        const emailQuery = query(
-          collection(db, 'users'),
-          where('email', '==', email.trim().toLowerCase())
-        );
-        const emailSnapshot = await getDocs(emailQuery);
-        if (!emailSnapshot.empty) {
-          Alert.alert('שגיאה', 'כתובת האימייל כבר רשומה במערכת');
-          setLoading(false);
-          return;
-        }
-      }
-
       // Create Firebase Auth user
       const userCredential = await createUserWithEmailAndPassword(auth, firebaseEmail, password);
       const user = userCredential.user;
