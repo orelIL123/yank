@@ -15,11 +15,12 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,56 +28,119 @@ export default function RegisterScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Normalize phone: strip non-digits, add country code if starts with 0
+  const normalizePhone = (input) => {
+    const digits = (input || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('0')) return '972' + digits.slice(1);
+    return digits;
+  };
+
+  // Build Firebase email from phone or real email
+  const buildFirebaseEmail = (emailInput, phoneInput) => {
+    const trimmedEmail = (emailInput || '').trim();
+    if (trimmedEmail) return trimmedEmail;
+    const norm = normalizePhone(phoneInput);
+    return norm ? `${norm}@hayanuka.com` : null;
+  };
+
   const handleRegister = async () => {
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('שגיאה', 'נא למלא את כל השדות');
+    if (!name.trim()) {
+      Alert.alert('שגיאה', 'נא להזין שם מלא');
       return;
     }
-
+    if (!phone.trim()) {
+      Alert.alert('שגיאה', 'נא להזין מספר טלפון');
+      return;
+    }
+    if (!password || !confirmPassword) {
+      Alert.alert('שגיאה', 'נא למלא סיסמה ואישור סיסמה');
+      return;
+    }
     if (password !== confirmPassword) {
       Alert.alert('שגיאה', 'הסיסמאות אינן תואמות');
       return;
     }
-
     if (password.length < 6) {
       Alert.alert('שגיאה', 'הסיסמה חייבת להכיל לפחות 6 תווים');
       return;
     }
 
+    const firebaseEmail = buildFirebaseEmail(email, phone);
+    if (!firebaseEmail) {
+      Alert.alert('שגיאה', 'נא להזין מספר טלפון תקין');
+      return;
+    }
+
+    const normalizedPhone = normalizePhone(phone);
+
     setLoading(true);
     try {
-      // Create user
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      // Check if phone already registered
+      const phoneQuery = query(
+        collection(db, 'users'),
+        where('phone', '==', normalizedPhone)
+      );
+      const phoneSnapshot = await getDocs(phoneQuery);
+      if (!phoneSnapshot.empty) {
+        Alert.alert('שגיאה', 'מספר הטלפון כבר רשום במערכת');
+        setLoading(false);
+        return;
+      }
+
+      // Check if real email already registered (only if user entered email)
+      if (email.trim()) {
+        const emailQuery = query(
+          collection(db, 'users'),
+          where('email', '==', email.trim().toLowerCase())
+        );
+        const emailSnapshot = await getDocs(emailQuery);
+        if (!emailSnapshot.empty) {
+          Alert.alert('שגיאה', 'כתובת האימייל כבר רשומה במערכת');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Create Firebase Auth user
+      const userCredential = await createUserWithEmailAndPassword(auth, firebaseEmail, password);
       const user = userCredential.user;
 
-      // Update profile
+      // Update display name
       await updateProfile(user, {
         displayName: name.trim()
       });
 
-      // Create user document in Firestore
+      // Save user doc in Firestore
       await setDoc(doc(db, 'users', user.uid), {
         name: name.trim(),
-        email: email.trim(),
-        role: 'user', // Default role
+        phone: normalizedPhone,
+        email: email.trim().toLowerCase() || null,
+        firebaseEmail,
+        role: 'user',
         createdAt: new Date().toISOString(),
-        unlockedCards: [] // Cards that user has unlocked
+        unlockedCards: [],
       });
 
-      // Navigation will be handled by App.js based on auth state
+      // App.js will handle navigation via onAuthStateChanged
     } catch (error) {
       console.error('Registration error:', error);
       let errorMessage = 'אירעה שגיאה בהרשמה';
 
       switch (error.code) {
         case 'auth/email-already-in-use':
-          errorMessage = 'כתובת האימייל כבר בשימוש';
+          errorMessage = email.trim()
+            ? 'כתובת האימייל כבר בשימוש'
+            : 'מספר הטלפון כבר רשום במערכת';
           break;
         case 'auth/invalid-email':
           errorMessage = 'כתובת אימייל לא תקינה';
           break;
         case 'auth/weak-password':
           errorMessage = 'הסיסמה חלשה מדי';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'בעיית רשת. אנא נסה שוב';
           break;
       }
 
@@ -117,7 +181,20 @@ export default function RegisterScreen({ navigation }) {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>אימייל</Text>
+              <Text style={styles.label}>טלפון *</Text>
+              <TextInput
+                style={styles.input}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="הזן מספר טלפון"
+                placeholderTextColor="#666"
+                keyboardType="phone-pad"
+                textAlign="right"
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>אימייל (אופציונלי)</Text>
               <TextInput
                 style={styles.input}
                 value={email}
