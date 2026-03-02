@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { trackLogin } from '../services/analytics';
+import { t } from '../utils/i18n';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -24,16 +25,25 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Allow login with number only (e.g. 0512345678) -> 0512345678@hayanuka.com for Google Play test account
+  const normalizeEmail = (input) => {
+    const trimmed = (input || '').trim();
+    if (!trimmed) return trimmed;
+    if (trimmed.includes('@')) return trimmed;
+    return `${trimmed}@hayanuka.com`;
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('שגיאה', 'נא למלא את כל השדות');
+      Alert.alert(t('שגיאה'), t('נא למלא את כל השדות'));
       return;
     }
 
     setLoading(true);
+    const emailToUse = normalizeEmail(email);
     try {
-      console.log('Attempting login with email:', email.trim());
-      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      console.log('Attempting login with email:', emailToUse);
+      const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
       console.log('Login successful! User:', userCredential.user.uid);
       trackLogin(userCredential.user.uid, 'email');
       console.log('Firebase Auth persists session automatically - user will stay logged in');
@@ -55,27 +65,27 @@ export default function LoginScreen({ navigation }) {
       console.error('Error code:', error.code);
       console.error('Error message:', error.message);
       
-      let errorMessage = 'אירעה שגיאה בהתחברות';
+      let errorMessage = t('אירעה שגיאה בהתחברות');
 
       switch (error.code) {
         case 'auth/invalid-email':
-          errorMessage = 'כתובת אימייל לא תקינה';
+          errorMessage = t('כתובת אימייל לא תקינה');
           break;
         case 'auth/user-disabled':
-          errorMessage = 'משתמש זה הושבת';
+          errorMessage = t('משתמש זה הושבת');
           break;
         case 'auth/user-not-found':
-          errorMessage = 'משתמש לא נמצא';
+          errorMessage = t('משתמש לא נמצא');
           break;
         case 'auth/wrong-password':
-          errorMessage = 'סיסמה שגויה';
+          errorMessage = t('סיסמה שגויה');
           break;
         case 'auth/network-request-failed':
-          errorMessage = 'בעיית רשת. אנא נסה שוב';
+          errorMessage = t('בעיית רשת. אנא נסה שוב');
           break;
       }
 
-      Alert.alert('שגיאה', errorMessage);
+      Alert.alert(t('שגיאה'), errorMessage);
       setLoading(false);
     }
   };
@@ -95,16 +105,16 @@ export default function LoginScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
-          <Text style={styles.title}>התחברות</Text>
-          <Text style={styles.subtitle}>ברוכים השבים לאפליקציית הינוקא</Text>
+          <Text style={styles.title}>{t('התחברות')}</Text>
+          <Text style={styles.subtitle}>{t('ברוכים השבים לאפליקציית הינוקא')}</Text>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>אימייל</Text>
+            <Text style={styles.label}>{t('אימייל')}</Text>
             <TextInput
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder="הזן אימייל"
+              placeholder={t('הזן אימייל')}
               placeholderTextColor="#666"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -113,7 +123,7 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>סיסמה</Text>
+            <Text style={styles.label}>{t('סיסמה')}</Text>
             <View style={styles.passwordInputContainer}>
               <TouchableOpacity
                 style={styles.eyeButton}
@@ -129,7 +139,7 @@ export default function LoginScreen({ navigation }) {
                 style={styles.inputWithIcon}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="הזן סיסמה"
+                placeholder={t('הזן סיסמה')}
                 placeholderTextColor="#666"
                 secureTextEntry={!showPassword}
                 textAlign="right"
@@ -145,8 +155,24 @@ export default function LoginScreen({ navigation }) {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.loginButtonText}>התחבר</Text>
+              <Text style={styles.loginButtonText}>{t('התחבר')}</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.registerLink}
+            onPress={() => navigation.navigate('Register')}
+          >
+            <Text style={styles.registerText}>
+              {t('אין לך חשבון?')} <Text style={styles.registerTextBold}>{t('הירשם עכשיו')}</Text>
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.guestButton}
+            onPress={() => navigation.navigate('Home')}
+          >
+            <Text style={styles.guestButtonText}>{t('המשך כאורח')}</Text>
           </TouchableOpacity>
 
           </View>

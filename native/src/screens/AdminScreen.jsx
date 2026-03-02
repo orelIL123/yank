@@ -17,6 +17,7 @@ const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
 
 const TABS = [
+  { id: 'dashboard', label: 'דשבורד', icon: 'stats-chart-outline' },
   { id: 'featured', label: 'נושא מרכזי', icon: 'star-outline' },
   { id: 'cards', label: 'כרטיסיות', icon: 'grid-outline' },
   { id: 'books', label: 'ספרים', icon: 'book-outline' },
@@ -72,7 +73,7 @@ export default function AdminScreen({ navigation, route, userRole, userPermissio
   }
 
   // Check if initialTab was passed from navigation
-  const initialTab = route?.params?.initialTab || 'books';
+  const initialTab = route?.params?.initialTab || 'dashboard';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   return (
@@ -123,6 +124,7 @@ export default function AdminScreen({ navigation, route, userRole, userPermissio
 
       {/* Content */}
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {activeTab === 'dashboard' && <DashboardPanel />}
         {activeTab === 'featured' && <FeaturedTopicForm />}
         {activeTab === 'cards' && <CardsForm />}
         {activeTab === 'books' && <BooksForm />}
@@ -141,6 +143,252 @@ export default function AdminScreen({ navigation, route, userRole, userPermissio
     </SafeAreaView>
   )
 }
+
+// ========== DASHBOARD PANEL ==========
+function DashboardPanel() {
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const loadStats = async () => {
+    try {
+      // Firestore: users + push tokens
+      const usersSnapshot = await getDocs(collection(firestoreDb, 'users'))
+      let totalUsers = 0
+      let totalPushTokens = 0
+      let usersWithToken = 0
+      const recentUsers = []
+
+      usersSnapshot.forEach((docSnap) => {
+        totalUsers++
+        const data = docSnap.data()
+        const tokens = [
+          ...(Array.isArray(data.expoPushTokens) ? data.expoPushTokens : []),
+          ...(typeof data.expoPushToken === 'string' && data.expoPushToken ? [data.expoPushToken] : []),
+        ].filter(t => t && t.length > 0)
+        if (tokens.length > 0) usersWithToken++
+        totalPushTokens += tokens.length
+        recentUsers.push({
+          email: data.email || 'אנונימי',
+          updatedAt: data.updatedAt?.toDate?.() || data.lastPushTokenAt?.toDate?.() || null,
+          tokens: tokens.length,
+        })
+      })
+
+      // Sort by recent
+      recentUsers.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+
+      // Supabase: content counts
+      let booksCount = 0
+      let prayersCount = 0
+      let newsCount = 0
+      let notificationsCount = 0
+      let shortLessonsCount = 0
+      let longLessonsCount = 0
+
+      try {
+        const [books, prayers, news, notifications, shortLessons, longLessons] = await Promise.all([
+          db.getCollection('books'),
+          db.getCollection('prayers'),
+          db.getCollection('news'),
+          db.getCollection('notifications'),
+          db.getCollection('shortLessons'),
+          db.getCollection('longLessons'),
+        ])
+        booksCount = books?.length || 0
+        prayersCount = prayers?.length || 0
+        newsCount = news?.length || 0
+        notificationsCount = notifications?.length || 0
+        shortLessonsCount = shortLessons?.length || 0
+        longLessonsCount = longLessons?.length || 0
+      } catch (supaErr) {
+        console.log('Dashboard supabase counts error:', supaErr?.message)
+      }
+
+      setStats({
+        totalUsers,
+        totalPushTokens,
+        usersWithToken,
+        recentUsers: recentUsers.slice(0, 5),
+        booksCount,
+        prayersCount,
+        newsCount,
+        notificationsCount,
+        shortLessonsCount,
+        longLessonsCount,
+      })
+    } catch (err) {
+      console.error('Dashboard load error:', err)
+      Alert.alert('שגיאה', 'לא ניתן לטעון נתוני דשבורד')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => { loadStats() }, [])
+
+  const handleRefresh = () => {
+    setRefreshing(true)
+    loadStats()
+  }
+
+  if (loading) {
+    return (
+      <View style={[styles.formContainer, { alignItems: 'center', paddingTop: 40 }]}>
+        <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+        <Text style={[styles.label, { marginTop: 16 }]}>טוען נתונים...</Text>
+      </View>
+    )
+  }
+
+  const StatCard = ({ icon, label, value, color }) => (
+    <View style={dashStyles.statCard}>
+      <Ionicons name={icon} size={28} color={color || PRIMARY_BLUE} />
+      <Text style={dashStyles.statValue}>{value ?? '—'}</Text>
+      <Text style={dashStyles.statLabel}>{label}</Text>
+    </View>
+  )
+
+  return (
+    <View style={styles.formContainer}>
+      <View style={dashStyles.headerRow}>
+        <Text style={styles.formTitle}>📊 דשבורד</Text>
+        <Pressable onPress={handleRefresh} disabled={refreshing} style={dashStyles.refreshBtn}>
+          {refreshing
+            ? <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+            : <Ionicons name="refresh-outline" size={22} color={PRIMARY_BLUE} />
+          }
+        </Pressable>
+      </View>
+
+      {/* Users section */}
+      <Text style={dashStyles.sectionTitle}>👥 משתמשים</Text>
+      <View style={dashStyles.statsRow}>
+        <StatCard icon="people-outline" label="סה״כ משתמשים" value={stats.totalUsers} />
+        <StatCard icon="notifications-outline" label="עם Push Token" value={stats.usersWithToken} color="#059669" />
+        <StatCard icon="phone-portrait-outline" label="טוקנים" value={stats.totalPushTokens} color="#7c3aed" />
+      </View>
+
+      {/* Content section */}
+      <Text style={dashStyles.sectionTitle}>📚 תוכן</Text>
+      <View style={dashStyles.statsRow}>
+        <StatCard icon="book-outline" label="ספרים" value={stats.booksCount} />
+        <StatCard icon="heart-outline" label="תפילות" value={stats.prayersCount} color="#dc2626" />
+        <StatCard icon="newspaper-outline" label="חדשות" value={stats.newsCount} color="#d97706" />
+      </View>
+      <View style={dashStyles.statsRow}>
+        <StatCard icon="videocam-outline" label="שיעורים קצרים" value={stats.shortLessonsCount} color="#0891b2" />
+        <StatCard icon="film-outline" label="שיעורים ארוכים" value={stats.longLessonsCount} color="#6d28d9" />
+        <StatCard icon="notifications-outline" label="התראות" value={stats.notificationsCount} color="#065f46" />
+      </View>
+
+      {/* Recent users */}
+      {stats.recentUsers.length > 0 && (
+        <>
+          <Text style={dashStyles.sectionTitle}>🕐 משתמשים אחרונים</Text>
+          {stats.recentUsers.map((u, i) => (
+            <View key={i} style={dashStyles.userRow}>
+              <View style={dashStyles.userInfo}>
+                <Ionicons name="person-circle-outline" size={20} color={PRIMARY_BLUE} />
+                <Text style={dashStyles.userEmail} numberOfLines={1}>{u.email}</Text>
+              </View>
+              <View style={dashStyles.userMeta}>
+                <Text style={dashStyles.userTokens}>{u.tokens} טוקנים</Text>
+                {u.updatedAt && (
+                  <Text style={dashStyles.userDate}>
+                    {u.updatedAt.toLocaleDateString('he-IL')}
+                  </Text>
+                )}
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  )
+}
+
+const dashStyles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  refreshBtn: {
+    padding: 8,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: PRIMARY_BLUE,
+    marginTop: 20,
+    marginBottom: 10,
+    textAlign: 'right',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 4,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#f0f4ff',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  userRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: '#374151',
+    flex: 1,
+  },
+  userMeta: {
+    alignItems: 'flex-end',
+  },
+  userTokens: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '600',
+  },
+  userDate: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+})
 
 // ========== FEATURED TOPIC FORM ==========
 function FeaturedTopicForm() {

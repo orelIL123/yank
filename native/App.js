@@ -26,7 +26,7 @@ import PrayerCommitmentScreen from './src/screens/PrayerCommitmentScreen'
 import PdfViewerScreen from './src/screens/PdfViewerScreen'
 import ContactRabbiScreen from './src/screens/ContactRabbiScreen'
 import LoginScreen from './src/screens/LoginScreen'
-// RegisterScreen removed - registration disabled temporarily
+import RegisterScreen from './src/screens/RegisterScreen'
 import AboutScreen from './src/screens/AboutScreen'
 import MusicScreen from './src/screens/MusicScreen'
 import BooksScreen from './src/screens/BooksScreen'
@@ -610,7 +610,7 @@ export default function App() {
         >
           {/* Auth screens - always available */}
           <Stack.Screen name="Login" component={LoginScreen} />
-          {/* Register screen removed - registration disabled temporarily */}
+          <Stack.Screen name="Register" component={RegisterScreen} />
 
           {/* Main app screens - accessible to all users (guests and authenticated) */}
           <Stack.Screen name="Home">
