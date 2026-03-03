@@ -2,6 +2,7 @@ import React from 'react'
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Linking } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import { t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -17,7 +18,7 @@ export default function HelpSupportScreen({ navigation }) {
   }
 
   const handleEmail = () => {
-    Linking.openURL('mailto:support@hayanuka.com?subject=תמיכה טכנית')
+    Linking.openURL(`mailto:support@hayanuka.com?subject=${encodeURIComponent(t('תמיכה טכנית'))}`)
   }
 
   const handleWebsite = () => {
@@ -26,20 +27,20 @@ export default function HelpSupportScreen({ navigation }) {
 
   const faqs = [
     {
-      question: 'איך אני מתחבר לחשבון?',
-      answer: 'לחץ על כפתור "התחבר לחשבון" בעמוד הפרופיל והכנס את פרטי ההתחברות שלך.'
+      question: t('איך אני מתחבר לחשבון?'),
+      answer: t('לחץ על כפתור "התחבר לחשבון" בעמוד הפרופיל והכנס את פרטי ההתחברות שלך.')
     },
     {
-      question: 'איך אני משנה את הסיסמה?',
-      answer: 'לך לעמוד הפרופיל, לחץ על "אבטחה וסיסמה" ובחר "שנה סיסמה".'
+      question: t('איך אני משנה את הסיסמה?'),
+      answer: t('לך לעמוד הפרופיל, לחץ על "אבטחה וסיסמה" ובחר "שנה סיסמה".')
     },
     {
-      question: 'איך אני מבקש תפילה?',
-      answer: 'לך לעמוד "תפילות" ולחץ על "בקש תפילה". מלא את הפרטים והבקשה תועבר לקהילה.'
+      question: t('איך אני מבקש תפילה?'),
+      answer: t('לך לעמוד "תפילות" ולחץ על "בקש תפילה". מלא את הפרטים והבקשה תועבר לקהילה.')
     },
     {
-      question: 'איך אני מוחק את החשבון שלי?',
-      answer: 'לך לעמוד הפרופיל, גלול למטה ולחץ על "מחק חשבון". שים לב שפעולה זו אינה הפיכה.'
+      question: t('איך אני מוחק את החשבון שלי?'),
+      answer: t('לך לעמוד הפרופיל, גלול למטה ולחץ על "מחק חשבון". שים לב שפעולה זו אינה הפיכה.')
     }
   ]
 
@@ -55,21 +56,21 @@ export default function HelpSupportScreen({ navigation }) {
         >
           <Ionicons name="arrow-forward" size={28} color={DEEP_BLUE} />
         </Pressable>
-        <Text style={styles.headerTitle}>עזרה ותמיכה</Text>
+        <Text style={styles.headerTitle}>{t('עזרה ותמיכה')}</Text>
         <View style={{ width: 28 }} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Contact Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>צור קשר</Text>
+          <Text style={styles.sectionTitle}>{t('צור קשר')}</Text>
           
           <Pressable style={styles.contactCard} onPress={handleCall} accessibilityRole="button">
             <View style={styles.contactIcon}>
               <Ionicons name="call-outline" size={24} color={PRIMARY_BLUE} />
             </View>
             <View style={styles.contactInfo}>
-              <Text style={styles.contactTitle}>טלפון</Text>
+              <Text style={styles.contactTitle}>{t('טלפון')}</Text>
               <Text style={styles.contactValue}>054-8434755</Text>
             </View>
             <Ionicons name="chevron-back" size={20} color="#9ca3af" />
@@ -91,7 +92,7 @@ export default function HelpSupportScreen({ navigation }) {
               <Ionicons name="mail-outline" size={24} color={PRIMARY_BLUE} />
             </View>
             <View style={styles.contactInfo}>
-              <Text style={styles.contactTitle}>אימייל</Text>
+              <Text style={styles.contactTitle}>{t('אימייל')}</Text>
               <Text style={styles.contactValue}>support@hayanuka.com</Text>
             </View>
             <Ionicons name="chevron-back" size={20} color="#9ca3af" />
@@ -102,7 +103,7 @@ export default function HelpSupportScreen({ navigation }) {
               <Ionicons name="globe-outline" size={24} color={PRIMARY_BLUE} />
             </View>
             <View style={styles.contactInfo}>
-              <Text style={styles.contactTitle}>אתר אינטרנט</Text>
+              <Text style={styles.contactTitle}>{t('אתר אינטרנט')}</Text>
               <Text style={styles.contactValue}>hayanuka.com</Text>
             </View>
             <Ionicons name="chevron-back" size={20} color="#9ca3af" />
@@ -111,7 +112,7 @@ export default function HelpSupportScreen({ navigation }) {
 
         {/* FAQ Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>שאלות נפוצות</Text>
+          <Text style={styles.sectionTitle}>{t('שאלות נפוצות')}</Text>
           
           {faqs.map((faq, index) => (
             <View key={index} style={styles.faqCard}>
@@ -225,5 +226,3 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 })
-
-

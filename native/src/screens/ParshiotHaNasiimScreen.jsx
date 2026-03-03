@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -476,8 +477,8 @@ export default function ParshiotHaNasiimScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <AppHeader
-        title="פרשת הנשיאים"
-        subtitle="קרבנות הנשיאים לחנוכת המזבח"
+        title={t('פרשת הנשיאים')}
+        subtitle={t('קרבנות הנשיאים לחנוכת המזבח')}
         onBackPress={() => navigation.goBack()}
       />
 

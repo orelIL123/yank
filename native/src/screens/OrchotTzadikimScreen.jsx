@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import db from '../services/database'
 import { auth } from '../config/firebase'
 import orhotData from '../data/orhot_tzadikim_data.json'
@@ -276,7 +277,7 @@ export default function OrchotTzadikimScreen({ navigation, userRole }) {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title="אורחות צדיקים"
+          title={t('אורחות צדיקים')}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
         />
@@ -292,7 +293,7 @@ export default function OrchotTzadikimScreen({ navigation, userRole }) {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title="אורחות צדיקים"
+        title={t('אורחות צדיקים')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
         rightIcon={isAdmin ? "create-outline" : undefined}

@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 import db from '../services/database';
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -84,8 +85,8 @@ export default function LearningLibraryScreen({ navigation, userRole }) {
   return (
     <View style={styles.container}>
       <AppHeader
-        title="ספריית לימוד"
-        subtitle="כל השיעורים והסרטונים במקום אחד"
+        title={t('ספריית לימוד')}
+        subtitle={t('כל השיעורים והסרטונים במקום אחד')}
         onBackPress={() => navigation.goBack()}
       />
 
@@ -113,9 +114,9 @@ export default function LearningLibraryScreen({ navigation, userRole }) {
                 <View style={styles.largeCategoryIconContainer}>
                   <Ionicons name="film" size={48} color="#fff" style={{ textAlign: 'center' }} />
                 </View>
-                <Text style={styles.largeCategoryTitle}>שיעורים</Text>
+                <Text style={styles.largeCategoryTitle}>{t('שיעורים')}</Text>
                 <Text style={styles.largeCategoryDescription}>
-                  שיעורים מלאים מהיוטיוב
+                  {t('שיעורים מלאים וכנסים')}
                 </Text>
                 <View style={styles.largeCategoryArrow}>
                   <Ionicons name="chevron-forward" size={28} color="#fff" />
@@ -146,9 +147,14 @@ export default function LearningLibraryScreen({ navigation, userRole }) {
                   <View style={styles.halfCategoryIconContainer}>
                     <Ionicons name="videocam" size={32} color="#fff" style={{ textAlign: 'center' }} />
                   </View>
-                  <Text style={styles.halfCategoryTitle}>קצרים</Text>
-                  <Text style={styles.halfCategoryDescription}>
-                    שיעורים קצרים מהיוטיוב/האלעה
+                  <Text
+                    style={[styles.halfCategoryTitle, styles.shortLearningTitle]}
+                    numberOfLines={2}
+                  >
+                    {t('שיחות ופנינים')}
+                  </Text>
+                  <Text style={[styles.halfCategoryDescription, styles.shortLearningDescription]}>
+                    {t('שיחות שנמסרו בדרך ובמקומות נוספים')}
                   </Text>
                   <View style={styles.halfCategoryArrow}>
                     <Ionicons name="chevron-forward" size={20} color="#fff" />
@@ -177,9 +183,9 @@ export default function LearningLibraryScreen({ navigation, userRole }) {
                   <View style={styles.halfCategoryIconContainer}>
                     <Ionicons name="sparkles" size={32} color="#fff" style={{ textAlign: 'center' }} />
                   </View>
-                  <Text style={styles.halfCategoryTitle}>הודו לה'</Text>
+                  <Text style={styles.halfCategoryTitle}>{t('הודו לה׳')}</Text>
                   <Text style={styles.halfCategoryDescription}>
-                    סיפורי ניסים וכו'
+                    {t('סיפורי השגחה פרטית')}
                   </Text>
                   <View style={styles.halfCategoryArrow}>
                     <Ionicons name="chevron-forward" size={20} color="#fff" />
@@ -192,7 +198,7 @@ export default function LearningLibraryScreen({ navigation, userRole }) {
 
         {/* השיעור העדכני ביותר */}
         <View style={styles.latestSection}>
-          <Text style={styles.latestSectionTitle}>השיעור העדכני ביותר</Text>
+          <Text style={styles.latestSectionTitle}>{t('השיעור העדכני ביותר')}</Text>
           {loadingLatest ? (
             <View style={styles.latestLoadingContainer}>
               <ActivityIndicator size="small" color={PRIMARY_BLUE} />
@@ -222,7 +228,7 @@ export default function LearningLibraryScreen({ navigation, userRole }) {
                 </View>
                 <View style={styles.latestLessonInfo}>
                   <Text style={styles.latestLessonTitle} numberOfLines={2}>
-                    {latestLesson.title || 'שיעור'}
+                    {latestLesson.title || t('שיעור')}
                   </Text>
                   {latestLesson.description && (
                     <Text style={styles.latestLessonDescription} numberOfLines={2}>
@@ -236,7 +242,7 @@ export default function LearningLibraryScreen({ navigation, userRole }) {
           ) : (
             <View style={styles.latestEmptyContainer}>
               <Ionicons name="film-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-              <Text style={styles.latestEmptyText}>אין שיעורים זמינים כרגע</Text>
+              <Text style={styles.latestEmptyText}>{t('אין שיעורים זמינים כרגע')}</Text>
             </View>
           )}
         </View>
@@ -387,6 +393,10 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
+  shortLearningTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
   halfCategoryDescription: {
     fontSize: 14,
     fontFamily: 'Heebo_400Regular',
@@ -394,6 +404,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginBottom: 12,
     lineHeight: 20,
+  },
+  shortLearningDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   halfCategoryArrow: {
     alignSelf: 'flex-end',
@@ -502,4 +516,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

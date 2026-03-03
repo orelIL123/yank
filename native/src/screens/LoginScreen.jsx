@@ -148,6 +148,13 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           <TouchableOpacity
+            style={styles.forgotLink}
+            onPress={() => navigation.navigate('ForgotPassword')}
+          >
+            <Text style={styles.forgotLinkText}>{t('שכחתי סיסמה')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.loginButton}
             onPress={handleLogin}
             disabled={loading}
@@ -255,6 +262,16 @@ const styles = StyleSheet.create({
   registerLink: {
     marginTop: 20,
     alignItems: 'center',
+  },
+  forgotLink: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  forgotLinkText: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontFamily: 'Heebo_500Medium',
+    textDecorationLine: 'underline',
   },
   registerText: {
     color: '#fff',

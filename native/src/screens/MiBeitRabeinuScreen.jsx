@@ -691,7 +691,7 @@ export default function MiBeitRabeinuScreen({ navigation, userRole, userPermissi
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title="מהנעשה בבית המדרש"
+        title={t('מהנעשה בבית המדרש')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />

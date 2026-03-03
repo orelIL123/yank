@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "eas-build-pre-install": "./eas-hooks/pre-build.sh",
     "start": "expo start --dev-client",
     "start:go": "expo start --go",
     "android": "expo start --android --dev-client",

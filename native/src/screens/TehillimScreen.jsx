@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import db from '../services/database'
 import { auth } from '../config/firebase'
 import { tehillimData, tehillimDays } from '../data/tehillim'
@@ -36,6 +37,18 @@ function yearToHebrew(yearNum) {
   return s || 'א'
 }
 
+function getHebrewDay(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('he-IL', {
+    day: 'numeric',
+    calendar: 'hebrew'
+  })
+  const dayText = formatter.format(date)
+  let day = parseInt(String(dayText).replace(/\D/g, ''), 10) || 1
+  if (day < 1) day = 1
+  if (day > 30) day = 30
+  return day
+}
+
 // Get Hebrew date: day of month (1–30) and formatted string with year in Hebrew letters
 function getHebrewDateInfo() {
   const date = new Date()
@@ -58,11 +71,15 @@ function getHebrewDateInfo() {
   
   const yearHebrew = yearPart ? yearToHebrew(yearPart) : ''
   const fullDate = [day, monthPart, yearHebrew].filter(Boolean).join(' ')
-  
-  return { day, fullDate }
-}
 
-const TEHILLIM_CHAPTERS = 150
+  // Detect if current Hebrew month has 29 days (only relevant near month end).
+  const tomorrow = new Date(date)
+  tomorrow.setDate(date.getDate() + 1)
+  const tomorrowHebrewDay = getHebrewDay(tomorrow)
+  const monthLength = day === 29 && tomorrowHebrewDay === 1 ? 29 : 30
+  
+  return { day, fullDate, monthLength }
+}
 
 // Convert number to Hebrew letters (e.g., 6 -> ו׳, 118 -> קי״ח)
 function numberToHebrew(num) {
@@ -89,6 +106,22 @@ function numberToHebrew(num) {
   return hebrewLetters[num] || String(num)
 }
 
+function getTehillimDayPlan(day, monthLength = 30) {
+  const dayInfo = tehillimDays.find(d => d.day === day) || tehillimDays[0]
+  let chapters = [...(dayInfo?.chapters || [])]
+  let note = ''
+
+  if (day === 29 && monthLength === 29) {
+    const day30 = tehillimDays.find(d => d.day === 30)
+    if (day30?.chapters?.length) {
+      chapters = Array.from(new Set([...chapters, ...day30.chapters])).sort((a, b) => a - b)
+      note = 'בחודש חסר (כט ימים) אומרים ביום כט גם את פרקי יום ל.'
+    }
+  }
+
+  return { chapters, note }
+}
+
 function getLocalChapter(chapterNum) {
   const chapter = tehillimData.find(c => c.chapter === chapterNum)
   if (!chapter) {
@@ -96,6 +129,15 @@ function getLocalChapter(chapterNum) {
     return null
   }
   return chapter.verses
+}
+
+function buildDailyChapterTexts(chapters) {
+  return chapters
+    .map((chapterNum) => ({
+      chapterNum,
+      verses: getLocalChapter(chapterNum) || [],
+    }))
+    .filter(item => item.verses.length > 0)
 }
 
 export default function TehillimScreen({ navigation, userRole }) {
@@ -107,12 +149,7 @@ export default function TehillimScreen({ navigation, userRole }) {
   const [editChapters, setEditChapters] = useState('')
   const [editImageUrl, setEditImageUrl] = useState('')
   const [saving, setSaving] = useState(false)
-  const [selectedChapter, setSelectedChapter] = useState(null)
-  const [chapterVerses, setChapterVerses] = useState([])
-  const [loadingChapter, setLoadingChapter] = useState(false)
-  const [chapterError, setChapterError] = useState(null)
-  const [chapterInput, setChapterInput] = useState('')
-  const [dailyChaptersList, setDailyChapters] = useState([])
+  const [hebrewDateInfo, setHebrewDateInfo] = useState(getHebrewDateInfo())
 
   useEffect(() => {
     checkAdmin()
@@ -132,15 +169,12 @@ export default function TehillimScreen({ navigation, userRole }) {
   const loadDailyContent = async () => {
     try {
       setLoading(true)
-      const { day, fullDate } = getHebrewDateInfo()
+      const dateInfo = getHebrewDateInfo()
+      const { fullDate } = dateInfo
+      setHebrewDateInfo(dateInfo)
       
       // Get chapters for today from local data
-      const dayInfo = tehillimDays.find(d => d.day === day) || tehillimDays[0]
-      setDailyChapters(dayInfo.chapters)
-
-      const defaultChapters = dayInfo.chapters.length
-        ? `פרקים מ${numberToHebrew(dayInfo.chapters[0])}־${numberToHebrew(dayInfo.chapters[dayInfo.chapters.length - 1])}`
-        : ''
+      const defaultChapters = ''
       const defaultContent = {
         title: `תהילים יומי - ${fullDate}`,
         chapters: defaultChapters,
@@ -170,11 +204,10 @@ export default function TehillimScreen({ navigation, userRole }) {
         setEditImageUrl('')
       }
     } catch (error) {
-      const { day, fullDate } = getHebrewDateInfo()
-      const dayInfo = tehillimDays.find(d => d.day === day) || tehillimDays[0]
-      const defaultChapters = dayInfo.chapters.length
-        ? `פרקים מ${numberToHebrew(dayInfo.chapters[0])}־${numberToHebrew(dayInfo.chapters[dayInfo.chapters.length - 1])}`
-        : ''
+      const dateInfo = getHebrewDateInfo()
+      const { fullDate } = dateInfo
+      setHebrewDateInfo(dateInfo)
+      const defaultChapters = ''
       setDailyContent({
         title: `תהילים יומי - ${fullDate}`,
         chapters: defaultChapters,
@@ -217,37 +250,6 @@ export default function TehillimScreen({ navigation, userRole }) {
       }
     } finally {
       setSaving(false)
-    }
-  }
-
-  const loadChapter = (num) => {
-    if (num < 1 || num > TEHILLIM_CHAPTERS) {
-      Alert.alert('שגיאה', `מספר פרק לא תקין. יש להזין מספר בין 1 ל־${TEHILLIM_CHAPTERS}`)
-      return
-    }
-    
-    setSelectedChapter(num)
-    setLoadingChapter(true)
-    setChapterError(null)
-    
-    // Verify the chapter exists in data
-    const chapter = tehillimData.find(c => c.chapter === num)
-    if (!chapter) {
-      console.error(`Chapter ${num} not found in tehillimData`)
-      setChapterError(`פרק ${numberToHebrew(num)} לא נמצא במערכת`)
-      setChapterVerses([])
-      setLoadingChapter(false)
-      return
-    }
-    
-    const verses = chapter.verses
-    if (verses && verses.length > 0) {
-      setChapterVerses(verses)
-      setLoadingChapter(false)
-    } else {
-      setChapterError(`פרק ${numberToHebrew(num)} נמצא אבל אין בו פסוקים`)
-      setChapterVerses([])
-      setLoadingChapter(false)
     }
   }
 
@@ -298,7 +300,7 @@ export default function TehillimScreen({ navigation, userRole }) {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title="תהילים יומי"
+          title={t('תהילים יומי')}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
         />
@@ -310,11 +312,14 @@ export default function TehillimScreen({ navigation, userRole }) {
     )
   }
 
+  const todayPlan = getTehillimDayPlan(hebrewDateInfo.day, hebrewDateInfo.monthLength)
+  const todayChapterTexts = buildDailyChapterTexts(todayPlan.chapters)
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title="תהילים יומי"
+        title={t('תהילים יומי')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
         rightIcon={isAdmin ? "create-outline" : undefined}
@@ -331,150 +336,29 @@ export default function TehillimScreen({ navigation, userRole }) {
             <Ionicons name="book" size={48} color={PRIMARY_BLUE} />
           </View>
           <Text style={styles.mainTitle}>תהילים יומי</Text>
-          <Text style={styles.hebrewDate}>{getHebrewDateInfo().fullDate}</Text>
+          <Text style={styles.hebrewDate}>{hebrewDateInfo.fullDate}</Text>
         </View>
 
-        {/* Daily Chapters Quick Access */}
-        {dailyChaptersList.length > 0 && (
-          <View style={styles.dailyChaptersRow}>
-            <Text style={styles.dailyChaptersLabel}>פרקי היום:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {dailyChaptersList.map(num => (
-                <Pressable
-                  key={num}
-                  style={[styles.miniChapterChip, selectedChapter === num && styles.chapterChipActive]}
-                  onPress={() => loadChapter(num)}
-                >
-                  <Text style={[styles.miniChapterChipText, selectedChapter === num && styles.chapterChipTextActive]}>{numberToHebrew(num)}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Daily Content Card */}
-        {dailyContent && (dailyContent.title || dailyContent.chapters || dailyContent.imageUrl) ? (
-          <View style={styles.contentCard}>
-            {dailyContent.title && (
-              <Text style={styles.contentTitle}>{dailyContent.title}</Text>
-            )}
-
-            {dailyContent.imageUrl && (
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{ uri: dailyContent.imageUrl }}
-                  style={styles.contentImage}
-                  resizeMode="contain"
-                />
-              </View>
-            )}
-
-            {(() => {
-              const { day } = getHebrewDateInfo()
-              const dayInfo = tehillimDays.find(d => d.day === day) || tehillimDays[0]
-              const chaptersLabel = dayInfo.chapters.length
-                ? `פרקים מ${numberToHebrew(dayInfo.chapters[0])}־${numberToHebrew(dayInfo.chapters[dayInfo.chapters.length - 1])}`
-                : ''
-              return chaptersLabel ? (
-                <View style={styles.chaptersContainer}>
-                  <Text style={styles.chaptersTitle}>פרקים להיום:</Text>
-                  <Text style={styles.chaptersText}>{chaptersLabel}</Text>
-                </View>
-              ) : null
-            })()}
-
-            {dailyContent.updatedAt && (
-              <Text style={styles.updateTime}>
-                עודכן לאחרונה: {new Date(dailyContent.updatedAt).toLocaleString('he-IL')}
+        <View style={styles.dailyFullCard}>
+          <Text style={styles.dailyFullTitle}>
+            יום {numberToHebrew(hebrewDateInfo.day)} לחודש ({hebrewDateInfo.fullDate})
+          </Text>
+          {todayPlan.note ? <Text style={styles.dailyNote}>{todayPlan.note}</Text> : null}
+          {todayChapterTexts.map((chapter) => (
+            <View key={chapter.chapterNum} style={styles.dailyChapterBlock}>
+              <Text style={styles.dailyChapterTitle}>
+                תהלים פרק {numberToHebrew(chapter.chapterNum)}
               </Text>
-            )}
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="book-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-            <Text style={styles.emptyText}>אין תוכן זמין להיום</Text>
-            {isAdmin && (
-              <Pressable
-                style={styles.addButton}
-                onPress={() => setEditModalVisible(true)}
-              >
-                <Text style={styles.addButtonText}>הוסף תוכן</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {/* Read full chapter */}
-        <View style={styles.readChapterCard}>
-          <Text style={styles.readChapterTitle}>קרא פרק מלא</Text>
-          <Text style={styles.readChapterSubtitle}>לחיצה: פרקים א–ל. להצגת פרק 31–150 הקלד מספר ולחץ הצג</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chapterChipsRow}
-          >
-            {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => (
-              <Pressable
-                key={num}
-                style={[styles.chapterChip, selectedChapter === num && styles.chapterChipActive]}
-                onPress={() => loadChapter(num)}
-                disabled={loadingChapter}
-              >
-                <Text style={[styles.chapterChipText, selectedChapter === num && styles.chapterChipTextActive]}>{numberToHebrew(num)}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-          <View style={styles.chapterInputRow}>
-            <Pressable
-              style={styles.chapterGoButton}
-              onPress={() => {
-                const n = parseInt(chapterInput, 10)
-                if (n >= 1 && n <= TEHILLIM_CHAPTERS) loadChapter(n)
-                else Alert.alert('שגיאה', `הזן מספר בין 1 ל־${TEHILLIM_CHAPTERS}`)
-              }}
-              disabled={loadingChapter}
-            >
-              <Text style={styles.chapterGoButtonText}>הצג פרק</Text>
-            </Pressable>
-            <TextInput
-              style={styles.chapterInput}
-              value={chapterInput}
-              onChangeText={setChapterInput}
-              placeholder="הקלד פרק 1–150"
-              placeholderTextColor="#9ca3af"
-              keyboardType="number-pad"
-              maxLength={3}
-            />
-          </View>
-          {loadingChapter && (
-            <View style={styles.chapterLoading}>
-              <ActivityIndicator size="small" color={PRIMARY_BLUE} />
-              <Text style={styles.chapterLoadingText}>טוען פרק...</Text>
-            </View>
-          )}
-          {chapterError && (
-            <Text style={styles.chapterError}>{chapterError}</Text>
-          )}
-          {!loadingChapter && chapterVerses.length > 0 && (
-            <View style={styles.versesContainer}>
-              <Text style={styles.versesTitle}>תהלים פרק {numberToHebrew(selectedChapter)}</Text>
-              {chapterVerses.map((verse, idx) => (
-                <View key={idx} style={styles.verseRow}>
+              {chapter.verses.map((verse, idx) => (
+                <View key={`${chapter.chapterNum}-${idx}`} style={styles.verseRow}>
                   <Text style={styles.verseNum}>{numberToHebrew(idx + 1)}</Text>
                   <Text style={styles.verseText}>{verse}</Text>
                 </View>
               ))}
             </View>
-          )}
+          ))}
         </View>
 
-        {/* Info Card */}
-        <View style={styles.infoCard}>
-          <Ionicons name="information-circle-outline" size={24} color={PRIMARY_BLUE} />
-          <Text style={styles.infoText}>
-            תוכן זה מתעדכן יומית על ידי האדמין ומציג את פרקי התהילים הרלוונטים ליום
-          </Text>
-        </View>
       </ScrollView>
 
       {/* Edit Modal */}
@@ -625,115 +509,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
   },
-  dailyChaptersRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 4,
-  },
-  dailyChaptersLabel: {
-    fontSize: 16,
-    fontFamily: 'Heebo_700Bold',
-    color: DEEP_BLUE,
-    marginLeft: 12,
-  },
-  miniChapterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: 'rgba(30,58,138,0.08)',
-    marginHorizontal: 4,
-    minWidth: 36,
-    alignItems: 'center',
-  },
-  miniChapterChipText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-    color: PRIMARY_BLUE,
-  },
-  contentCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(11,27,58,0.08)',
-  },
-  contentTitle: {
-    fontSize: 22,
-    fontFamily: 'Heebo_700Bold',
-    color: DEEP_BLUE,
-    textAlign: 'right',
-    marginBottom: 16,
-  },
-  imageContainer: {
-    marginVertical: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  contentImage: {
-    width: '100%',
-    height: 250,
-  },
-  chaptersContainer: {
-    backgroundColor: 'rgba(30,58,138,0.05)',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
-  },
-  chaptersTitle: {
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-    color: PRIMARY_BLUE,
-    textAlign: 'right',
-    marginBottom: 8,
-  },
-  chaptersText: {
-    fontSize: 18,
-    fontFamily: 'Heebo_400Regular',
-    color: DEEP_BLUE,
-    textAlign: 'right',
-    lineHeight: 28,
-  },
-  updateTime: {
-    fontSize: 12,
-    fontFamily: 'Poppins_400Regular',
-    color: '#9ca3af',
-    textAlign: 'right',
-    marginTop: 16,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    marginBottom: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#6b7280',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  addButton: {
-    backgroundColor: PRIMARY_BLUE,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-  readChapterCard: {
+  dailyFullCard: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 20,
@@ -746,109 +522,33 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  readChapterTitle: {
+  dailyFullTitle: {
     fontSize: 18,
     fontFamily: 'Heebo_700Bold',
     color: DEEP_BLUE,
     textAlign: 'right',
     marginBottom: 4,
   },
-  readChapterSubtitle: {
+  dailyNote: {
+    marginBottom: 12,
     fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Heebo_400Regular',
     color: '#6b7280',
     textAlign: 'right',
+    lineHeight: 20,
+  },
+  dailyChapterBlock: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 14,
+    padding: 12,
     marginBottom: 12,
   },
-  chapterChipsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 8,
-    flexWrap: 'nowrap',
-  },
-  chapterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(30,58,138,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(30,58,138,0.25)',
-    minWidth: 44,
-    alignItems: 'center',
-  },
-  chapterChipActive: {
-    backgroundColor: PRIMARY_BLUE,
-    borderColor: PRIMARY_BLUE,
-  },
-  chapterChipText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-    color: PRIMARY_BLUE,
-  },
-  chapterChipTextActive: {
-    color: '#fff',
-  },
-  chapterInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 12,
-  },
-  chapterInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(11,27,58,0.2)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    fontFamily: 'Heebo_400Regular',
-    color: DEEP_BLUE,
-    backgroundColor: '#f9fafb',
-    textAlign: 'right',
-  },
-  chapterGoButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: PRIMARY_BLUE,
-  },
-  chapterGoButtonText: {
-    fontSize: 15,
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#fff',
-  },
-  chapterLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  chapterLoadingText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    color: PRIMARY_BLUE,
-  },
-  chapterError: {
-    fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    color: '#ef4444',
-    textAlign: 'center',
-    paddingVertical: 12,
-  },
-  versesContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(11,27,58,0.08)',
-  },
-  versesTitle: {
-    fontSize: 18,
+  dailyChapterTitle: {
+    fontSize: 17,
     fontFamily: 'Heebo_700Bold',
     color: PRIMARY_BLUE,
     textAlign: 'right',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   verseRow: {
     flexDirection: 'row-reverse',
@@ -873,22 +573,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
     lineHeight: 32,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(30,58,138,0.1)',
-    borderRadius: 16,
-    padding: 16,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-    color: DEEP_BLUE,
-    textAlign: 'right',
-    lineHeight: 22,
   },
   loadingContainer: {
     flex: 1,

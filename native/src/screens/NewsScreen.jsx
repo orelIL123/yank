@@ -41,7 +41,7 @@ const DEEP_BLUE = '#0b1b3a'
 export default function NewsScreen({ navigation, userRole, userPermissions }) {
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
-  const screenTitle = 'תיעודים ועדכונים'
+  const screenTitle = t('תיעודים ועדכונים')
 
   useEffect(() => {
     loadNews()
@@ -117,7 +117,7 @@ export default function NewsScreen({ navigation, userRole, userPermissions }) {
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.subtitle}>תיעודים ועדכונים מהעמותה</Text>
+        <Text style={styles.subtitle}>{t('תיעודים ועדכונים מהעמותה')}</Text>
 
         {articles.length === 0 ? (
             <View style={styles.emptyState}>

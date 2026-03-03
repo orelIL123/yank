@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, 
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import db from '../services/database'
 import { canManageBooks } from '../utils/permissions'
 
@@ -151,14 +152,24 @@ export default function BooksScreen({ navigation, userRole, userPermissions }) {
                         <Ionicons name="cart-outline" size={16} color="#fff" />
                     </Pressable>
                     {canManage && (
-                        <>
-                            <Pressable onPress={() => handleOpenEdit(item)} style={styles.adminIconBtn}>
-                                <Ionicons name="pencil" size={20} color={PRIMARY_BLUE} />
+                        <View style={styles.adminActions}>
+                            <Pressable 
+                                onPress={() => handleOpenEdit(item)} 
+                                style={[styles.adminActionBtn, styles.editActionBtn]}
+                                accessibilityLabel="ערוך מוצר"
+                            >
+                                <Ionicons name="pencil" size={18} color="#fff" />
+                                <Text style={styles.adminActionText}>ערוך</Text>
                             </Pressable>
-                            <Pressable onPress={() => handleDeleteBook(item)} style={styles.adminIconBtn}>
-                                <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                            <Pressable 
+                                onPress={() => handleDeleteBook(item)} 
+                                style={[styles.adminActionBtn, styles.deleteActionBtn]}
+                                accessibilityLabel="מחק מוצר"
+                            >
+                                <Ionicons name="trash-outline" size={18} color="#fff" />
+                                <Text style={styles.adminActionText}>מחק</Text>
                             </Pressable>
-                        </>
+                        </View>
                     )}
                 </View>
             </View>
@@ -171,8 +182,8 @@ export default function BooksScreen({ navigation, userRole, userPermissions }) {
             <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
 
             <AppHeader
-                title="חנות קודש"
-                subtitle="ספרים ומוצרים"
+                title={t('חנות קודש')}
+                subtitle={t('ספרים ומוצרים')}
                 showBackButton={true}
                 onBackPress={() => navigation.goBack()}
             />
@@ -362,6 +373,29 @@ const styles = StyleSheet.create({
         padding: 8,
         borderRadius: 8,
         backgroundColor: 'rgba(30,58,138,0.08)',
+    },
+    adminActions: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    adminActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 8,
+        gap: 4,
+    },
+    editActionBtn: {
+        backgroundColor: '#10b981', // green
+    },
+    deleteActionBtn: {
+        backgroundColor: '#ef4444', // red
+    },
+    adminActionText: {
+        color: '#fff',
+        fontSize: 12,
+        fontFamily: 'Heebo_600SemiBold',
     },
     modalOverlay: {
         flex: 1,

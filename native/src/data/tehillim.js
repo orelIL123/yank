@@ -3277,23 +3277,23 @@ export const tehillimDays = [
   { day: 9, chapters: [49, 50, 51, 52, 53, 54] },
   { day: 10, chapters: [55, 56, 57, 58, 59] },
   { day: 11, chapters: [60, 61, 62, 63, 64, 65] },
-  { day: 12, chapters: [66, 67, 68] }, // סו–סח
-  { day: 13, chapters: [73, 74, 75, 76] },
-  { day: 14, chapters: [77, 78] },
-  { day: 15, chapters: [79, 80, 81, 82] },
-  { day: 16, chapters: [83, 84, 85, 86, 87, 88, 89] },
-  { day: 17, chapters: [90, 91, 92, 93, 94, 95, 96] },
-  { day: 18, chapters: [97, 98, 99, 100, 101, 102, 103] },
-  { day: 19, chapters: [104, 105] },
-  { day: 20, chapters: [106, 107] },
-  { day: 21, chapters: [108, 109, 110, 111, 112] },
-  { day: 22, chapters: [113, 114, 115, 116, 117, 118] },
-  { day: 23, chapters: [119] }, // 1-88
-  { day: 24, chapters: [119] }, // 89-176 (Note: Chapter 119 is usually split, but for now we keep it as one)
-  { day: 25, chapters: [120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134] },
-  { day: 26, chapters: [135, 136, 137, 138, 139] },
-  { day: 27, chapters: [140, 141, 142, 143, 144] },
-  { day: 28, chapters: [145, 146, 147, 148, 149, 150] },
-  { day: 29, chapters: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }, // Simplified for 29/30 days
-  { day: 30, chapters: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }
+  { day: 12, chapters: [66, 67, 68] },
+  { day: 13, chapters: [69, 70, 71] },
+  { day: 14, chapters: [72, 73, 74, 75, 76] },
+  { day: 15, chapters: [77, 78] },
+  { day: 16, chapters: [79, 80, 81, 82] },
+  { day: 17, chapters: [83, 84, 85, 86, 87] },
+  { day: 18, chapters: [88, 89] },
+  { day: 19, chapters: [90, 91, 92, 93, 94, 95, 96] },
+  { day: 20, chapters: [97, 98, 99, 100, 101, 102, 103] },
+  { day: 21, chapters: [104, 105] },
+  { day: 22, chapters: [106, 107] },
+  { day: 23, chapters: [108, 109, 110, 111, 112] },
+  { day: 24, chapters: [113, 114, 115, 116, 117, 118] },
+  { day: 25, chapters: [119] },
+  { day: 26, chapters: [119] },
+  { day: 27, chapters: [120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134] },
+  { day: 28, chapters: [135, 136, 137, 138, 139] },
+  { day: 29, chapters: [140, 141, 142, 143, 144] },
+  { day: 30, chapters: [145, 146, 147, 148, 149, 150] }
 ];

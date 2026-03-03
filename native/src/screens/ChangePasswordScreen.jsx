@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { t } from '../utils/i18n';
 
 export default function ChangePasswordScreen({ navigation }) {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -28,9 +29,9 @@ export default function ChangePasswordScreen({ navigation }) {
   // Check if user is logged in, redirect to login if not
   useEffect(() => {
     if (!auth.currentUser) {
-      Alert.alert('נדרש התחברות', 'עליך להתחבר כדי לשנות את הסיסמה', [
+      Alert.alert(t('נדרש התחברות'), t('עליך להתחבר כדי לשנות את הסיסמה'), [
         {
-          text: 'אישור',
+          text: t('אישור'),
           onPress: () => navigation.navigate('Login')
         }
       ]);
@@ -39,22 +40,22 @@ export default function ChangePasswordScreen({ navigation }) {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('שגיאה', 'נא למלא את כל השדות');
+      Alert.alert(t('שגיאה'), t('נא למלא את כל השדות'));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('שגיאה', 'הסיסמה החדשה ואישור הסיסמה אינם תואמים');
+      Alert.alert(t('שגיאה'), t('הסיסמה החדשה ואישור הסיסמה אינם תואמים'));
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert('שגיאה', 'הסיסמה החדשה חייבת להכיל לפחות 6 תווים');
+      Alert.alert(t('שגיאה'), t('הסיסמה החדשה חייבת להכיל לפחות 6 תווים'));
       return;
     }
 
     if (newPassword === currentPassword) {
-      Alert.alert('שגיאה', 'הסיסמה החדשה זהה לסיסמה הנוכחית');
+      Alert.alert(t('שגיאה'), t('הסיסמה החדשה זהה לסיסמה הנוכחית'));
       return;
     }
 
@@ -62,7 +63,7 @@ export default function ChangePasswordScreen({ navigation }) {
     try {
       const user = auth.currentUser;
       if (!user || !user.email) {
-        throw new Error('משתמש לא מחובר');
+        throw new Error(t('משתמש לא מחובר'));
       }
 
       // Re-authenticate user before changing password
@@ -73,32 +74,32 @@ export default function ChangePasswordScreen({ navigation }) {
       await updatePassword(user, newPassword);
 
       Alert.alert(
-        'הצלחה!',
-        'הסיסמה שונתה בהצלחה',
+        t('הצלחה!'),
+        t('הסיסמה שונתה בהצלחה'),
         [
           {
-            text: 'אישור',
+            text: t('אישור'),
             onPress: () => navigation.goBack()
           }
         ]
       );
     } catch (error) {
       console.error('Change password error:', error);
-      let errorMessage = 'אירעה שגיאה בשינוי הסיסמה';
+      let errorMessage = t('אירעה שגיאה בשינוי הסיסמה');
 
       switch (error.code) {
         case 'auth/wrong-password':
-          errorMessage = 'הסיסמה הנוכחית שגויה';
+          errorMessage = t('הסיסמה הנוכחית שגויה');
           break;
         case 'auth/weak-password':
-          errorMessage = 'הסיסמה החדשה חלשה מדי';
+          errorMessage = t('הסיסמה החדשה חלשה מדי');
           break;
         case 'auth/requires-recent-login':
-          errorMessage = 'נדרשת התחברות מחדש. אנא התחבר שוב ונסה שנית';
+          errorMessage = t('נדרשת התחברות מחדש. אנא התחבר שוב ונסה שנית');
           break;
       }
 
-      Alert.alert('שגיאה', errorMessage);
+      Alert.alert(t('שגיאה'), errorMessage);
     } finally {
       setLoading(false);
     }
@@ -126,7 +127,7 @@ export default function ChangePasswordScreen({ navigation }) {
             >
               <Ionicons name="arrow-forward" size={24} color="#FFD700" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>שינוי סיסמה</Text>
+            <Text style={styles.headerTitle}>{t('שינוי סיסמה')}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -135,11 +136,11 @@ export default function ChangePasswordScreen({ navigation }) {
               <Ionicons name="lock-closed" size={60} color="#FFD700" />
             </View>
 
-            <Text style={styles.subtitle}>הזן סיסמה נוכחית וסיסמה חדשה</Text>
+            <Text style={styles.subtitle}>{t('הזן סיסמה נוכחית וסיסמה חדשה')}</Text>
 
             {/* Current Password */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>סיסמה נוכחית</Text>
+              <Text style={styles.label}>{t('סיסמה נוכחית')}</Text>
               <View style={styles.passwordInputContainer}>
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -155,7 +156,7 @@ export default function ChangePasswordScreen({ navigation }) {
                   style={styles.input}
                   value={currentPassword}
                   onChangeText={setCurrentPassword}
-                  placeholder="הזן סיסמה נוכחית"
+                  placeholder={t('הזן סיסמה נוכחית')}
                   placeholderTextColor="#666"
                   secureTextEntry={!showCurrentPassword}
                   textAlign="right"
@@ -166,7 +167,7 @@ export default function ChangePasswordScreen({ navigation }) {
 
             {/* New Password */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>סיסמה חדשה</Text>
+              <Text style={styles.label}>{t('סיסמה חדשה')}</Text>
               <View style={styles.passwordInputContainer}>
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -182,7 +183,7 @@ export default function ChangePasswordScreen({ navigation }) {
                   style={styles.input}
                   value={newPassword}
                   onChangeText={setNewPassword}
-                  placeholder="הזן סיסמה חדשה (לפחות 6 תווים)"
+                  placeholder={t('הזן סיסמה חדשה (לפחות 6 תווים)')}
                   placeholderTextColor="#666"
                   secureTextEntry={!showNewPassword}
                   textAlign="right"
@@ -193,7 +194,7 @@ export default function ChangePasswordScreen({ navigation }) {
 
             {/* Confirm Password */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>אישור סיסמה חדשה</Text>
+              <Text style={styles.label}>{t('אישור סיסמה חדשה')}</Text>
               <View style={styles.passwordInputContainer}>
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -209,7 +210,7 @@ export default function ChangePasswordScreen({ navigation }) {
                   style={styles.input}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
-                  placeholder="הזן סיסמה חדשה שוב"
+                  placeholder={t('הזן סיסמה חדשה שוב')}
                   placeholderTextColor="#666"
                   secureTextEntry={!showConfirmPassword}
                   textAlign="right"
@@ -222,7 +223,7 @@ export default function ChangePasswordScreen({ navigation }) {
             <View style={styles.infoBox}>
               <Ionicons name="information-circle" size={20} color="#FFD700" />
               <Text style={styles.infoText}>
-                הסיסמה חייבת להכיל לפחות 6 תווים
+                {t('הסיסמה חייבת להכיל לפחות 6 תווים')}
               </Text>
             </View>
 
@@ -234,7 +235,7 @@ export default function ChangePasswordScreen({ navigation }) {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.changeButtonText}>שנה סיסמה</Text>
+                <Text style={styles.changeButtonText}>{t('שנה סיסמה')}</Text>
               )}
             </TouchableOpacity>
           </View>

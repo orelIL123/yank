@@ -1,13 +1,19 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { isAdmin } from '../utils/permissions'
+import { getLocale, initLocale, setLocale, t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
 const DEEP_BLUE = '#0b1b3a'
+const LANGUAGE_OPTIONS = [
+    { key: 'he', label: 'עברית' },
+    { key: 'en', label: 'אנגלית' },
+    { key: 'fr', label: 'צרפתית' },
+]
 
 const MENU_ITEMS = [
     { id: 'learningLibrary', label: 'ספריית לימוד', icon: 'library-outline', screen: 'LearningLibrary' },
@@ -29,11 +35,25 @@ const MENU_ITEMS = [
 ]
 
 export default function MenuDrawer({ visible, onClose, navigation, userRole }) {
+    const insets = useSafeAreaInsets()
+    const [currentLocale, setCurrentLocale] = useState(getLocale())
+
     const handleNavigate = (screen) => {
         onClose()
         setTimeout(() => {
             navigation?.navigate(screen)
         }, 300)
+    }
+
+    useEffect(() => {
+        initLocale().then((locale) => {
+            setCurrentLocale(locale)
+        })
+    }, [])
+
+    const handleLanguageChange = async (locale) => {
+        const next = await setLocale(locale)
+        setCurrentLocale(next)
     }
 
     // Debug: Log userRole
@@ -56,6 +76,7 @@ export default function MenuDrawer({ visible, onClose, navigation, userRole }) {
             visible={visible}
             animationType="fade"
             transparent={true}
+            statusBarTranslucent={true}
             onRequestClose={onClose}
         >
             <Pressable
@@ -64,10 +85,18 @@ export default function MenuDrawer({ visible, onClose, navigation, userRole }) {
                 activeOpacity={1}
             >
                 <Pressable
-                    style={styles.drawerContainer}
+                    style={[
+                        styles.drawerContainer,
+                        {
+                            paddingTop: 0,
+                            paddingBottom: 0,
+                            paddingRight: 0,
+                            paddingLeft: 0,
+                        },
+                    ]}
                     onPress={(e) => e.stopPropagation()}
                 >
-                    <SafeAreaView style={styles.drawer}>
+                    <SafeAreaView style={[styles.drawer, { paddingTop: Math.max(insets.top, 4), paddingBottom: Math.max(insets.bottom, 4) }]} edges={['top', 'bottom']}>
                         <LinearGradient
                             colors={[BG, '#f5f5f5']}
                             style={StyleSheet.absoluteFill}
@@ -82,8 +111,33 @@ export default function MenuDrawer({ visible, onClose, navigation, userRole }) {
                             >
                                 <Ionicons name="close" size={24} color={PRIMARY_BLUE} />
                             </Pressable>
-                            <Text style={styles.drawerTitle}>תפריט ראשי</Text>
+                            <Text style={styles.drawerTitle}>{t('תפריט ראשי')}</Text>
                             <View style={{ width: 36 }} />
+                        </View>
+
+                        <View style={styles.languageBar}>
+                            <Text style={styles.languageTitle}>{t('שפה')}</Text>
+                            <View style={styles.languageButtonsRow}>
+                                {LANGUAGE_OPTIONS.map((option) => (
+                                    <Pressable
+                                        key={option.key}
+                                        onPress={() => handleLanguageChange(option.key)}
+                                        style={[
+                                            styles.languageButton,
+                                            currentLocale === option.key && styles.languageButtonActive,
+                                        ]}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.languageButtonText,
+                                                currentLocale === option.key && styles.languageButtonTextActive,
+                                            ]}
+                                        >
+                                            {t(option.label)}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </View>
                         </View>
 
                         {/* Menu Items */}
@@ -105,7 +159,7 @@ export default function MenuDrawer({ visible, onClose, navigation, userRole }) {
                                         <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
                                     </View>
                                     <View style={styles.menuItemContent}>
-                                        <Text style={styles.menuItemLabel}>{item.label}</Text>
+                                        <Text style={styles.menuItemLabel}>{t(item.label)}</Text>
                                         <View style={styles.menuItemIcon}>
                                             <Ionicons name={item.icon} size={24} color={PRIMARY_BLUE} />
                                         </View>
@@ -117,10 +171,10 @@ export default function MenuDrawer({ visible, onClose, navigation, userRole }) {
                         {/* Footer */}
                         <View style={styles.drawerFooter}>
                             <Text style={styles.footerText}>
-                                הגאון הינוקא שליט״א
+                                {t('הגאון הינוקא שליט״א')}
                             </Text>
                             <Text style={styles.footerSubtext}>
-                                "הודו לה׳ כי טוב"
+                                "{t('הודו לה׳ כי טוב')}"
                             </Text>
                         </View>
                     </SafeAreaView>
@@ -139,14 +193,16 @@ const styles = StyleSheet.create({
     },
     drawerContainer: {
         height: '100%',
-        width: '75%',
-        maxWidth: 320,
+        width: '88%',
+        maxWidth: 420,
     },
     drawer: {
         flex: 1,
         backgroundColor: BG,
-        borderTopLeftRadius: 0,
-        borderBottomLeftRadius: 0,
+        borderTopLeftRadius: 18,
+        borderBottomLeftRadius: 18,
+        borderTopRightRadius: 0,
+        borderBottomRightRadius: 0,
         overflow: 'hidden',
     },
     drawerHeader: {
@@ -177,8 +233,47 @@ const styles = StyleSheet.create({
     menuScroll: {
         flex: 1,
     },
+    languageBar: {
+        paddingHorizontal: 12,
+        paddingTop: 10,
+        paddingBottom: 8,
+    },
+    languageTitle: {
+        fontSize: 13,
+        fontFamily: 'Heebo_600SemiBold',
+        color: '#475569',
+        textAlign: 'right',
+        marginBottom: 8,
+    },
+    languageButtonsRow: {
+        flexDirection: 'row-reverse',
+        gap: 8,
+    },
+    languageButton: {
+        borderWidth: 1,
+        borderColor: 'rgba(11,27,58,0.15)',
+        backgroundColor: '#fff',
+        borderRadius: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+    },
+    languageButtonActive: {
+        borderColor: PRIMARY_BLUE,
+        backgroundColor: 'rgba(30,58,138,0.08)',
+    },
+    languageButtonText: {
+        fontSize: 12,
+        fontFamily: 'Heebo_500Medium',
+        color: '#475569',
+        textAlign: 'center',
+    },
+    languageButtonTextActive: {
+        color: PRIMARY_BLUE,
+        fontFamily: 'Heebo_700Bold',
+    },
     menuContent: {
-        padding: 14,
+        paddingVertical: 14,
+        paddingHorizontal: 12,
         gap: 6,
     },
     menuItem: {
@@ -220,6 +315,7 @@ const styles = StyleSheet.create({
         fontFamily: 'Heebo_600SemiBold',
         color: DEEP_BLUE,
         textAlign: 'right',
+        flexShrink: 1,
     },
     menuItemArrow: {
         opacity: 0.5,

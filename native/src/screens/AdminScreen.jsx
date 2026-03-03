@@ -26,7 +26,7 @@ const TABS = [
   { id: 'news', label: 'חדשות', icon: 'newspaper-outline' },
   { id: 'newsletters', label: 'עלונים', icon: 'document-text-outline' },
   { id: 'dailyLearning', label: 'לימוד יומי', icon: 'school-outline' },
-  { id: 'shortLessons', label: 'קטעי לימוד קצרים', icon: 'videocam-outline' },
+  { id: 'shortLessons', label: 'שיחות ופנינים', icon: 'videocam-outline' },
   { id: 'longLessons', label: 'שיעורים ארוכים', icon: 'film-outline' },
   { id: 'hoduLaHashem', label: 'הודו לה\'', icon: 'sparkles-outline' },
   { id: 'music', label: 'ניגונים', icon: 'musical-notes-outline' },
@@ -3541,7 +3541,7 @@ function ShortLessonsForm() {
       </Pressable>
 
       <Text style={styles.note}>
-        💡 השיעור הקצר יישמר ב-Firestore ויופיע באפליקציה במסך "קטעי לימוד קצרים".
+        💡 השיעור הקצר יישמר ב-Firestore ויופיע באפליקציה במסך "שיחות ופנינים".
       </Text>
     </View>
   )

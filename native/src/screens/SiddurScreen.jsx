@@ -7,6 +7,7 @@ import { WebView } from 'react-native-webview'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -209,8 +210,8 @@ export default function SiddurScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title="סידור"
-        subtitle="סידור תפילה"
+        title={t('סידור')}
+        subtitle={t('סידור תפילה')}
         showBackButton={true}
         onBackPress={() => {
           // If viewing a section, go back to list. Otherwise, go back to previous screen
@@ -850,4 +851,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 })
-

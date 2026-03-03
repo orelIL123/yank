@@ -7,6 +7,7 @@ import * as FileSystem from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import { scheduleNotification } from '../utils/notifications'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -170,7 +171,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <AppHeader
-          title="תפילה"
+          title={t('תפילה')}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
         />

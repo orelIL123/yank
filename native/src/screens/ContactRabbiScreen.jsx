@@ -81,7 +81,7 @@ export default function ContactRabbiScreen({ navigation }) {
           >
             <Ionicons name="arrow-back" size={24} color={PRIMARY_BLUE} />
           </Pressable>
-          <Text style={styles.headerTitle}>כתיבה לרב</Text>
+          <Text style={styles.headerTitle}>כתוב פיתקא</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -92,10 +92,7 @@ export default function ContactRabbiScreen({ navigation }) {
         >
           <View style={styles.introCard}>
             <Ionicons name="mail-outline" size={32} color={PRIMARY_BLUE} />
-            <Text style={styles.introTitle}>כתוב לרבי יהודה בארי</Text>
-            <Text style={styles.introText}>
-              מלא את הטופס ונשלח את ההודעה שלך. תקבל תשובה בהקדם האפשרי.
-            </Text>
+            <Text style={styles.introTitle}>כתוב קוויטלעך</Text>
           </View>
 
           <View style={styles.formCard}>
@@ -176,7 +173,7 @@ export default function ContactRabbiScreen({ navigation }) {
                 ) : (
                   <>
                     <Ionicons name="send-outline" size={20} color="#fff" />
-                    <Text style={styles.submitButtonText}>שלח הודעה</Text>
+                    <Text style={styles.submitButtonText}>שלח פיתקא</Text>
                   </>
                 )}
               </LinearGradient>
@@ -252,14 +249,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     color: DEEP_BLUE,
     marginTop: 12,
-    marginBottom: 8,
-  },
-  introText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 20,
   },
   formCard: {
     backgroundColor: '#ffffff',

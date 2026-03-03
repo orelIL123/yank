@@ -277,7 +277,7 @@ export default function PidyonNefeshScreen({ navigation, userRole, userPermissio
           </View>
         )}
 
-        {/* Pidyon List */}
+        {/* Pidyon List – compact grid */}
         {pidyonList.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="heart-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
@@ -285,42 +285,44 @@ export default function PidyonNefeshScreen({ navigation, userRole, userPermissio
             <Text style={styles.emptySubtext}>תוכל להוסיף שם חדש</Text>
           </View>
         ) : (
-          pidyonList.map((pidyon, idx) => (
-            <View key={pidyon.id} style={[styles.pidyonCard, idx === 0 && styles.pidyonCardFirst]}>
-              <View style={styles.pidyonContent}>
-                <View style={styles.pidyonIcon}>
-                  <Ionicons name="heart" size={28} color={PRIMARY_BLUE} />
+          <View style={styles.pidyonGrid}>
+            {pidyonList.map((pidyon) => (
+              <View key={pidyon.id} style={styles.pidyonCardCompact}>
+                <View style={styles.pidyonCardCompactInner}>
+                  <Ionicons name="heart" size={16} color={PRIMARY_BLUE} />
+                  <View style={styles.pidyonCardCompactText}>
+                    <Text style={styles.pidyonCardCompactName} numberOfLines={1}>
+                      {pidyon.name}
+                    </Text>
+                    <Text style={styles.pidyonCardCompactMother} numberOfLines={1}>
+                      בן/בת {pidyon.motherName}
+                    </Text>
+                    {pidyon.description ? (
+                      <Text style={styles.pidyonCardCompactDesc} numberOfLines={1}>{pidyon.description}</Text>
+                    ) : null}
+                  </View>
                 </View>
-                <View style={styles.pidyonTextBlock}>
-                  <Text style={styles.pidyonName}>
-                    {pidyon.name} בן/בת {pidyon.motherName}
-                  </Text>
-                  {pidyon.description && (
-                    <Text style={styles.pidyonDesc}>{pidyon.description}</Text>
-                  )}
-                  <Text style={styles.pidyonDate}>{formatDate(pidyon.createdAt)}</Text>
-                </View>
+                {isAdmin && (
+                  <View style={styles.pidyonCardCompactActions}>
+                    <Pressable
+                      style={styles.pidyonActionBtn}
+                      onPress={() => handleEdit(pidyon)}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="create-outline" size={14} color={PRIMARY_BLUE} />
+                    </Pressable>
+                    <Pressable
+                      style={[styles.pidyonActionBtn, styles.pidyonActionBtnDelete]}
+                      onPress={() => handleDelete(pidyon)}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                    </Pressable>
+                  </View>
+                )}
               </View>
-              {isAdmin && (
-                <View style={styles.adminActions}>
-                  <Pressable
-                    style={styles.editButton}
-                    onPress={() => handleEdit(pidyon)}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="create-outline" size={20} color={PRIMARY_BLUE} />
-                  </Pressable>
-                  <Pressable
-                    style={styles.deleteButton}
-                    onPress={() => handleDelete(pidyon)}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          ))
+            ))}
+          </View>
         )}
 
         <View style={styles.footerCard}>
@@ -478,57 +480,68 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
   },
-  pidyonCard: {
+  pidyonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  pidyonCardCompact: {
+    width: '31%',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 10,
+    padding: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(11,27,58,0.08)',
   },
-  pidyonCardFirst: {
-    marginTop: 6,
-  },
-  pidyonContent: {
+  pidyonCardCompactInner: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
-  },
-  pidyonIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(30,58,138,0.1)',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
   },
-  pidyonTextBlock: {
+  pidyonCardCompactText: {
     flex: 1,
     alignItems: 'flex-end',
-    gap: 4,
+    minWidth: 0,
   },
-  pidyonName: {
+  pidyonCardCompactName: {
     color: DEEP_BLUE,
-    fontSize: 17,
+    fontSize: 11,
     fontFamily: 'Poppins_600SemiBold',
     textAlign: 'right',
   },
-  pidyonDesc: {
+  pidyonCardCompactMother: {
     color: '#6b7280',
-    fontSize: 14,
+    fontSize: 10,
     fontFamily: 'Poppins_400Regular',
     textAlign: 'right',
+    marginTop: 1,
   },
-  pidyonDate: {
+  pidyonCardCompactDesc: {
     color: '#9ca3af',
-    fontSize: 12,
+    fontSize: 9,
     fontFamily: 'Poppins_400Regular',
     textAlign: 'right',
-    marginTop: 4,
+    marginTop: 1,
+  },
+  pidyonCardCompactActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 6,
+  },
+  pidyonActionBtn: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(30,58,138,0.1)',
+  },
+  pidyonActionBtnDelete: {
+    backgroundColor: 'rgba(239,68,68,0.12)',
   },
   footerCard: {
     marginTop: 8,
@@ -568,27 +581,5 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
-  },
-  adminActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    justifyContent: 'flex-end',
-  },
-  editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(30,58,138,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(239,68,68,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 })

@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 ;
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 import db from '../services/database'
 import { canManageLearning } from '../utils/permissions'
 
@@ -54,7 +55,7 @@ function getYouTubeThumbnail(videoId, quality = 'hqdefault') {
   return `https://img.youtube.com/vi/${videoId}/${quality}.jpg`;
 }
 
-export default function LongLessonsScreen({ navigation, userRole, userPermissions }) {
+export default function LongLessonsScreen({ navigation, route, userRole, userPermissions }) {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLesson, setSelectedLesson] = useState(null);
@@ -69,16 +70,33 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
   const [formYoutubeUrl, setFormYoutubeUrl] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const isWeeklyNewsletterMode = route?.params?.context === 'weeklyNewsletter';
+  const scopedCategory = 'weekly-newsletter';
+  const screenTitle = isWeeklyNewsletterMode ? 'לימוד יומי בגליון השבועי' : t('שיעורים');
+  const screenSubtitle = isWeeklyNewsletterMode ? 'סרטונים ארוכים מהיוטיוב' : t('שיעורים מלאים מהרב');
+
+  const filteredLessons = lessons.filter(lesson => 
+    lesson.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    lesson.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    lesson.category?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   useEffect(() => {
     console.log('LongLessonsScreen - userRole:', userRole, 'canManage:', canManage);
+    setLoading(true);
     loadLessons();
-  }, [userRole, userPermissions]);
+  }, [userRole, userPermissions, isWeeklyNewsletterMode]);
 
   const loadLessons = async () => {
     try {
+      const where = [['isActive', '==', true]];
+      if (isWeeklyNewsletterMode) {
+        where.push(['category', '==', scopedCategory]);
+      }
+
       const lessonsData = await db.getCollection('longLessons', {
-        where: [['isActive', '==', true]],
+        where,
         orderBy: { field: 'createdAt', direction: 'desc' }
       });
 
@@ -131,21 +149,21 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
           title: formTitle.trim(),
           description: formDescription.trim() || '',
           youtubeUrl: formYoutubeUrl.trim(),
-          category: formCategory.trim() || '',
+          category: isWeeklyNewsletterMode ? scopedCategory : (formCategory.trim() || ''),
         });
-        Alert.alert('הצלחה', 'השיעור עודכן בהצלחה');
+        Alert.alert('הצלחה', isWeeklyNewsletterMode ? 'הסרטון עודכן בהצלחה' : 'השיעור עודכן בהצלחה');
       } else {
         // Add new lesson
         await db.addDocument('longLessons', {
           title: formTitle.trim(),
           description: formDescription.trim() || '',
           youtubeUrl: formYoutubeUrl.trim(),
-          category: formCategory.trim() || '',
+          category: isWeeklyNewsletterMode ? scopedCategory : (formCategory.trim() || ''),
           isActive: true,
           createdAt: new Date().toISOString(),
           order: 0
         });
-        Alert.alert('הצלחה', 'השיעור נוסף בהצלחה');
+        Alert.alert('הצלחה', isWeeklyNewsletterMode ? 'הסרטון נוסף בהצלחה' : 'השיעור נוסף בהצלחה');
       }
 
       setShowAddModal(false);
@@ -158,7 +176,12 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
       loadLessons();
     } catch (error) {
       console.error('Error saving lesson:', error);
-      Alert.alert('שגיאה', editingLesson ? 'לא ניתן לעדכן את השיעור' : 'לא ניתן להוסיף את השיעור');
+      Alert.alert(
+        'שגיאה',
+        editingLesson
+          ? (isWeeklyNewsletterMode ? 'לא ניתן לעדכן את הסרטון' : 'לא ניתן לעדכן את השיעור')
+          : (isWeeklyNewsletterMode ? 'לא ניתן להוסיף את הסרטון' : 'לא ניתן להוסיף את השיעור')
+      );
     } finally {
       setSaving(false);
     }
@@ -169,14 +192,14 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
     setFormTitle(lesson.title || '');
     setFormDescription(lesson.description || '');
     setFormYoutubeUrl(lesson.youtubeUrl || '');
-    setFormCategory(lesson.category || '');
+    setFormCategory(isWeeklyNewsletterMode ? scopedCategory : (lesson.category || ''));
     setShowEditModal(true);
   };
 
   const handleDeleteLesson = (lesson) => {
     Alert.alert(
-      'מחיקת שיעור',
-      'האם אתה בטוח שברצונך למחוק את השיעור?',
+      isWeeklyNewsletterMode ? 'מחיקת סרטון' : 'מחיקת שיעור',
+      isWeeklyNewsletterMode ? 'האם אתה בטוח שברצונך למחוק את הסרטון?' : 'האם אתה בטוח שברצונך למחוק את השיעור?',
       [
         { text: 'ביטול', style: 'cancel' },
         {
@@ -185,11 +208,11 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
           onPress: async () => {
             try {
               await db.deleteDocument('longLessons', lesson.id);
-              Alert.alert('הצלחה', 'השיעור נמחק בהצלחה');
+              Alert.alert('הצלחה', isWeeklyNewsletterMode ? 'הסרטון נמחק בהצלחה' : 'השיעור נמחק בהצלחה');
               loadLessons();
             } catch (error) {
               console.error('Error deleting lesson:', error);
-              Alert.alert('שגיאה', 'לא ניתן למחוק את השיעור');
+              Alert.alert('שגיאה', isWeeklyNewsletterMode ? 'לא ניתן למחוק את הסרטון' : 'לא ניתן למחוק את השיעור');
             }
           }
         }
@@ -197,9 +220,17 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
     );
   };
 
-  const renderLesson = ({ item }) => {
+  const handleRandomLesson = () => {
+    if (filteredLessons.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * filteredLessons.length);
+    setSelectedLesson(filteredLessons[randomIndex]);
+  };
+
+  const renderLesson = ({ item, index }) => {
     const thumbnailUrl = getYouTubeThumbnail(item.youtubeId, 'hqdefault');
     const isNew = item.createdAt && (new Date() - new Date(item.createdAt)) < 72 * 60 * 60 * 1000;
+    const isLatest = index === 0;
+    const statusLabel = isLatest ? 'אחרון' : (isNew ? 'חדש' : null);
     
     return (
       <TouchableOpacity
@@ -209,9 +240,9 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
       >
         <View style={styles.lessonContent}>
           <View style={styles.lessonThumbnailContainer}>
-            {isNew && (
-              <View style={styles.newBadge}>
-                <Text style={styles.newBadgeText}>חדש</Text>
+            {statusLabel && (
+              <View style={[styles.newBadge, isLatest && styles.latestNewBadge]}>
+                <Text style={styles.newBadgeText}>{statusLabel}</Text>
               </View>
             )}
             {thumbnailUrl ? (
@@ -230,15 +261,22 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
             </View>
           </View>
           <View style={styles.lessonInfo}>
-            <Text style={styles.lessonTitle} numberOfLines={2}>
-              {item.title || 'שיעור'}
-            </Text>
+            <View style={styles.lessonTitleRow}>
+              {statusLabel && (
+                <View style={[styles.inlineStatusBadge, isLatest ? styles.inlineLatestBadge : styles.inlineNewBadge]}>
+                  <Text style={styles.inlineStatusBadgeText}>{statusLabel}</Text>
+                </View>
+              )}
+              <Text style={styles.lessonTitle} numberOfLines={2}>
+                {item.title || 'שיעור'}
+              </Text>
+            </View>
             {item.description && (
               <Text style={styles.lessonDescription} numberOfLines={2}>
                 {item.description}
               </Text>
             )}
-            {item.category && (
+            {item.category && !isWeeklyNewsletterMode && (
               <View style={styles.categoryBadge}>
                 <Text style={styles.categoryText}>{item.category}</Text>
               </View>
@@ -278,11 +316,12 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
     return (
       <View style={styles.container}>
         <AppHeader
-          title="שיעורים"          onBackPress={() => navigation.goBack()}
+          title={screenTitle}
+          onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY_BLUE} />
-          <Text style={styles.loadingText}>טוען שיעורים...</Text>
+          <Text style={styles.loadingText}>{isWeeklyNewsletterMode ? 'טוען סרטונים...' : 'טוען שיעורים...'}</Text>
         </View>
       </View>
     );
@@ -291,8 +330,8 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
   return (
     <View style={styles.container}>
       <AppHeader
-        title="שיעורים"
-        subtitle="שיעורים מלאים מהרב"
+        title={screenTitle}
+        subtitle={screenSubtitle}
         onBackPress={() => navigation.goBack()}
       />
 
@@ -306,20 +345,58 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
             style={styles.addButtonGradient}
           >
             <Ionicons name="add" size={24} color="#fff" />
-            <Text style={styles.addButtonText}>הוסף שיעור</Text>
+            <Text style={styles.addButtonText}>{isWeeklyNewsletterMode ? 'הוסף סרטון' : 'הוסף שיעור'}</Text>
           </LinearGradient>
         </TouchableOpacity>
       )}
 
-      {lessons.length === 0 ? (
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color={PRIMARY_BLUE} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={isWeeklyNewsletterMode ? 'חפש סרטון...' : 'חפש שיעור...'}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            textAlign="right"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Random Button */}
+      {filteredLessons.length > 0 && (
+        <TouchableOpacity
+          style={styles.randomButton}
+          onPress={handleRandomLesson}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#8b5cf6', '#6366f1']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.randomButtonGradient}
+          >
+            <Ionicons name="sparkles-outline" size={20} color="#fff" />
+            <Text style={styles.randomButtonText}>{isWeeklyNewsletterMode ? 'סרטון אקראי' : 'שיעור אקראי'}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      {filteredLessons.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="film-outline" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-          <Text style={styles.emptyText}>אין שיעורים זמינים כרגע</Text>
-          <Text style={styles.emptySubtext}>השיעורים יתווספו בקרוב</Text>
+          <Text style={styles.emptyText}>{isWeeklyNewsletterMode ? 'אין סרטונים זמינים כרגע' : 'אין שיעורים זמינים כרגע'}</Text>
+          <Text style={styles.emptySubtext}>{isWeeklyNewsletterMode ? 'הסרטונים יתווספו בקרוב' : 'השיעורים יתווספו בקרוב'}</Text>
         </View>
       ) : (
         <FlatList
-          data={lessons}
+          data={filteredLessons}
           keyExtractor={(item) => item.id}
           renderItem={renderLesson}
           contentContainerStyle={styles.listContent}
@@ -381,7 +458,7 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>הוסף שיעור חדש</Text>
+              <Text style={styles.modalTitle}>{isWeeklyNewsletterMode ? 'הוסף סרטון חדש' : 'הוסף שיעור חדש'}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowAddModal(false);
@@ -439,16 +516,18 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
                 />
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>קטגוריה</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formCategory}
-                  onChangeText={setFormCategory}
-                  placeholder="הכנס קטגוריה (אופציונלי)"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
+              {!isWeeklyNewsletterMode && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>קטגוריה</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={formCategory}
+                    onChangeText={setFormCategory}
+                    placeholder="הכנס קטגוריה (אופציונלי)"
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -508,7 +587,7 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>ערוך שיעור</Text>
+              <Text style={styles.modalTitle}>{isWeeklyNewsletterMode ? 'ערוך סרטון' : 'ערוך שיעור'}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowEditModal(false);
@@ -567,16 +646,18 @@ export default function LongLessonsScreen({ navigation, userRole, userPermission
                 />
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>קטגוריה</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formCategory}
-                  onChangeText={setFormCategory}
-                  placeholder="הכנס קטגוריה (אופציונלי)"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
+              {!isWeeklyNewsletterMode && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>קטגוריה</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={formCategory}
+                    onChangeText={setFormCategory}
+                    placeholder="הכנס קטגוריה (אופציונלי)"
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -653,6 +734,58 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Heebo_600SemiBold',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    marginHorizontal: 8,
+    fontSize: 16,
+    fontFamily: 'Heebo_400Regular',
+    color: DEEP_BLUE,
+    height: '100%',
+  },
+  randomButton: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  randomButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  randomButtonText: {
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Heebo_600SemiBold',
@@ -739,9 +872,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Heebo_600SemiBold',
     color: DEEP_BLUE,
-    marginBottom: 6,
+    marginBottom: 0,
     textAlign: 'right',
     lineHeight: 22,
+    flexShrink: 1,
+  },
+  lessonTitleRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'stretch',
+    justifyContent: 'flex-start',
+    marginBottom: 6,
   },
   lessonDescription: {
     fontSize: 14,
@@ -764,17 +906,36 @@ const styles = StyleSheet.create({
   },
   newBadge: {
     position: 'absolute',
-    top: 4,
-    left: 4,
+    top: 8,
+    left: 8,
     backgroundColor: '#dc2626',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     zIndex: 10,
+  },
+  latestNewBadge: {
+    backgroundColor: '#f59e0b',
   },
   newBadgeText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
+    fontFamily: 'Heebo_700Bold',
+  },
+  inlineStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  inlineLatestBadge: {
+    backgroundColor: '#f59e0b',
+  },
+  inlineNewBadge: {
+    backgroundColor: '#dc2626',
+  },
+  inlineStatusBadgeText: {
+    color: '#fff',
+    fontSize: 11,
     fontFamily: 'Heebo_700Bold',
   },
   emptyState: {
@@ -931,4 +1092,3 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 });
-

@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 import db from '../services/database'
 import { canManageLearning } from '../utils/permissions'
 import { pickVideo, uploadFileToSupabaseStorage } from '../utils/storage'
@@ -337,8 +338,8 @@ export default function BaalShemTovStoriesScreen({ navigation, userRole, userPer
     return (
       <View style={styles.container}>
         <AppHeader
-          title="סיפורי הבעל שם טוב"
-          subtitle="סיפורים מופלאים - כל מוצש"
+          title={t('סיפורי הבעל שם טוב')}
+          subtitle={t('סיפורים מופלאים - כל מוצש')}
           onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
@@ -352,8 +353,8 @@ export default function BaalShemTovStoriesScreen({ navigation, userRole, userPer
   return (
     <View style={styles.container}>
       <AppHeader
-        title="סיפורי הבעל שם טוב"
-        subtitle="סיפורים מופלאים - כל מוצש"
+        title={t('סיפורי הבעל שם טוב')}
+        subtitle={t('סיפורים מופלאים - כל מוצש')}
         onBackPress={() => navigation.goBack()}
       />
 

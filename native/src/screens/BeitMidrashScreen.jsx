@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 
 import YoutubePlayer from 'react-native-youtube-iframe'
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -100,7 +101,7 @@ export default function BeitMidrashScreen({ navigation }) {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title="מהנעשה בבית המדרש"
+          title={t('מהנעשה בבית המדרש')}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
         />
@@ -116,7 +117,7 @@ export default function BeitMidrashScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={[BG, '#f4f6f9']} style={StyleSheet.absoluteFill} />
       <AppHeader
-        title="מהנעשה בבית המדרש"
+        title={t('מהנעשה בבית המדרש')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
@@ -399,4 +400,3 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 })
-

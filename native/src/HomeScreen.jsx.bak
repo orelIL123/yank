@@ -21,7 +21,7 @@ const DEFAULT_CARDS = [
   { key: 'learningLibrary', title: 'שיעורים', desc: 'כל השיעורים והסרטונים', icon: 'library-outline', image: require('../assets/photos/cards/hinuka1.jpg'), gradient: ['#667eea', '#764ba2'], size: 'small' },
   { key: 'prayers', title: 'תפילות הינוקא', desc: 'תפילות מיוחדות וסגולות', icon: 'heart-outline', image: require('../assets/photos/cards/prayer.png'), gradient: ['#f093fb', '#f5576c'], size: 'small' },
   { key: 'dailyLearning', title: 'לימוד יומי', desc: 'תורה וחיזוק יומיים', icon: 'book-outline', image: require('../assets/photos/cards/books.jpg'), gradient: ['#43e97b', '#38f9d7'], size: 'small' },
-  { key: 'yeshiva', title: 'מהנעשה בבית המדרש', desc: 'עדכונים וחדשות', icon: 'school-outline', image: require('../assets/photos/cards/yeshiva.png'), gradient: ['#30cfd0', '#330867'], size: 'small' },
+  { key: 'yeshiva', title: 'מהנעשה בבית המדרש', desc: 'עדכונים ותיעודים', icon: 'school-outline', image: require('../assets/photos/cards/yeshiva.png'), gradient: ['#30cfd0', '#330867'], size: 'small' },
   { key: 'kodeshStore', title: 'חנות קודש', desc: 'ספרים ומוצרים', icon: 'cart-outline', image: require('../assets/photos/cards/books.jpg'), gradient: ['#f59e0b', '#ef4444'], size: 'small' },
 ]
 

@@ -43,6 +43,19 @@
 | **Special access** | אם יש | אם האפליקציה דורשת התחברות – לספק פרטי בדיקה (אימייל/סיסמה או הוראות) כדי ש-Google יוכלו לבדוק. |
 | **Login / demo** | אם יש התחברות | להסביר איך להיכנס (למשל: "התחברות עם אימייל" + פרטי חשבון בדיקה). |
 
+**חשבון בדיקה לגוגל פליי (Google Play reviewers):**
+
+| שדה | ערך |
+|-----|------|
+| **אימייל** | `0512345678@hayanuka.com` |
+| **סיסמה** | `123456` |
+
+הוראות למבקר: "התחברות עם אימייל וסיסמה. ניתן להזין אימייל מלא או רק את המספר 0512345678."
+
+**התחברות:** באפליקציה מופעלת התחברות גם עם המספר בלבד (0512345678) – המערכת מוסיפה אוטומטית @hayanuka.com.
+
+**יצירת המשתמש:** כבר נוצר ב-Firebase. ליצירה מחדש (לאחר מחיקה): `node scripts/create-google-play-test-user.cjs` מתוך שורש הפרויקט.
+
 ---
 
 ### 3.3 פרסום (Ads) – אם יש פרסומות
@@ -230,9 +243,62 @@
 
 ---
 
-## 10. קובץ האפליקציה (Build)
+## 10. Service Account – להעלאה אוטומטית (EAS Submit)
 
-בפרויקט Expo (הינוקא) עם EAS:
+כדי ש־`eas submit` יעבוד (העלאה אוטומטית ל־Play Store), יש **להזמין** את חשבון ה־Service Account ל־**Google Play Console** ולתת לו הרשאות מתאימות.
+
+### שגיאה נפוצה
+
+```
+The service account is missing the necessary permissions to submit the app to Google Play Store.
+```
+
+### מה לעשות
+
+1. **להוציא את אימייל ה-Service Account**  
+   בקובץ ה־JSON של ה-Service Account (מה שהועלה ל־EAS) מחפשים את השדה `client_email`. למשל:
+   `something@your-project.iam.gserviceaccount.com`
+
+2. **להזמין את ה-Service Account ל־Play Console**
+   - כניסה ל־[Google Play Console](https://play.google.com/console)
+   - **Setup** → **Users and permissions** (או: Settings → Users and permissions)
+   - **Invite new users**
+   - להזין את אימייל ה-Service Account (`client_email` מקובץ ה-JSON)
+   - ב־**Account permissions**: לבחור **Admin** או **Release manager**
+     - **Release manager** – משחרר גרסאות (Production + Testing)
+     - **Admin** – גישה מלאה (כולל משתמשים והגדרות)
+   - אם יש **App permissions**: לבחור את האפליקציה (הינוקא) ולוודא שהיא נכללת
+   - **Send invite**
+
+3. **לאשר את ההזמנה**  
+   החשבון יופיע כ־Pending עד לאישור. אם יש access ל־Organization – הוא מאושר אוטומטית.
+
+4. **ליצור Service Account ב־Google Cloud (אם עדיין אין)**  
+   - [Google Cloud Console](https://console.cloud.google.com) → IAM & Admin → Service Accounts
+   - Create Service Account → שם (למשל: EAS Submit)
+   - ב־**IAM**: אין צורך ב־Owner – מספיקות ההרשאות ב־Play Console
+   - Keys → Add Key → Create new key → JSON  
+   להעלות את ה-JSON ל־EAS: Credentials → Android → com.hayanuka.app → Google Service Account Key
+
+5. **להפעיל את ה-API ב־Google Cloud**  
+   - APIs & Services → Enable APIs
+   - להפעיל: **Google Play Android Developer API**
+
+### סיכום
+
+| מיקום | פעולה |
+|-------|--------|
+| **Google Cloud** | יצירת Service Account, יצירת JSON key, הפעלת Google Play Android Developer API |
+| **EAS** | העלאת ה-JSON key תחת Credentials |
+| **Google Play Console** | הזמנת ה-Service Account (Users and permissions) עם **Release manager** או **Admin** |
+
+אחרי ההגדרה, הרץ שוב: `eas submit --platform android --profile production`.
+
+---
+
+## 11. קובץ האפליקציה (Build)
+
+בפרויקט Expo (הינוקא) עם EAS Build:
 
 - **Package:** `com.hayanuka.app`
 - **Version:** מוגדר ב-`app.json` (כרגע version "1.2", versionCode 12).

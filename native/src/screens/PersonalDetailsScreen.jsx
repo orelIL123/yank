@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { auth, db as firestoreDb } from '../config/firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { t } from '../utils/i18n'
 
 const PRIMARY_BLUE = '#1e3a8a'
 const BG = '#FFFFFF'
@@ -41,7 +42,7 @@ export default function PersonalDetailsScreen({ navigation, user }) {
       }
     } catch (error) {
       console.error('Error loading user data:', error)
-      Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים')
+      Alert.alert(t('שגיאה'), t('לא ניתן לטעון את הנתונים'))
     } finally {
       setLoading(false)
     }
@@ -59,11 +60,11 @@ export default function PersonalDetailsScreen({ navigation, user }) {
         phone: phone.trim() || null,
       })
 
-      Alert.alert('הצלחה', 'הפרטים עודכנו בהצלחה')
+      Alert.alert(t('הצלחה'), t('הפרטים עודכנו בהצלחה'))
       navigation?.goBack()
     } catch (error) {
       console.error('Error saving user data:', error)
-      Alert.alert('שגיאה', 'לא ניתן לשמור את הנתונים')
+      Alert.alert(t('שגיאה'), t('לא ניתן לשמור את הנתונים'))
     } finally {
       setSaving(false)
     }
@@ -91,7 +92,7 @@ export default function PersonalDetailsScreen({ navigation, user }) {
         >
           <Ionicons name="arrow-forward" size={28} color={DEEP_BLUE} />
         </Pressable>
-        <Text style={styles.headerTitle}>פרטים אישיים</Text>
+        <Text style={styles.headerTitle}>{t('פרטים אישיים')}</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -105,34 +106,34 @@ export default function PersonalDetailsScreen({ navigation, user }) {
       >
         <View style={styles.form}>
           <View style={styles.formGroup}>
-            <Text style={styles.label}>שם מלא</Text>
+            <Text style={styles.label}>{t('שם מלא')}</Text>
             <TextInput
               style={styles.input}
               value={displayName}
               onChangeText={setDisplayName}
-              placeholder="הכנס שם מלא"
+              placeholder={t('הכנס שם מלא')}
               placeholderTextColor="#9ca3af"
             />
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>אימייל</Text>
+            <Text style={styles.label}>{t('אימייל')}</Text>
             <TextInput
               style={[styles.input, styles.inputDisabled]}
               value={email}
               editable={false}
               placeholderTextColor="#9ca3af"
             />
-            <Text style={styles.helpText}>אימייל לא ניתן לשינוי</Text>
+            <Text style={styles.helpText}>{t('אימייל לא ניתן לשינוי')}</Text>
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>טלפון</Text>
+            <Text style={styles.label}>{t('טלפון')}</Text>
             <TextInput
               style={styles.input}
               value={phone}
               onChangeText={setPhone}
-              placeholder="הכנס מספר טלפון"
+              placeholder={t('הכנס מספר טלפון')}
               placeholderTextColor="#9ca3af"
               keyboardType="phone-pad"
             />
@@ -149,7 +150,7 @@ export default function PersonalDetailsScreen({ navigation, user }) {
             ) : (
               <>
                 <Ionicons name="checkmark-circle-outline" size={22} color="#ffffff" />
-                <Text style={styles.saveButtonText}>שמור שינויים</Text>
+                <Text style={styles.saveButtonText}>{t('שמור שינויים')}</Text>
               </>
             )}
           </Pressable>
@@ -249,5 +250,4 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
 })
-
 

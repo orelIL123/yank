@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 import db from '../services/database';
 import { canManageLearning } from '../utils/permissions';
 import { auth } from '../config/firebase';
@@ -84,6 +85,7 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
   const [formYoutubeUrl, setFormYoutubeUrl] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     console.log('ShortLessonsScreen - userRole:', userRole, 'canManage:', canManage);
@@ -190,7 +192,12 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
   };
 
   const handleRandomLesson = () => {
-    const currentLessons = isShuffled ? shuffledLessons : lessons;
+    const allCurrent = isShuffled ? shuffledLessons : lessons;
+    const currentLessons = allCurrent.filter(lesson => 
+      lesson.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      lesson.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lesson.category?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
     if (!currentLessons.length) return;
     const randomIndex = Math.floor(Math.random() * currentLessons.length);
     const randomLesson = currentLessons[randomIndex];
@@ -405,8 +412,8 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
     return (
       <View style={styles.container}>
         <AppHeader
-          title="שיעורים קצרים"
-          subtitle="רילסים מהרב"
+          title={t('שיחות ופנינים')}
+          subtitle={t('קטעי וידאו קצרים מהרב')}
           onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
@@ -417,20 +424,44 @@ export default function ShortLessonsScreen({ navigation, userRole, userPermissio
     );
   }
 
-  const currentLessons = isShuffled ? shuffledLessons : lessons;
+  const currentLessons = (isShuffled ? shuffledLessons : lessons).filter(lesson => 
+    lesson.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    lesson.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    lesson.category?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <>
       <View style={styles.container}>
         <AppHeader
-          title="שיעורים קצרים"
-          subtitle="רילסים מהרב"
+          title={t('שיחות ופנינים')}
+          subtitle={t('קטעי וידאו קצרים מהרב')}
           onBackPress={() => navigation.goBack()}
         />
 
         {isRegistered && (
           <Text style={styles.viewedHint}>(סימון "נצפה" — רק למשתמשים רשומים)</Text>
         )}
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color={PRIMARY_BLUE} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="חפש שיעור..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              textAlign="right"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color="#9ca3af" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
         <View style={styles.controlsBar}>
           <TouchableOpacity
             style={[styles.controlPill, isShuffled && styles.controlPillActive]}
@@ -992,6 +1023,33 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 0,
   },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: 'rgba(11,27,58,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    marginHorizontal: 8,
+    fontSize: 16,
+    fontFamily: 'Heebo_400Regular',
+    color: DEEP_BLUE,
+    height: '100%',
+  },
   controlsBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1158,4 +1216,3 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_700Bold',
   },
 });
-

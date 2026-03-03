@@ -1,0 +1,558 @@
+{
+  "title": "חלוקה יומית לפי הרב",
+  "description": "חלוקה שיובאה מקובץ מסומן של הרב (DOCX)",
+  "sourceFile": "ספר המידות מסומן.docx",
+  "importNotes": "החלוקה זוהתה אוטומטית: יום א ויום ב במפורש, והמשך הימים לפי סמני כותרת באנגלית במסמך המקור.",
+  "days": [
+    {
+      "day": 1,
+      "label": "יום א",
+      "chapters": [
+        "אמת"
+      ]
+    },
+    {
+      "day": 2,
+      "label": "יום ב",
+      "chapters": [
+        "הכנסת אורחים"
+      ]
+    },
+    {
+      "day": 3,
+      "label": "יום 3",
+      "sourceMarker": "BFD",
+      "chapters": [
+        "אהבה"
+      ]
+    },
+    {
+      "day": 4,
+      "label": "יום 4",
+      "sourceMarker": "FWEGF",
+      "chapters": [
+        "אמונה"
+      ]
+    },
+    {
+      "day": 5,
+      "label": "יום 5",
+      "sourceMarker": "FQEF",
+      "chapters": [
+        "אכילה"
+      ]
+    },
+    {
+      "day": 6,
+      "label": "יום 6",
+      "sourceMarker": "FWEFW",
+      "chapters": [
+        "אלמן",
+        "ארץ-ישראל",
+        "אבדה",
+        "בנים"
+      ]
+    },
+    {
+      "day": 7,
+      "label": "יום 7",
+      "sourceMarker": "HUSSDGI",
+      "chapters": [
+        "בית"
+      ]
+    },
+    {
+      "day": 8,
+      "label": "יום 8",
+      "sourceMarker": "HERR",
+      "chapters": [
+        "בושה"
+      ]
+    },
+    {
+      "day": 9,
+      "label": "יום 9",
+      "sourceMarker": "ACCA",
+      "chapters": [
+        "בגדים"
+      ]
+    },
+    {
+      "day": 10,
+      "label": "יום 10",
+      "sourceMarker": "ASC",
+      "chapters": [
+        "בטחון"
+      ]
+    },
+    {
+      "day": 11,
+      "label": "יום 11",
+      "sourceMarker": "AAC",
+      "chapters": [
+        "בשורה",
+        "ברכה",
+        "בכיה",
+        "גאוה"
+      ]
+    },
+    {
+      "day": 12,
+      "label": "יום 12",
+      "sourceMarker": "DFH",
+      "chapters": [
+        "גנבה וגזלה"
+      ]
+    },
+    {
+      "day": 13,
+      "label": "יום 13",
+      "sourceMarker": "DHZ",
+      "chapters": [
+        "דעת"
+      ]
+    },
+    {
+      "day": 14,
+      "label": "יום 14",
+      "sourceMarker": "RHEH",
+      "chapters": [
+        "דרך"
+      ]
+    },
+    {
+      "day": 15,
+      "label": "יום 15",
+      "sourceMarker": "DHH",
+      "chapters": [
+        "דין",
+        "המתקת דין"
+      ]
+    },
+    {
+      "day": 16,
+      "label": "יום 16",
+      "sourceMarker": "DFSG",
+      "chapters": [
+        "התבודדות",
+        "הרהורים"
+      ]
+    },
+    {
+      "day": 17,
+      "label": "יום 17",
+      "sourceMarker": "VFVD",
+      "chapters": [
+        "התנשאות"
+      ]
+    },
+    {
+      "day": 18,
+      "label": "יום 18",
+      "sourceMarker": "NDHNH",
+      "chapters": [
+        "הצלחה",
+        "הריון"
+      ]
+    },
+    {
+      "day": 19,
+      "label": "יום 19",
+      "sourceMarker": "XXBFD",
+      "chapters": [
+        "הוראה",
+        "ודוי דברים",
+        "ותרן",
+        "זיפן",
+        "זכות אבות",
+        "זכירה"
+      ]
+    },
+    {
+      "day": 20,
+      "label": "יום 20",
+      "sourceMarker": "BFHDF",
+      "chapters": [
+        "זקנים",
+        "זריזות",
+        "חלום",
+        "חן"
+      ]
+    },
+    {
+      "day": 21,
+      "label": "יום 21",
+      "sourceMarker": "SDFG",
+      "chapters": [
+        "חנפה",
+        "חקירה",
+        "חדושין דאוריתא"
+      ]
+    },
+    {
+      "day": 22,
+      "label": "יום 22",
+      "sourceMarker": "HDBF",
+      "chapters": [
+        "חתון",
+        "טבע",
+        "טלטול",
+        "טהרה"
+      ]
+    },
+    {
+      "day": 23,
+      "label": "יום 23",
+      "sourceMarker": "DSV",
+      "chapters": [
+        "ישועה",
+        "יראה"
+      ]
+    },
+    {
+      "day": 24,
+      "label": "יום 24",
+      "sourceMarker": "FXB",
+      "chapters": [
+        "יחוס"
+      ]
+    },
+    {
+      "day": 25,
+      "label": "יום 25",
+      "sourceMarker": "DSG",
+      "chapters": [
+        "כבוד"
+      ]
+    },
+    {
+      "day": 26,
+      "label": "יום 26",
+      "sourceMarker": "DVDSB",
+      "chapters": [
+        "כעס"
+      ]
+    },
+    {
+      "day": 27,
+      "label": "יום 27",
+      "sourceMarker": "SRHS",
+      "chapters": [
+        "כשוף",
+        "למוד"
+      ]
+    },
+    {
+      "day": 28,
+      "label": "יום 28",
+      "sourceMarker": "JUIVY",
+      "chapters": [
+        "לשון הרע"
+      ]
+    },
+    {
+      "day": 29,
+      "label": "יום 29",
+      "sourceMarker": "JHKL",
+      "chapters": [
+        "ליצנות",
+        "מריבה"
+      ]
+    },
+    {
+      "day": 30,
+      "label": "יום 30",
+      "sourceMarker": "POJKLJNM",
+      "chapters": [
+        "ממון"
+      ]
+    },
+    {
+      "day": 31,
+      "label": "יום 31",
+      "sourceMarker": "JHGV",
+      "chapters": [
+        "מפלת",
+        "מסור",
+        "משקה",
+        "משיח",
+        "מוהל"
+      ]
+    },
+    {
+      "day": 32,
+      "label": "יום 32",
+      "sourceMarker": "KJHVB",
+      "chapters": [
+        "מפרסם",
+        "נאוף"
+      ]
+    },
+    {
+      "day": 33,
+      "label": "יום 33",
+      "sourceMarker": "LKJHGC",
+      "chapters": [
+        "נדה"
+      ]
+    },
+    {
+      "day": 34,
+      "label": "יום 34",
+      "sourceMarker": "LKHGGH",
+      "chapters": [
+        "נפילה"
+      ]
+    },
+    {
+      "day": 35,
+      "label": "יום 35",
+      "sourceMarker": "LOIG",
+      "chapters": [
+        "נבול-פה",
+        "נהנה מאחרים",
+        "נגינה",
+        "נסיון",
+        "נר תמיד",
+        "ספירת העמר"
+      ]
+    },
+    {
+      "day": 36,
+      "label": "יום 36",
+      "sourceMarker": "KJHGV",
+      "chapters": [
+        "סוד",
+        "ספר",
+        "סגולה",
+        "ענוה"
+      ]
+    },
+    {
+      "day": 37,
+      "label": "יום 37",
+      "sourceMarker": "HJBJ",
+      "chapters": [
+        "עצבות"
+      ]
+    },
+    {
+      "day": 38,
+      "label": "יום 38",
+      "sourceMarker": "KYIUI",
+      "chapters": [
+        "עצירות",
+        "עברה",
+        "עצלות"
+      ]
+    },
+    {
+      "day": 39,
+      "label": "יום 39",
+      "sourceMarker": "JICGH",
+      "chapters": [
+        "ענש",
+        "עצה",
+        "עזות",
+        "פחד"
+      ]
+    },
+    {
+      "day": 40,
+      "label": "יום 40",
+      "sourceMarker": "NKH",
+      "chapters": [
+        "פדיון שבויים",
+        "פרישות",
+        "פוסק",
+        "צדקה"
+      ]
+    },
+    {
+      "day": 41,
+      "label": "יום 41",
+      "sourceMarker": "FGJFJ",
+      "chapters": [
+        "צדיק"
+      ]
+    },
+    {
+      "day": 42,
+      "label": "יום 42",
+      "sourceMarker": "IOULL",
+      "chapters": [
+        "קמג",
+        "קמד",
+        "קמה",
+        "קמו",
+        "קמז",
+        "קמח",
+        "קמט",
+        "קנ",
+        "קנא",
+        "קנב",
+        "קנג",
+        "קנד",
+        "קנה",
+        "קנו",
+        "קנז",
+        "קנח",
+        "קנט",
+        "קס",
+        "קסא",
+        "קסב",
+        "קסג",
+        "קסד",
+        "קסה",
+        "קסו",
+        "קסז",
+        "קסח",
+        "קסט",
+        "קע",
+        "קעא",
+        "קעב",
+        "קעג",
+        "קעד",
+        "קעה",
+        "קעו"
+      ]
+    },
+    {
+      "day": 43,
+      "label": "יום 43",
+      "sourceMarker": "VGJ",
+      "chapters": [
+        "קעז",
+        "קעח",
+        "קעט",
+        "קפ",
+        "קפא",
+        "קפב",
+        "קפג",
+        "קפד",
+        "קפה",
+        "קפו",
+        "קפז",
+        "קפח",
+        "קפט",
+        "קצ",
+        "קצא",
+        "קצב",
+        "קצג",
+        "קצד",
+        "קצה",
+        "קצו",
+        "קצז",
+        "קצח",
+        "קצט",
+        "ר",
+        "רא",
+        "רב"
+      ]
+    },
+    {
+      "day": 44,
+      "label": "יום 44",
+      "sourceMarker": "KNL",
+      "chapters": [
+        "רג",
+        "רד",
+        "רה",
+        "רו",
+        "רז",
+        "רח",
+        "רט",
+        "א",
+        "ב",
+        "ג",
+        "ד",
+        "ה",
+        "ו",
+        "ז",
+        "ח",
+        "ט",
+        "י",
+        "יא",
+        "יב",
+        "יג",
+        "יד",
+        "טו",
+        "טז",
+        "יז",
+        "יח",
+        "יט",
+        "כ",
+        "כא",
+        "קליפה"
+      ]
+    },
+    {
+      "day": 45,
+      "label": "יום 45",
+      "sourceMarker": "LKHJ",
+      "chapters": [
+        "קנאה"
+      ]
+    },
+    {
+      "day": 46,
+      "label": "יום 46",
+      "sourceMarker": "KJB",
+      "chapters": [
+        "קרי",
+        "קשוי לילד",
+        "הרחקת רשעים"
+      ]
+    },
+    {
+      "day": 47,
+      "label": "יום 47",
+      "sourceMarker": "HOK",
+      "chapters": [
+        "רחמנות",
+        "ראיה"
+      ]
+    },
+    {
+      "day": 48,
+      "label": "יום 48",
+      "sourceMarker": "JKG",
+      "chapters": [
+        "רפואה",
+        "שמחה"
+      ]
+    },
+    {
+      "day": 49,
+      "label": "יום 49",
+      "sourceMarker": "M,BKJL",
+      "chapters": [
+        "שכרות",
+        "שרים",
+        "שחד",
+        "שלום"
+      ]
+    },
+    {
+      "day": 50,
+      "label": "יום 50",
+      "sourceMarker": "HKJGBN",
+      "chapters": [
+        "שבועה",
+        "שבת",
+        "שנה",
+        "שוחט",
+        "תשובה"
+      ]
+    },
+    {
+      "day": 51,
+      "label": "יום 51",
+      "sourceMarker": "YUY",
+      "chapters": [
+        "תוכחה",
+        "תפלה"
+      ]
+    }
+  ]
+}

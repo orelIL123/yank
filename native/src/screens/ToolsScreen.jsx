@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import AppHeader from '../components/AppHeader'
+import { t } from '../utils/i18n'
 import db from '../services/database'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -60,7 +61,15 @@ async function fetchZmanim(lat, lon) {
 async function fetchCalendarData(lat, lon, isJerusalem) {
   try {
     const candles = isJerusalem ? 40 : 18
-    const url = `https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&year=now&month=now&ss=on&mf=on&c=on&latitude=${lat}&longitude=${lon}&b=${candles}&M=on&s=on`
+    const start = new Date()
+    start.setDate(start.getDate() - 7)
+    const end = new Date()
+    end.setDate(end.getDate() + 120)
+
+    const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+    const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+
+    const url = `https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&start=${startDate}&end=${endDate}&ss=on&mf=on&c=on&o=on&latitude=${lat}&longitude=${lon}&b=${candles}&M=on&s=on`
     const res = await fetch(url)
     const data = await res.json()
     if (!data?.items) return null
@@ -146,10 +155,10 @@ const ZMANIM_LIST = [
   { key: 'alotHaShachar', label: 'עלות השחר', icon: 'moon-outline', color: '#6366f1' },
   { key: 'misheyakir', label: 'משיכיר', icon: 'cloudy-night-outline', color: '#818cf8' },
   { key: 'sunrise', label: 'הנץ החמה', icon: 'sunny-outline', color: '#f59e0b' },
-  { key: 'sofZmanShma', label: 'סוף זמן ק״ש (גר״א)', icon: 'book-outline', color: '#10b981' },
   { key: 'sofZmanShmaMGA', label: 'סוף זמן ק״ש (מג״א)', icon: 'book-outline', color: '#059669' },
-  { key: 'sofZmanTfilla', label: 'סוף זמן תפילה (גר״א)', icon: 'time-outline', color: '#3b82f6' },
+  { key: 'sofZmanShma', label: 'סוף זמן ק״ש (גר״א)', icon: 'book-outline', color: '#10b981' },
   { key: 'sofZmanTfillaMGA', label: 'סוף זמן תפילה (מג״א)', icon: 'time-outline', color: '#2563eb' },
+  { key: 'sofZmanTfilla', label: 'סוף זמן תפילה (גר״א)', icon: 'time-outline', color: '#3b82f6' },
   { key: 'chatzot', label: 'חצות היום', icon: 'sunny', color: '#eab308' },
   { key: 'minchaGedola', label: 'מנחה גדולה', icon: 'partly-sunny-outline', color: '#f97316' },
   { key: 'minchaKetana', label: 'מנחה קטנה', icon: 'partly-sunny-outline', color: '#ea580c' },
@@ -276,6 +285,101 @@ function getHebrewDateFormatted() {
   }
 }
 
+function toDateOrNull(isoStr) {
+  if (!isoStr) return null
+  const d = new Date(isoStr)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function pickShabbatData(calendarItems, now) {
+  if (!Array.isArray(calendarItems) || calendarItems.length === 0) {
+    return { candleLighting: null, havdalah: null, parashaItem: null }
+  }
+
+  const candlesItems = calendarItems
+    .filter(item => item.category === 'candles' && toDateOrNull(item.date))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const havdalahItems = calendarItems
+    .filter(item => item.category === 'havdalah' && toDateOrNull(item.date))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const parashaItems = calendarItems
+    .filter(item => item.category === 'parashat' && toDateOrNull(item.date))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  const prevCandles = [...candlesItems].reverse().find(item => new Date(item.date) <= now)
+  const nextCandles = candlesItems.find(item => new Date(item.date) > now)
+
+  let selectedCandles = nextCandles || null
+  if (prevCandles) {
+    const hoursSinceCandles = (now - new Date(prevCandles.date)) / (1000 * 60 * 60)
+    if (hoursSinceCandles <= 36) selectedCandles = prevCandles
+  }
+
+  const candleDate = selectedCandles ? new Date(selectedCandles.date) : null
+  const windowEnd = candleDate ? new Date(candleDate.getTime() + 48 * 60 * 60 * 1000) : null
+
+  let selectedHavdalah = null
+  if (candleDate && windowEnd) {
+    selectedHavdalah = havdalahItems.find(item => {
+      const d = new Date(item.date)
+      return d >= candleDate && d <= windowEnd
+    }) || null
+  }
+
+  let selectedParasha = null
+  if (candleDate && windowEnd) {
+    selectedParasha = parashaItems.find(item => {
+      const d = new Date(item.date)
+      return d >= candleDate && d <= windowEnd
+    }) || null
+  }
+  if (!selectedParasha && parashaItems.length) {
+    selectedParasha = parashaItems.find(item => new Date(item.date) >= now) || parashaItems[parashaItems.length - 1]
+  }
+
+  return {
+    candleLighting: selectedCandles?.date || null,
+    havdalah: selectedHavdalah?.date || null,
+    parashaItem: selectedParasha,
+  }
+}
+
+function pickOmerDay(calendarItems, now) {
+  if (!Array.isArray(calendarItems) || calendarItems.length === 0) {
+    return { omerDay: null, daysUntilOmer: null }
+  }
+
+  const omerItems = calendarItems
+    .filter(item => item.category === 'omer')
+    .map(item => {
+      const date = toDateOrNull(item.date)
+      const titleMatch = item.title?.match(/(\d+)/)
+      const num = titleMatch ? parseInt(titleMatch[1], 10) : null
+      return { ...item, parsedDate: date, parsedDay: num }
+    })
+    .filter(item => item.parsedDate && item.parsedDay)
+    .sort((a, b) => a.parsedDate - b.parsedDate)
+
+  if (!omerItems.length) {
+    return { omerDay: null, daysUntilOmer: null }
+  }
+
+  const firstOmer = omerItems[0]
+  if (now < firstOmer.parsedDate) {
+    const diffMs = firstOmer.parsedDate - now
+    const daysUntil = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return { omerDay: null, daysUntilOmer: daysUntil }
+  }
+
+  const lastOmer = omerItems[omerItems.length - 1]
+  if (now > lastOmer.parsedDate) {
+    return { omerDay: null, daysUntilOmer: null }
+  }
+
+  const active = [...omerItems].reverse().find(item => item.parsedDate <= now)
+  return { omerDay: active?.parsedDay || null, daysUntilOmer: 0 }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Component
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -356,8 +460,12 @@ export default function ToolsScreen({ navigation }) {
   const regionCities = CITY_GROUPS.find(g => g.region === selectedRegion)?.cities || []
 
   // ─── Extract parsha, shabbat times, omer from calendar ────────────
-  const today = new Date()
-  const dayOfWeek = today.getDay() // 0=Sun, 5=Fri, 6=Sat
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0=Sun, 5=Fri, 6=Sat
+  const showShabbat = dayOfWeek >= 3 || dayOfWeek === 6
+
+  const { candleLighting, havdalah, parashaItem } = pickShabbatData(calendarItems, now)
+  const { omerDay, daysUntilOmer } = pickOmerDay(calendarItems, now)
 
   // Parashat HaShavua – manual override (admin) or from HebCal
   let parashaName = null
@@ -365,46 +473,15 @@ export default function ToolsScreen({ navigation }) {
   if (parashaOverride && parashaOverride.trim()) {
     parashaHebrew = parashaOverride.trim()
     parashaName = parashaOverride.trim()
-  } else if (calendarItems) {
-    const parashaItem = calendarItems.find(item => item.category === 'parashat')
-    if (parashaItem) {
-      parashaName = parashaItem.title
-      parashaHebrew = parashaItem.hebrew
-    }
-  }
-
-  // Shabbat times (only show from Wed=3 through Shabbat=6)
-  let candleLighting = null
-  let havdalah = null
-  const showShabbatTimes = dayOfWeek >= 3 || dayOfWeek === 0 // Wed-Sat (and show havdalah on motzei shabbat = Sat night which is still day 6)
-  // Actually: show from Wednesday (3) through Saturday (6)
-  const showShabbat = dayOfWeek >= 3
-  if (showShabbat && calendarItems) {
-    const candleItem = calendarItems.find(item => item.category === 'candles')
-    const havdalahItem = calendarItems.find(item => item.category === 'havdalah')
-    if (candleItem) candleLighting = candleItem.date
-    if (havdalahItem) havdalah = havdalahItem.date
-  }
-
-  // Omer count – look for "Counting of the Omer" in items
-  let omerDay = null
-  if (calendarItems) {
-    const omerItem = calendarItems.find(item =>
-      item.category === 'omer' ||
-      (item.title && item.title.includes('Omer')) ||
-      (item.hebrew && item.hebrew.includes('עומר'))
-    )
-    if (omerItem) {
-      // Extract day number from title like "18th day of the Omer"
-      const match = omerItem.title?.match(/(\d+)/)
-      if (match) omerDay = parseInt(match[1], 10)
-    }
+  } else if (parashaItem) {
+    parashaName = parashaItem.title
+    parashaHebrew = parashaItem.hebrew
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
-      <AppHeader title="כלי עזר" showBackButton onBackPress={() => navigation.goBack()} />
+      <AppHeader title={t('כלי עזר')} showBackButton onBackPress={() => navigation.goBack()} />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
       <ScrollView
@@ -530,6 +607,19 @@ export default function ToolsScreen({ navigation }) {
               </View>
               <Text style={styles.omerProgressText}>{omerDay} מתוך 49 ימים</Text>
             </LinearGradient>
+          </View>
+        )}
+
+        {!omerDay && typeof daysUntilOmer === 'number' && daysUntilOmer > 0 && daysUntilOmer <= 45 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="analytics-outline" size={24} color="#eab308" />
+              <Text style={styles.sectionTitle}>ספירת העומר</Text>
+            </View>
+            <View style={styles.omerPrepCard}>
+              <Ionicons name="hourglass-outline" size={24} color="#b45309" />
+              <Text style={styles.omerPrepText}>ספירת העומר תחל בעוד {daysUntilOmer} ימים</Text>
+            </View>
           </View>
         )}
 
@@ -839,6 +929,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Heebo_400Regular',
     color: 'rgba(255,255,255,0.8)',
     marginTop: 6,
+  },
+  omerPrepCard: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  omerPrepText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Heebo_600SemiBold',
+    color: '#92400e',
+    textAlign: 'right',
   },
 
   // ─── Clock ─────────────────────────────────────────

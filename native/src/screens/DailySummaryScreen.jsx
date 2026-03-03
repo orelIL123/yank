@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AppHeader from '../components/AppHeader';
+import { t } from '../utils/i18n';
 import db from '../services/database'
 import { canManageLearning } from '../utils/permissions'
 
@@ -258,8 +259,8 @@ export default function DailySummaryScreen({ navigation, userRole, userPermissio
     return (
       <View style={styles.container}>
         <AppHeader
-          title="תקציר יומי"
-          subtitle="סרטונים מהיוטיוב"
+          title={t('תקציר יומי')}
+          subtitle={t('סרטונים מהיוטיוב')}
           onBackPress={() => navigation.goBack()}
         />
         <View style={styles.loadingContainer}>
@@ -273,8 +274,8 @@ export default function DailySummaryScreen({ navigation, userRole, userPermissio
   return (
     <View style={styles.container}>
       <AppHeader
-        title="תקציר יומי"
-        subtitle="סרטונים מהיוטיוב"
+        title={t('תקציר יומי')}
+        subtitle={t('סרטונים מהיוטיוב')}
         onBackPress={() => navigation.goBack()}
       />
 
@@ -859,4 +860,3 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 });
-

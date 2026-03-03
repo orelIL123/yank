@@ -26,6 +26,7 @@ import PrayerCommitmentScreen from './src/screens/PrayerCommitmentScreen'
 import PdfViewerScreen from './src/screens/PdfViewerScreen'
 import ContactRabbiScreen from './src/screens/ContactRabbiScreen'
 import LoginScreen from './src/screens/LoginScreen'
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'
 import RegisterScreen from './src/screens/RegisterScreen'
 import AboutScreen from './src/screens/AboutScreen'
 import MusicScreen from './src/screens/MusicScreen'
@@ -610,6 +611,7 @@ export default function App() {
         >
           {/* Auth screens - always available */}
           <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
 
           {/* Main app screens - accessible to all users (guests and authenticated) */}
