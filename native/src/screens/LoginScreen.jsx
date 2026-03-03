@@ -25,12 +25,16 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Allow login with number only (e.g. 0512345678) -> 0512345678@hayanuka.com for Google Play test account
+  // Support login with email or phone number
+  // Phone (e.g. 0512345678 or 0512345678) -> 972512345678@hayanuka.com
   const normalizeEmail = (input) => {
     const trimmed = (input || '').trim();
     if (!trimmed) return trimmed;
     if (trimmed.includes('@')) return trimmed;
-    return `${trimmed}@hayanuka.com`;
+    // It's a phone number - normalize to international format
+    const digits = trimmed.replace(/\D/g, '');
+    const normalized = digits.startsWith('0') ? '972' + digits.slice(1) : digits;
+    return `${normalized}@hayanuka.com`;
   };
 
   const handleLogin = async () => {
@@ -109,14 +113,14 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.subtitle}>{t('ברוכים השבים לאפליקציית הינוקא')}</Text>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('אימייל')}</Text>
+            <Text style={styles.label}>{t('אימייל או טלפון')}</Text>
             <TextInput
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder={t('הזן אימייל')}
+              placeholder={t('הזן אימייל או מספר טלפון')}
               placeholderTextColor="#666"
-              keyboardType="email-address"
+              keyboardType="default"
               autoCapitalize="none"
               textAlign="right"
             />
