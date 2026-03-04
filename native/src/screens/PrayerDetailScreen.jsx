@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Share, ActivityIndicator, Dimensions, Alert } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Share, ActivityIndicator, Dimensions, Alert, Modal } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 
 import AppHeader from '../components/AppHeader'
-import { t } from '../utils/i18n'
+import { t, tByLang } from '../utils/i18n'
 import { scheduleNotification } from '../utils/notifications'
 
 const PRIMARY_BLUE = '#1e3a8a'
@@ -21,6 +21,8 @@ export default function PrayerDetailScreen({ route, navigation }) {
   const [imageError, setImageError] = useState(false)
   const [sharingPDF, setSharingPDF] = useState(false)
   const [reminderScheduled, setReminderScheduled] = useState(false)
+  const [fullImageVisible, setFullImageVisible] = useState(false)
+  const [fullImageIndex, setFullImageIndex] = useState(0)
 
   // Get all images - support both single imageUrl and multiple imageUrls
   const getImages = () => {
@@ -70,6 +72,14 @@ export default function PrayerDetailScreen({ route, navigation }) {
 
   const pdfUrl = getPDFUrl()
 
+  const localizedTitle =
+    (language === 'he' && (prayer?.title_he || prayer?.title)) ||
+    (language === 'en' && prayer?.title_en) ||
+    (language === 'ru' && prayer?.title_ru) ||
+    (language === 'fr' && prayer?.title_fr) ||
+    prayer?.title ||
+    ''
+
   // Debug logging
   React.useEffect(() => {
     if (prayer) {
@@ -104,12 +114,12 @@ export default function PrayerDetailScreen({ route, navigation }) {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: prayer.title
+          dialogTitle: localizedTitle
         })
       } else {
         // Fallback to basic share
         await Share.share({
-          message: `${prayer.title}\n\n${prayer.description || ''}`,
+          message: `${localizedTitle}\n\n${prayer.description || ''}`,
           url: pdfUrl
         })
       }
@@ -128,7 +138,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
       // Share text/images if no PDF
       try {
         await Share.share({
-          message: `${prayer.title}\n\n${prayer.description || ''}`
+          message: `${localizedTitle}\n\n${prayer.description || ''}`
         })
       } catch (error) {
         console.error('Error sharing:', error)
@@ -155,7 +165,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
       const triggerDate = new Date(Date.now() + minutesFromNow * 60 * 1000)
       await scheduleNotification({
         title: 'הזכרה לתפילה',
-        body: `${prayer.title} – הזמן לקרוא בהמשך`,
+        body: `${localizedTitle} – הזמן לקרוא בהמשך`,
         data: { screen: 'Prayers', prayerId: prayer.id },
         triggerDate,
       })
@@ -171,7 +181,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <AppHeader
-          title={t('תפילה')}
+          title={tByLang(language, 'תפילה')}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
         />
@@ -188,7 +198,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
       <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
 
       <AppHeader
-        title={prayer.title}
+        title={localizedTitle}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
         rightIcon="share-social-outline"
@@ -200,7 +210,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* Prayer Title */}
-        <Text style={styles.title}>{prayer.title}</Text>
+        <Text style={styles.title}>{localizedTitle}</Text>
 
         {/* Prayer Description */}
         {prayer.description && (
@@ -222,23 +232,29 @@ export default function PrayerDetailScreen({ route, navigation }) {
               console.log('Opening PDF:', pdfUrl)
               navigation.navigate('PdfViewer', {
                 pdf: { uri: pdfUrl },
-                title: prayer.title
+                title: localizedTitle
               })
             }}
             accessibilityRole="button"
           >
             <Ionicons name="document-text-outline" size={24} color="#fff" />
-            <Text style={styles.pdfButtonText}>פתח תפילה ב-PDF</Text>
+            <Text style={styles.pdfButtonText}>{tByLang(language, 'פתח תפילה ב-PDF')}</Text>
           </Pressable>
         ) : null}
 
         {/* Prayer Images Gallery */}
         {images.length > 0 ? (
           <View style={styles.imagesContainer}>
-            <Text style={styles.sectionTitle}>תצוגת תפילה</Text>
+            <Text style={styles.sectionTitle}>{tByLang(language, 'תצוגת תפילה')}</Text>
             {images.length === 1 ? (
               // Single image - full width
-              <View style={styles.imageContainer}>
+              <Pressable
+                style={styles.imageContainer}
+                onPress={() => {
+                  setFullImageIndex(0)
+                  setFullImageVisible(true)
+                }}
+              >
                 {imageLoading && (
                   <View style={styles.imageLoadingContainer}>
                     <ActivityIndicator size="large" color={PRIMARY_BLUE} />
@@ -259,10 +275,10 @@ export default function PrayerDetailScreen({ route, navigation }) {
                 {imageError && (
                   <View style={styles.imageErrorContainer}>
                     <Ionicons name="image-outline" size={48} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-                    <Text style={styles.imageErrorText}>לא ניתן לטעון תמונה</Text>
+                    <Text style={styles.imageErrorText}>{tByLang(language, 'לא ניתן לטעון תמונה')}</Text>
                   </View>
                 )}
-              </View>
+              </Pressable>
             ) : (
               // Multiple images - scrollable horizontal gallery
               <ScrollView
@@ -272,7 +288,14 @@ export default function PrayerDetailScreen({ route, navigation }) {
                 contentContainerStyle={styles.imagesGallery}
               >
                 {images.map((img, index) => (
-                  <View key={index} style={styles.imageContainer}>
+                  <Pressable
+                    key={index}
+                    style={styles.imageContainer}
+                    onPress={() => {
+                      setFullImageIndex(index)
+                      setFullImageVisible(true)
+                    }}
+                  >
                     <Image
                       source={img}
                       style={styles.prayerImage}
@@ -292,7 +315,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
                         </Text>
                       </View>
                     )}
-                  </View>
+                  </Pressable>
                 ))}
               </ScrollView>
             )}
@@ -302,17 +325,17 @@ export default function PrayerDetailScreen({ route, navigation }) {
           <View style={styles.pdfPlaceholder}>
             <Ionicons name="document-text" size={80} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
             <Text style={styles.pdfPlaceholderText}>
-              התפילה זמינה בפורמט PDF
+              {tByLang(language, 'התפילה זמינה בפורמט PDF')}
             </Text>
             <Text style={styles.pdfPlaceholderSubtext}>
-              לחץ על הכפתור למעלה לצפייה
+              {tByLang(language, 'לחץ על הכפתור למעלה לצפייה')}
             </Text>
           </View>
         ) : (
           // No content available
           <View style={styles.imagePlaceholder}>
             <Ionicons name="image-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.2 }} />
-            <Text style={styles.placeholderText}>אין תוכן זמין</Text>
+            <Text style={styles.placeholderText}>{tByLang(language, 'אין תוכן זמין')}</Text>
           </View>
         )}
 
@@ -325,7 +348,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
         >
           <Ionicons name="notifications-outline" size={22} color={PRIMARY_BLUE} />
           <Text style={styles.remindButtonText}>
-            {reminderScheduled ? 'תזכורת נקבעה' : 'הזכר לי לקרוא בהמשך'}
+            {reminderScheduled ? tByLang(language, 'תזכורת נקבעה') : tByLang(language, 'הזכר לי לקרוא בהמשך')}
           </Text>
         </Pressable>
 
@@ -342,7 +365,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
             ) : (
               <>
                 <Ionicons name="share-social" size={22} color={PRIMARY_BLUE} />
-                <Text style={styles.shareButtonText}>שתף תפילה</Text>
+                <Text style={styles.shareButtonText}>{tByLang(language, 'שתף תפילה')}</Text>
               </>
             )}
           </Pressable>
@@ -355,7 +378,7 @@ export default function PrayerDetailScreen({ route, navigation }) {
                 try {
                   await Sharing.shareAsync(pdfUrl, {
                     mimeType: 'application/pdf',
-                    dialogTitle: prayer.title,
+                    dialogTitle: localizedTitle,
                     UTI: 'com.adobe.pdf'
                   })
                 } catch (error) {
@@ -375,9 +398,35 @@ export default function PrayerDetailScreen({ route, navigation }) {
         {/* Footer */}
         <View style={styles.footer}>
           <Ionicons name="heart" size={24} color={PRIMARY_BLUE} style={{ opacity: 0.5 }} />
-          <Text style={styles.footerText}>תפילה זו נכתבה על ידי הגאון הינוקא שליט"א</Text>
+          <Text style={styles.footerText}>{tByLang(language, 'תפילה זו נכתבה על ידי הגאון הינוקא שליט"א')}</Text>
         </View>
       </ScrollView>
+      {images.length > 0 && (
+        <Modal
+          visible={fullImageVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setFullImageVisible(false)}
+        >
+          <Pressable
+            style={styles.fullImageOverlay}
+            onPress={() => setFullImageVisible(false)}
+          >
+            <Image
+              source={images[fullImageIndex]}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+            {images.length > 1 && (
+              <View style={styles.fullImageCounter}>
+                <Text style={styles.fullImageCounterText}>
+                  {fullImageIndex + 1} / {images.length}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        </Modal>
+      )}
     </SafeAreaView>
   )
 }
@@ -619,5 +668,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_500Medium',
     color: '#6b7280',
+  },
+  fullImageOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fullImageCounter: {
+    position: 'absolute',
+    bottom: 32,
+    right: 24,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  fullImageCounterText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
   },
 })

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, Pressable, Animated, Platform, Image, ImageBackground, ScrollView, Share, Alert, Easing, Linking, ActivityIndicator, Modal, TextInput, TouchableOpacity } from 'react-native'
+import * as FileSystem from 'expo-file-system'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Audio } from 'expo-av'
@@ -135,9 +136,24 @@ export default function HomeScreen({ navigation, userRole }) {
   const [notificationModalVisible, setNotificationModalVisible] = useState(false)
   const [currentNotification, setCurrentNotification] = useState(null)
 
-  const onShareQuote = React.useCallback(() => {
-    Share.share({ message: `"${quote}" - ${quoteAuthor}` }).catch(() => { })
-  }, [quote, quoteAuthor])
+  const onShareQuote = React.useCallback(async () => {
+    const message = `"${quote}" - ${quoteAuthor}`
+    if (!quoteImage) {
+      Share.share({ message }).catch(() => {})
+      return
+    }
+    try {
+      let localUri = quoteImage
+      if (quoteImage.startsWith('http://') || quoteImage.startsWith('https://')) {
+        const dest = FileSystem.cacheDirectory + `quote_share_${Date.now()}.jpg`
+        await FileSystem.downloadAsync(quoteImage, dest)
+        localUri = dest
+      }
+      Share.share({ message, url: localUri }).catch(() => Share.share({ message }).catch(() => {}))
+    } catch (err) {
+      Share.share({ message }).catch(() => {})
+    }
+  }, [quote, quoteAuthor, quoteImage])
 
   // Reset aspect ratio when quote image changes (prevents showing old ratio before new image loads)
   useEffect(() => {

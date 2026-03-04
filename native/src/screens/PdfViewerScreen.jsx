@@ -71,36 +71,8 @@ export default function PdfViewerScreen({ route, navigation }) {
           }
           
           if (uri && uri.startsWith('http')) {
-            // For images (e.g. newsletters), use URL directly; for PDFs try cache then download
-            if (isImage) {
-              setPdfUri(uri)
-              setLoading(false)
-              return
-            }
-            try {
-              console.log('Downloading PDF from:', uri)
-              const filename = uri.split('/').pop() || `prayer_${Date.now()}.pdf`
-              const localUri = `${FileSystem.cacheDirectory}${filename}`
-              
-              const fileInfo = await FileSystem.getInfoAsync(localUri)
-              if (fileInfo.exists) {
-                setPdfUri(localUri)
-                setLoading(false)
-                return
-              }
-              
-              const downloadResult = await FileSystem.downloadAsync(uri, localUri, {
-                headers: { 'Accept': 'application/pdf' },
-              })
-              
-              if (downloadResult.status === 200) {
-                setPdfUri(localUri)
-              } else {
-                setPdfUri(uri)
-              }
-            } catch (downloadError) {
-              setPdfUri(uri)
-            }
+            // Use remote URL directly for display (file:// often fails in WebView/Pdf on iOS)
+            setPdfUri(uri)
             setLoading(false)
           } else {
             console.error('PDF is not a valid URL:', pdf)

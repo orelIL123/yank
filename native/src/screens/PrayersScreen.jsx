@@ -8,7 +8,7 @@ import * as FileSystem from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 
 import AppHeader from '../components/AppHeader'
-import { t } from '../utils/i18n'
+import { t, tByLang } from '../utils/i18n'
 import db from '../services/database'
 import { canManagePrayers } from '../utils/permissions'
 import { BUNDLED_PRAYERS } from '../data/bundledPrayers'
@@ -168,7 +168,8 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
         id: item.id,
         title: item.title,
         imageUrls: images,
-      }
+      },
+      language: selectedLanguage,
     })
   }
 
@@ -181,10 +182,20 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
       onPress: () => setSelectedLanguage(lang.code),
     }))
 
-    Alert.alert('בחירת שפה', 'בחר שפה לתצוגת התפילות', [
-      ...options,
-      { text: 'ביטול', style: 'cancel' },
-    ])
+    Alert.alert(
+      tByLang(selectedLanguage, 'בחירת שפה'),
+      tByLang(selectedLanguage, 'בחר שפה לתצוגת התפילות'),
+      [...options, { text: tByLang(selectedLanguage, 'ביטול'), style: 'cancel' }]
+    )
+  }
+
+  const getBundledTitle = (entry, lang) => {
+    if (entry.type === 'single') {
+      const item = entry.item
+      return item[`title_${lang}`] || item.title
+    }
+    const first = entry.items?.[0]
+    return first ? (first[`title_${lang}`] || first.title) : entry.title
   }
 
   // Build display list: group items with same groupKey into one card "לאיש / לאישה"
@@ -204,25 +215,38 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
     return result
   }, [])
 
+  const getPrayerTitleForLang = (prayer, lang) =>
+    (lang === 'he' && (prayer.title_he || prayer.title)) ||
+    (lang === 'en' && prayer.title_en) ||
+    (lang === 'ru' && prayer.title_ru) ||
+    (lang === 'fr' && prayer.title_fr) ||
+    prayer.title ||
+    ''
+
+  const filteredPrayersByLang = React.useMemo(() => {
+    if (!showAllPrayers) return []
+    return prayers.filter((p) => getPrayerTitleForLang(p, selectedLanguage))
+  }, [prayers, showAllPrayers, selectedLanguage])
+
   const onBundledPress = (entry) => {
     if (entry.type === 'single') {
       handleBundledPrayerPress(entry.item)
       return
     }
     Alert.alert(
-      entry.title,
-      'בחר גרסה:',
+      getBundledTitle(entry, selectedLanguage),
+      tByLang(selectedLanguage, 'בחר גרסה:'),
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: tByLang(selectedLanguage, 'ביטול'), style: 'cancel' },
         {
-          text: 'לאיש',
+          text: tByLang(selectedLanguage, 'לאיש'),
           onPress: () => {
             const man = entry.items.find(i => i.gender === 'man')
             if (man) handleBundledPrayerPress(man)
           }
         },
         {
-          text: 'לאישה',
+          text: tByLang(selectedLanguage, 'לאישה'),
           onPress: () => {
             const woman = entry.items.find(i => i.gender === 'woman')
             if (woman) handleBundledPrayerPress(woman)
@@ -243,19 +267,19 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
       />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY_BLUE} />
-          <Text style={styles.loadingText}>טוען תפילות...</Text>
+          <Text style={styles.loadingText}>{tByLang(selectedLanguage, 'טוען תפילות...')}</Text>
         </View>
       </SafeAreaView>
     )
   }
 
-  // If showing all prayers – same format as תפילות הינוקא (grid, no PDF; images only)
+  // If showing all prayers – same format as תפילות הינוקא (grid); filter by selected language
   if (showAllPrayers) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={[BG, '#f5f5f5']} style={StyleSheet.absoluteFill} />
         <AppHeader
-          title={t('תפילות בנושאים שונים')}
+          title={tByLang(selectedLanguage, 'תפילות בנושאים שונים')}
           showBackButton={true}
           onBackPress={() => setShowAllPrayers(false)}
           rightIcon={canManage ? 'add' : undefined}
@@ -263,7 +287,7 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
         />
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.subtitle}>בחרו שפה / Choose language</Text>
+          <Text style={styles.subtitle}>{tByLang(selectedLanguage, 'בחרו שפה')}</Text>
           <View style={styles.languageTabsRow}>
             {LANGUAGES.map((lang) => (
               <Pressable
@@ -285,23 +309,27 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
             ))}
           </View>
 
-          {prayers.length === 0 ? (
+          {filteredPrayersByLang.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="heart-outline" size={64} color={PRIMARY_BLUE} style={{ opacity: 0.3 }} />
-              <Text style={styles.emptyText}>אין תפילות זמינות כרגע</Text>
-              <Text style={styles.emptySubtext}>התפילות יתווספו בקרוב</Text>
+              <Text style={styles.emptyText}>{tByLang(selectedLanguage, 'אין תפילות זמינות כרגע')}</Text>
+              <Text style={styles.emptySubtext}>{tByLang(selectedLanguage, 'התפילות יתווספו בקרוב')}</Text>
             </View>
           ) : (
             <View style={styles.bundledGrid}>
-              {prayers.map((prayer) => {
-                const hasImages = (prayer.imageUrls && prayer.imageUrls.length > 0) || (prayer.imageUrl && prayer.imageUrl.trim())
-                const title = (prayer.title_he && selectedLanguage === 'he') || (prayer.title_en && selectedLanguage === 'en') || (prayer.title_ru && selectedLanguage === 'ru') || (prayer.title_fr && selectedLanguage === 'fr') || prayer.title || ''
+              {filteredPrayersByLang.map((prayer) => {
+                const hasImages =
+                  (Array.isArray(prayer.imageUrls) && prayer.imageUrls.length > 0) ||
+                  (!!prayer.imageUrl && String(prayer.imageUrl).trim() !== '')
+                const hasPdf = !!(prayer.pdfUrl && String(prayer.pdfUrl).trim() !== '')
+                const hasContent = hasImages || hasPdf
+                const title = getPrayerTitleForLang(prayer, selectedLanguage)
                 return (
                   <View key={prayer.id} style={styles.bundledCardWrapper}>
                     <Pressable
-                      style={[styles.bundledCard, !hasImages && styles.bundledCardDisabled]}
-                      onPress={() => hasImages && handlePrayerPress(prayer)}
-                      disabled={!hasImages}
+                      style={[styles.bundledCard, !hasContent && styles.bundledCardDisabled]}
+                      onPress={() => hasContent && handlePrayerPress(prayer)}
+                      disabled={!hasContent}
                       accessibilityRole="button"
                       accessibilityLabel={`תפילה ${title}`}
                     >
@@ -309,10 +337,10 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
                         <Ionicons name="document-text-outline" size={22} color={PRIMARY_BLUE} />
                         <View style={styles.bundledCardText}>
                           <Text style={styles.bundledCardTitle} numberOfLines={2}>{title}</Text>
-                          {hasImages ? (
-                            <Text style={styles.genderBadge}>תוכן זמין</Text>
+                          {hasContent ? (
+                            <Text style={styles.genderBadge}>{tByLang(selectedLanguage, 'תוכן זמין')}</Text>
                           ) : (
-                            <Text style={styles.bundledCardSubtext}>טוען תוכן...</Text>
+                            <Text style={styles.bundledCardSubtext}>{tByLang(selectedLanguage, 'אין תוכן זמין')}</Text>
                           )}
                         </View>
                         <Ionicons name="chevron-forward" size={18} color={PRIMARY_BLUE} />
@@ -352,17 +380,35 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.subtitle}>תפילות מיוחדות וסגולות</Text>
-        <View style={styles.languageSelectorContainer}>
-          <Text style={styles.languageLabel}>שפה:</Text>
-          <Pressable
-            style={styles.languageSelector}
-            onPress={openLanguagePicker}
-            accessibilityRole="button"
-          >
-            <Text style={styles.languageSelectorText}>{selectedLanguageLabel}</Text>
-            <Ionicons name="chevron-down" size={14} color={PRIMARY_BLUE} />
-          </Pressable>
+        <Text style={styles.subtitle}>{tByLang(selectedLanguage, 'תפילות מיוחדות וסגולות')}</Text>
+        <View style={[styles.languageSelectorContainer, selectedLanguage === 'he' && styles.languageSelectorContainerRtl]}>
+          {selectedLanguage === 'he' ? (
+            <>
+              <Pressable
+                style={({ pressed }) => [styles.languageSelector, pressed && styles.languageSelectorPressed]}
+                onPress={openLanguagePicker}
+                accessibilityRole="button"
+              >
+                <Ionicons name="language-outline" size={18} color={PRIMARY_BLUE} />
+                <Text style={styles.languageSelectorText}>{selectedLanguageLabel}</Text>
+                <Ionicons name="chevron-down" size={16} color={PRIMARY_BLUE} />
+              </Pressable>
+              <Text style={styles.languageLabel}>{tByLang(selectedLanguage, 'שפה')}:</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.languageLabel}>{tByLang(selectedLanguage, 'שפה')}:</Text>
+              <Pressable
+                style={({ pressed }) => [styles.languageSelector, pressed && styles.languageSelectorPressed]}
+                onPress={openLanguagePicker}
+                accessibilityRole="button"
+              >
+                <Ionicons name="language-outline" size={18} color={PRIMARY_BLUE} />
+                <Text style={styles.languageSelectorText}>{selectedLanguageLabel}</Text>
+                <Ionicons name="chevron-down" size={16} color={PRIMARY_BLUE} />
+              </Pressable>
+            </>
+          )}
         </View>
 
         {/* Prayer Commitment Button */}
@@ -379,8 +425,8 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
           >
             <Ionicons name="heart" size={24} color="#fff" />
             <View style={styles.commitmentButtonTextContainer}>
-              <Text style={styles.commitmentButtonTitle}>התחייבות תפילה שבועית</Text>
-              <Text style={styles.commitmentButtonDesc}>התחייב להתפלל עבור מישהו אחר</Text>
+              <Text style={styles.commitmentButtonTitle}>{tByLang(selectedLanguage, 'התחייבות תפילה שבועית')}</Text>
+              <Text style={styles.commitmentButtonDesc}>{tByLang(selectedLanguage, 'התחייב להתפלל עבור מישהו אחר')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#fff" />
           </LinearGradient>
@@ -395,16 +441,16 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
                   <Ionicons name="document-text-outline" size={22} color={PRIMARY_BLUE} />
                   <View style={styles.bundledCardText}>
                     <Text style={styles.bundledCardTitle} numberOfLines={2}>
-                      {entry.type === 'single' ? entry.item.title : entry.title}
+                      {getBundledTitle(entry, selectedLanguage)}
                     </Text>
                     {entry.type === 'single' && entry.item.gender === 'man' && (
-                      <Text style={styles.genderBadge}>לאיש</Text>
+                      <Text style={styles.genderBadge}>{tByLang(selectedLanguage, 'לאיש')}</Text>
                     )}
                     {entry.type === 'single' && entry.item.gender === 'woman' && (
-                      <Text style={styles.genderBadge}>לאישה</Text>
+                      <Text style={styles.genderBadge}>{tByLang(selectedLanguage, 'לאישה')}</Text>
                     )}
                     {entry.type === 'group' && (
-                      <Text style={styles.genderBadge}>בחר גרסה:</Text>
+                      <Text style={styles.genderBadge}>{tByLang(selectedLanguage, 'בחר גרסה:')}</Text>
                     )}
                   </View>
                 </View>
@@ -418,7 +464,7 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
                         if (man) handleBundledPrayerPress(man)
                       }}
                     >
-                      <Text style={styles.genderButtonText}>לאיש</Text>
+                      <Text style={styles.genderButtonText}>{tByLang(selectedLanguage, 'לאיש')}</Text>
                     </Pressable>
                     <Pressable 
                       style={[styles.genderButton, styles.womanButton]} 
@@ -427,7 +473,7 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
                         if (woman) handleBundledPrayerPress(woman)
                       }}
                     >
-                      <Text style={styles.genderButtonText}>לאישה</Text>
+                      <Text style={styles.genderButtonText}>{tByLang(selectedLanguage, 'לאישה')}</Text>
                     </Pressable>
                   </View>
                 ) : (
@@ -435,7 +481,7 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
                     style={styles.openSingleButton}
                     onPress={() => onBundledPress(entry)}
                   >
-                    <Text style={styles.openSingleButtonText}>פתח תפילה</Text>
+                    <Text style={styles.openSingleButtonText}>{tByLang(selectedLanguage, 'פתח תפילה')}</Text>
                     <Ionicons name="chevron-forward" size={16} color="#fff" />
                   </Pressable>
                 )}
@@ -455,9 +501,9 @@ export default function PrayersScreen({ navigation, userRole, userPermissions })
               <Ionicons name="list" size={40} color={PRIMARY_BLUE} />
             </View>
             <View style={styles.mainCardTextContainer}>
-              <Text style={styles.mainCardTitle}>תפילות בנושאים שונים</Text>
+              <Text style={styles.mainCardTitle}>{tByLang(selectedLanguage, 'תפילות בנושאים שונים')}</Text>
               <Text style={styles.mainCardSubtitle}>
-                {prayers.length} תפילות זמינות · שפה נבחרת: {selectedLanguageLabel}
+                {prayers.length} · {selectedLanguageLabel}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={28} color={PRIMARY_BLUE} />
@@ -484,6 +530,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 12,
     marginTop: 8,
+    marginBottom: 4,
+  },
+  languageSelectorContainerRtl: {
+    flexDirection: 'row-reverse',
   },
   languageLabel: {
     fontSize: 14,
@@ -493,16 +543,25 @@ const styles = StyleSheet.create({
   languageSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(30,58,138,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(30,58,138,0.2)',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(30,58,138,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(30,58,138,0.25)',
+    shadowColor: PRIMARY_BLUE,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  languageSelectorPressed: {
+    opacity: 0.85,
+    backgroundColor: 'rgba(30,58,138,0.18)',
   },
   languageSelectorText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
     color: PRIMARY_BLUE,
   },
